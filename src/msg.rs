@@ -23,5 +23,5 @@ pub enum QueryMsg {
 }
 
 // We define a custom struct for each query response
-pub type configResponse = State;
+pub type ConfigResponse = State;
 
