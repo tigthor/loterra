@@ -1,4 +1,6 @@
-use cosmwasm_std::{to_binary, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation};
+use cosmwasm_std::{to_binary, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse,
+                   MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg,
+                   StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation};
 
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse};
@@ -7,6 +9,9 @@ use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
 use std::fs::canonicalize;
 use rand::Rng;
+use schemars::_serde_json::map::Entry::Vacant;
+use std::io::Stderr;
+
 
 
 // Note, you can use StdResult in some functions where you do not
@@ -48,48 +53,61 @@ pub fn handle_register(
 ) -> Result<HandleResponse, ContractError> {
 
     let mut state = config(deps.storage).load()?;
+    let ownerAddress = deps.api.human_address( &state.owner)?;
+
+    // Ensure message sender is sending some funds to buy the lottery
+    if info.sent_funds.clone().is_empty() {
+        //return Err(ContractError::Unauthorized {});
+        return Err(ContractError::EmptyBalance {});
+        //return Err(ContractError::Std(StdError::GenericErr { msg: "Error send funds please".to_string(), backtrace: Backtrace::disabled()  }))
+        //return Err(ContractError::Std(StdError::GenericErr { msg: format!("send some {} to buy tickets lottery", state.denom), backtrace: Backtrace }));
+    }
 
     // Ensure sender are not sending wrong coins
-    for coin in info.sent_funds {
+    for coin in &info.sent_funds {
         if coin.denom != state.denom{
-            return Err(ContractError::Unauthorized {});
+            return Err(ContractError::EmptyBalance {});
+            //return Err(ContractError::Std(StdError::GenericErr { msg: "Error send funds please 2".to_string(), backtrace: Backtrace::disabled()  }))
             // return Err(ContractError::Std(StdError::GenericErr { msg: format!("send only {} to buy tickets lottery", state.denom), backtrace: None }));
         }
     }
 
+
     // Ensure message sender is delegating some funds to the lottery validator
-    //let delegations = deps.querier.query_delegation(delegator: info.sender, validator: _env.contract.address).clone()?;
-    //let delegation = &deps.querier.query_delegation(&info.sender, &deps.api.human_address(&state.owner)?)??;
-    let bond = &deps.querier.query_all_delegations(&info.sender)?;
-    
-    //let delegation = StakingQuery::Delegation{ delegator: info.sender.into(), validator: _env.contract.address.into() }.into();
-/*
-    if delegation.amount.amount <= 0 {
+    let allDelegations = &deps.querier.query_all_delegations(&info.sender)?;
+    if allDelegations.is_empty() {
+        return Err(ContractError::EmptyBalance {});
+        //return Err(ContractError::Std(StdError::GenericErr { msg: "Error send funds please 3".to_string(), backtrace: Backtrace::disabled()  }))
+        //return Err(ContractError::Unauthorized {});
+    }
+    //let delegation = allDelegations.into_iter().filter(|&delegator| delegator.validator == ownerAddress).collect::<Delegation>();
+    let mut delegator = vec![];
+    for delegation in allDelegations {
+        if delegation.validator == ownerAddress {
+            delegator.push(delegation)
+        }
+    };
+    if delegator.is_empty(){
+        return Err(ContractError::EmptyBalance {});
+        //return Err(ContractError::Std(StdError::GenericErr { msg: "Error send funds please 4".to_string(), backtrace: Backtrace::disabled() }))
+        //return Err(ContractError::Unauthorized {});
+    }
+    /*
+        TODO: Probably we need to add a condition to check a minimum of staking coin to be able to participate a limit amount in the state
+    */
+    /*if delegator[0].amount.amount.is_zero() {
         return Err(ContractError::Unauthorized {});
         //return Err(ContractError::Std(StdError::GenericErr { msg: "you need to delegate some funds to the validator first".to_string(), backtrace: () }));
-    }
-    // Ensure message sender is sending some funds to buy the lottery
-    if info.sent_funds.is_empty() {
-        return Err(ContractError::Unauthorized {});
-        //return Err(ContractError::Std(StdError::GenericErr { msg: format!("send some {} to buy tickets lottery", state.denom), backtrace: Backtrace }));
-    }
+    }*/
+
     // Ensure message sender is sending the rights denom tickets and add register
-    for coin in info.sent_funds {
-        /*if coin.denom != state.denom{
-            return Err(ContractError::Unauthorized {});
-            // return Err(ContractError::Std(StdError::GenericErr { msg: format!("send only {} to buy tickets lottery", state.denom), backtrace: None }));
-        }*/
-        /*
-            TODO: Ensure the tickets are Integers and not Decimals
-        */
+    for coin in &info.sent_funds {
         for _ in 0..coin.amount.to_string().parse::<u64>().unwrap() {
             state.players.push(deps.api.canonical_address(&info.sender.clone())?);
         }
     }
     // Save the state
     config(deps.storage).save(&state);
-
-    */
 
     Ok(HandleResponse::default())
 }
@@ -167,7 +185,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, BankQuerier, MOCK_CONTRACT_ADDR, MockStorage};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, BankQuerier, MOCK_CONTRACT_ADDR, MockStorage, StakingQuerier};
     use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError, Storage, Api, CanonicalAddr};
     use std::collections::HashMap;
     use std::borrow::Borrow;
@@ -181,12 +199,10 @@ mod tests {
     #[test]
     fn proper_init (){
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
-
         let info = mock_info(HumanAddr::from("owner"), &[]);
         let init_msg = InitMsg {
             denom: "ujack".to_string()
         };
-
         let res = init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
         assert_eq!(0, res.messages.len());
 
@@ -195,60 +211,33 @@ mod tests {
         assert_eq!( "00000000006E00000000007772000000006F650000000000", CanonicalAddr::to_string(&res.owner));
 
     }
-    /*#[test]
+    #[test]
     fn register() {
+
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator1"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        }]);
 
-        let msg = InitMsg {
-            denom: "ujack".to_string()
-        };
-
-        let env = mock_env();
-        let info = mock_info("rico", &[Coin{ denom: "ux".to_string(), amount: Uint128(2)}]);
-        //Init the data
-        #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
-        struct Data {
-            players: Vec<HumanAddr>,
-            denom: String
-        }
-        let mut store = MockStorage::new();
-        let mut singleton = singleton::<_, Data>(&mut store, b"data");
-
-        let mut obj = Data{
-            players: vec![HumanAddr::from("hello1")],
-            denom: "uchimere".to_string()
-        };
-
-        //let info = MessageInfo{ sender: HumanAddr::from("sender"), sent_funds: vec![Coin{ denom: "uchimere".to_string(), amount: Uint128(3)}]};
-
-        //try_participate_lottery(&mut deps, env, info, HandleMsg::);
-
-        //Check if sender is a delegator
-        /*
-            Todo: Check if the sender is a Delegator
-         */
-/*
-        if info.sent_funds.is_empty(){
-            StdError::GenericErr { msg: "you need at least one ticket to play the lottery".to_string(), backtrace: None };
-        }
-        // Add participation
-        for x in info.sent_funds {
-            if x.denom != "uchimere".to_string(){
-                StdError::GenericErr { msg: format!("only is send {}", "uchimere".to_string()), backtrace: None };
-            }
-            for y in 0..x.amount.to_string().parse::<i32>().unwrap() {
-                obj.players.push(info.sender.clone());
-            }
-
-            println!("{:?}", x);
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(10)}]);
+        let res = handle_register(deps.as_mut(), mock_env(), info);
+        match res {
+            Err(ContractError::Unauthorized {}) => {},
+            Err(ContractError::EmptyBalance {}) => {},
+            _ => panic!("Unexpected error")
         }
 
-        singleton.save(&obj);
-        let reader2 = singleton_read::<_, Data>(&mut store, b"data");
-        let state2 = reader2.load();
-        println!("{:?}", state2);*/
     }
- */
+
 /*    #[test]
     fn run_lottery(){
         let environment= mock_env();
