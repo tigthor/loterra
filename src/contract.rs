@@ -6,6 +6,7 @@ use crate::state::{config, config_read, State};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
 use std::fs::canonicalize;
+use rand::Rng;
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -25,27 +26,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     Ok(InitResponse::default())
 }
 
-// Run the lottery
-/*pub fn try_lottery<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    _env: Env,
-    info: MessageInfo,
-    msg: HandleMsg,
-) -> Result<HandleResponse, ContractError> {
-
-    // Do not send funds, only the contract creator can call the lottery function
-    if !info.sent_funds.is_empty() || info.sender != _env.contract.address {
-       return Err(ContractError::Unauthorized {});
-    }
-    // Withdraw staking rewards and commissions
-    let withdraw = StakingMsg::Withdraw { validator: HumanAddr::from(_env.contract.address ), recipient: None }?;
-
-    // Get all delegations
-    let delegations =  StakingQuery::AllDelegations { delegator: Default::default() };
-    // Get delegation
-    let delegation = StakingQuery::Delegation { delegator: Default::default(), validator: Default::default() };
-    Ok(HandleResponse::default())
-}*/
 // And declare a custom Error variant for the ones where you will want to make use of it
 pub fn handle<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -70,7 +50,10 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         return Err(ContractError::Unauthorized {});
     }
     // Ensure message sender is delegating some funds to the lottery validator
+    //let delegations = deps.querier.query_delegation(delegator: info.sender, validator: _env.contract.address).clone()?;
     let delegations = StakingQuery::Delegation { delegator: info.sender, validator: _env.contract.address };
+
+    deps.querier.query_delegation();
     if delegations.amount <= 0 {
         return Err(ContractError::Std(StdError::GenericErr { msg: "you need to delegate some funds to the validator first".to_string(), backtrace: None }));
     }
@@ -106,28 +89,47 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     if  info.sender != _env.contract.address {
         return Err(ContractError::Unauthorized {});
     }
-
+    // Play the lottery
     let players = state.players;
+    let mut range = rand::thread_rng();
+    let maxRange = players.len() - 1;
+    range.gen_range(0..maxRange);
+    /*
+        TODO: Compare the winner weight to others players
+     */
+    /*
+        TODO: Calcule the amount to send to the winner
+     */
+    /*
+        TODO: Withdraw rewards and commissions
+     */
 
+    /*
+        TODO: Check the balance amount
+     */
+
+    /*
+        TODO: Send a transaction to the winner
+     */
 
     Ok(HandleResponse::default())
 }
-/*
+
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     _env: Env,
     msg: QueryMsg,
 ) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetCount {} => to_binary(&query_count(deps)?),
+        QueryMsg::Config {} => to_binary(&query_config(deps)?),
     }
 }
 
-fn query_count<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdResult<CountResponse> {
+fn query_config<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdResult<ConfigResponse> {
     let state = config_read(&deps.storage).load()?;
-    Ok(CountResponse { count: state.count })
+    Ok(state)
 }
-*/
+
 #[cfg(test)]
 mod tests {
     use super::*;
