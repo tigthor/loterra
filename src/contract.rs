@@ -59,7 +59,9 @@ pub fn handle_register(
 
     // Ensure message sender is delegating some funds to the lottery validator
     //let delegations = deps.querier.query_delegation(delegator: info.sender, validator: _env.contract.address).clone()?;
-    //let delegation = deps.querier.query_delegation(info.sender, deps.api.human_address(&state.owner)?)??;
+    //let delegation = &deps.querier.query_delegation(&info.sender, &deps.api.human_address(&state.owner)?)??;
+    let bond = &deps.querier.query_all_delegations(&info.sender)?;
+    
     //let delegation = StakingQuery::Delegation{ delegator: info.sender.into(), validator: _env.contract.address.into() }.into();
 /*
     if delegation.amount.amount <= 0 {
