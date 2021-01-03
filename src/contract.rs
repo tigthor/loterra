@@ -27,9 +27,10 @@ pub fn init(
         owner: deps.api.canonical_address(&info.sender)?,
         players: vec![deps.api.canonical_address(&address1).unwrap(), deps.api.canonical_address(&address2).unwrap(), deps.api.canonical_address(&address3).unwrap()],
         block: _env.block.height,
-        everyBlockHeight: 0,
+        everyBlockHeight: msg.everyBlockHeight,
         denom: msg.denom,
-        denomDelgation: msg.denomDelegation
+        denomDelgation: msg.denomDelegation,
+        claimTicket: vec![]
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -79,25 +80,29 @@ pub fn handle_register(
         return Err(ContractError::NoDelegations{});
     }
     //let delegation = allDelegations.into_iter().filter(|&delegator| delegator.validator == ownerAddress).collect::<Delegation>();
-    let mut delegator = vec![];
+    let delegator = allDelegations.iter().filter(|&e| e.validator == deps.api.human_address(&state.owner).unwrap()).cloned().collect::<Vec<Delegation>>();
+    /*let mut delegator = vec![];
     for delegation in allDelegations {
         if delegation.validator == ownerAddress {
             delegator.push(delegation)
         }
-    };
+    };*/
     if delegator.is_empty(){
         return Err(ContractError::EmptyBalance {});
     }
     /*
         TODO: Probably we need to add a condition to check a minimum of staking coin to be able to participate a limit amount in the state
     */
-
     // Ensure message sender is sending the rights denom tickets and add register
-    for coin in &info.sent_funds {
-        for _ in 0..coin.amount.to_string().parse::<u64>().unwrap() {
-            state.players.push(deps.api.canonical_address(&info.sender.clone())?);
-        }
+    let ticketNumber = info.sent_funds[0].amount.u128();
+
+    for d in 0..ticketNumber {
+        state.players.push(deps.api.canonical_address(&info.sender.clone())?);
     }
+
+    /*
+       TODO: Probably we need shuffle the array for better repartition
+   */
     // Save the new state
     config(deps.storage).save(&state);
 
@@ -211,7 +216,8 @@ mod tests {
         let info = mock_info(HumanAddr::from("owner"), &[]);
         let init_msg = InitMsg {
             denom: "ujack".to_string(),
-            denomDelegation: "uscrt".to_string()
+            denomDelegation: "uscrt".to_string(),
+            everyBlockHeight: 100
         };
         let res = init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
         assert_eq!(0, res.messages.len());
@@ -229,7 +235,8 @@ mod tests {
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let init_msg = InitMsg {
             denom: "ujack".to_string(),
-            denomDelegation: "uscrt".to_string()
+            denomDelegation: "uscrt".to_string(),
+            everyBlockHeight: 100904300345
         };
         let res = init(deps.as_mut(), mock_env(), info.clone(), init_msg).unwrap();
 
@@ -260,7 +267,7 @@ mod tests {
         }
         ]);
 
-        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(10)}]);
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(1)}]);
         let res = handle_register(deps.as_mut(), mock_env(), info.clone());
         //println!("{:?}", res);
 
@@ -283,7 +290,8 @@ mod tests {
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let init_msg = InitMsg {
             denom: "ujack".to_string(),
-            denomDelegation: "uscrt".to_string()
+            denomDelegation: "uscrt".to_string(),
+            everyBlockHeight: 100
         };
 
         deps.querier.update_staking("uscrt", &[Validator{

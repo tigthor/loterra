@@ -5,7 +5,8 @@ use crate::state::State;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
     pub denom: String,
-    pub denomDelegation: String
+    pub denomDelegation: String,
+    pub everyBlockHeight: u64
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
