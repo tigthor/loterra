@@ -12,7 +12,8 @@ pub struct State {
     pub players: Vec<CanonicalAddr>,
     pub block: u64,
     pub everyBlockHeight: u64,
-    pub denom: String
+    pub denom: String,
+    pub denomDelgation: String
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {

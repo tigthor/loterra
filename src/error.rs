@@ -24,6 +24,12 @@ pub enum ContractError {
     #[error("You need to delegate to the lottery validator first")]
     NoDelegations{},
 
+    #[error("Need players to play the lottery")]
+    NoPlayers{},
+
+    #[error("Sent extra delegation")]
+    ExtraDelegation{},
+
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }
