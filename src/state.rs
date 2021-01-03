@@ -13,7 +13,8 @@ pub struct State {
     pub block: u64,
     pub everyBlockHeight: u64,
     pub denom: String,
-    pub denomDelgation: String
+    pub denomDelgation: String,
+    pub claimTicket: Vec<CanonicalAddr>
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
