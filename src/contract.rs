@@ -10,6 +10,7 @@ use rand::Rng;
 use schemars::_serde_json::map::Entry::Vacant;
 use std::io::Stderr;
 use std::ops::Mul;
+use proc_macro::bridge::client::ProcMacro::Bang;
 
 
 // Note, you can use StdResult in some functions where you do not
@@ -26,10 +27,11 @@ pub fn init(
     let state = State {
         owner: deps.api.canonical_address(&info.sender)?,
         players: vec![deps.api.canonical_address(&address1).unwrap(), deps.api.canonical_address(&address2).unwrap(), deps.api.canonical_address(&address3).unwrap()],
-        block: _env.block.height,
+        blockPlay: _env.block.height,
+        blockClaim: _env.block.height,
         everyBlockHeight: msg.everyBlockHeight,
         denom: msg.denom,
-        denomDelgation: msg.denomDelegation,
+        denomDelegation: msg.denomDelegation,
         claimTicket: vec![]
     };
     config(deps.storage).save(&state)?;
@@ -47,6 +49,7 @@ pub fn handle(
     match msg {
         HandleMsg::Register {} => handle_register(deps, _env, info),
         HandleMsg::Play {} => handle_play(deps, _env, info),
+        HandleMsg::Claim {} => handle_claim(deps, _env, info),
     }
 }
 
@@ -81,12 +84,7 @@ pub fn handle_register(
     }
     //let delegation = allDelegations.into_iter().filter(|&delegator| delegator.validator == ownerAddress).collect::<Delegation>();
     let delegator = allDelegations.iter().filter(|&e| e.validator == deps.api.human_address(&state.owner).unwrap()).cloned().collect::<Vec<Delegation>>();
-    /*let mut delegator = vec![];
-    for delegation in allDelegations {
-        if delegation.validator == ownerAddress {
-            delegator.push(delegation)
-        }
-    };*/
+
     if delegator.is_empty(){
         return Err(ContractError::EmptyBalance {});
     }
@@ -109,6 +107,46 @@ pub fn handle_register(
     Ok(HandleResponse::default())
 }
 
+pub fn handle_claim(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo
+) -> Result<HandleResponse, ContractError> {
+    // Load the state
+    let mut state = config(deps.storage).load()?;
+    // convert the sender to canonical address
+    let sender = deps.api.canonical_address(&info.sender).unwrap();
+
+    if _env.block.height > state.blockClaim {
+        state.claimTicket = vec![];
+        state.blockClaim = _env.block.height + state.everyBlockHeight;
+    }
+
+    // Ensure users only can claim one time every x blocks
+    if state.claimTicket.iter().any(|&address| address == sender.clone()){
+        return Err(ContractError::AlreadyClaimed {});
+    }
+    // Add the sender to claimed state
+    state.claimTicket.push(sender.clone());
+
+    // Get the contract balance
+    let balance = deps.querier.query_balance(_env.contract.address, &state.denom)?;
+    // Cancel if no amount in the contract
+    if balance.amount.is_zero(){
+        return Err(ContractError::EmptyBalance {});
+    }
+
+    // Save the new state
+    config(deps.storage).save(&state);
+    // Send the claimed tickets
+    Ok(HandleResponse {
+        messages: vec![msg.into()],
+        attributes: vec![attr("action", "claim"), attr("to", sender)],
+        data: None,
+    })
+}
+
+
 pub fn handle_play(
     deps: DepsMut,
     _env: Env,
@@ -117,10 +155,19 @@ pub fn handle_play(
 
     let mut state = config(deps.storage).load()?;
     // Ensure message sender is the owner of the contract
-    let sender = deps.api.canonical_address(&info.sender).unwrap();
+   /* let sender = deps.api.canonical_address(&info.sender).unwrap();
     if  sender != state.owner {
         return Err(ContractError::Unauthorized {});
+    }*/
+
+    // Make the contract callable for everyone every x blocks
+    if _env.block.height > state.blockPlay {
+        // state.claimTicket = vec![];
+        state.blockPlay = _env.block.height + state.everyBlockHeight;
+    }else{
+        return Err(ContractError::Unauthorized {});
     }
+
     // Play the lottery
     let players = match state.players.len(){
         0 => Err(ContractError::NoPlayers {}),

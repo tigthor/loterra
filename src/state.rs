@@ -10,10 +10,11 @@ pub static CONFIG_KEY: &[u8] = b"config";
 pub struct State {
     pub owner: CanonicalAddr,
     pub players: Vec<CanonicalAddr>,
-    pub block: u64,
+    pub blockPlay: u64,
+    pub blockClaim: u64,
     pub everyBlockHeight: u64,
     pub denom: String,
-    pub denomDelgation: String,
+    pub denomDelegation: String,
     pub claimTicket: Vec<CanonicalAddr>
 }
 
