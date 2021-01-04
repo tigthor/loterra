@@ -1,4 +1,4 @@
-use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal};
+use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery};
 
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse};
@@ -10,29 +10,28 @@ use rand::Rng;
 use schemars::_serde_json::map::Entry::Vacant;
 use std::io::Stderr;
 use std::ops::Mul;
-use proc_macro::bridge::client::ProcMacro::Bang;
+
 
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
+// #[serde(rename_all = "snake_case")]
 pub fn init(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
     msg: InitMsg,
 ) -> StdResult<InitResponse> {
-    let address1 = HumanAddr::from("delegator1");
-    let address2 = HumanAddr::from("delegator3");
-    let address3 = HumanAddr::from("delegator2");
+
     let state = State {
         owner: deps.api.canonical_address(&info.sender)?,
-        players: vec![deps.api.canonical_address(&address1).unwrap(), deps.api.canonical_address(&address2).unwrap(), deps.api.canonical_address(&address3).unwrap()],
-        blockPlay: _env.block.height,
-        blockClaim: _env.block.height,
+        players: msg.players,
+        blockPlay: msg.blockPlay,
+        blockClaim: msg.blockClaim,
         everyBlockHeight: msg.everyBlockHeight,
         denom: msg.denom,
         denomDelegation: msg.denomDelegation,
-        claimTicket: vec![]
+        claimTicket: msg.claimTicket
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -83,7 +82,7 @@ pub fn handle_register(
         return Err(ContractError::NoDelegations{});
     }
     //let delegation = allDelegations.into_iter().filter(|&delegator| delegator.validator == ownerAddress).collect::<Delegation>();
-    let delegator = allDelegations.iter().filter(|&e| e.validator == deps.api.human_address(&state.owner).unwrap()).cloned().collect::<Vec<Delegation>>();
+    let delegator = allDelegations.iter().filter(|&e| e.validator == ownerAddress.clone()).cloned().collect::<Vec<Delegation>>();
 
     if delegator.is_empty(){
         return Err(ContractError::EmptyBalance {});
@@ -116,6 +115,10 @@ pub fn handle_claim(
     let mut state = config(deps.storage).load()?;
     // convert the sender to canonical address
     let sender = deps.api.canonical_address(&info.sender).unwrap();
+    // Ensure the sender not sending funds accidentally
+    if !info.sent_funds.is_empty() {
+        return Err(ContractError::DoNotSendFunds("Claim".to_string()));
+    }
 
     if _env.block.height > state.blockClaim {
         state.claimTicket = vec![];
@@ -123,14 +126,14 @@ pub fn handle_claim(
     }
 
     // Ensure users only can claim one time every x blocks
-    if state.claimTicket.iter().any(|&address| address == sender.clone()){
+    if state.claimTicket.iter().any(|address| deps.api.human_address(address).unwrap() == info.sender){
         return Err(ContractError::AlreadyClaimed {});
     }
     // Add the sender to claimed state
     state.claimTicket.push(sender.clone());
 
     // Get the contract balance
-    let balance = deps.querier.query_balance(_env.contract.address, &state.denom)?;
+    let balance = deps.querier.query_balance(_env.contract.address.clone(), &state.denom)?;
     // Cancel if no amount in the contract
     if balance.amount.is_zero(){
         return Err(ContractError::EmptyBalance {});
@@ -138,6 +141,12 @@ pub fn handle_claim(
 
     // Save the new state
     config(deps.storage).save(&state);
+
+    let msg = BankMsg::Send {
+        from_address: _env.contract.address.clone(),
+        to_address: deps.api.human_address(&sender).unwrap(),
+        amount: vec![Coin{ denom: state.denom.clone(), amount: Uint128(1)}]
+    };
     // Send the claimed tickets
     Ok(HandleResponse {
         messages: vec![msg.into()],
@@ -159,7 +168,10 @@ pub fn handle_play(
     if  sender != state.owner {
         return Err(ContractError::Unauthorized {});
     }*/
-
+    // Ensure the sender not sending funds accidentally
+    if !info.sent_funds.is_empty() {
+        return Err(ContractError::DoNotSendFunds("Play".to_string()));
+    }
     // Make the contract callable for everyone every x blocks
     if _env.block.height > state.blockPlay {
         // state.claimTicket = vec![];
@@ -185,7 +197,7 @@ pub fn handle_play(
     let winnerDelegationAmount = match winnerDelegation.len(){
         0 => Err(ContractError::NoDelegations {}),
         1 => {
-            if winnerDelegation[0].amount.denom == state.denomDelgation {
+            if winnerDelegation[0].amount.denom == state.denomDelegation {
                 Ok(&winnerDelegation[0].amount.amount)
             } else {
                 Err(ContractError::MissingDenom(state.denom.clone()))
@@ -199,7 +211,7 @@ pub fn handle_play(
         let delegations = deps.querier.query_all_delegations(deps.api.human_address(&delegators).unwrap()).unwrap();
         let delegation = delegations.iter().filter(|&e| e.validator == deps.api.human_address(&state.owner).unwrap()).cloned().collect::<Vec<Delegation>>();
         if !delegation.is_empty() {
-            if delegation[0].amount.denom == state.denomDelgation {
+            if delegation[0].amount.denom == state.denomDelegation {
                 totalInDelegation += delegation[0].amount.amount
             }
         }
@@ -207,13 +219,16 @@ pub fn handle_play(
 
     let percentOfJackpot = winnerDelegationAmount.u128() as f64 * 100 as f64 / totalInDelegation.u128() as f64;
 
-    let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelgation).unwrap();
+    // Withdraw (commissions + )? rewards
+    StakingMsg::Withdraw { validator: deps.api.human_address(&state.owner).unwrap(), recipient: None };
+
+    let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
     let jackpot = balance.amount.u128() as f64 * (percentOfJackpot as f64 / 100 as f64);
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
         to_address: deps.api.human_address(&winnerAddress).unwrap(),
-        amount: vec![Coin{ denom: state.denomDelgation.clone(), amount: Uint128(jackpot as u128)}]
+        amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: Uint128(jackpot as u128)}]
     };
 
     state.players = vec![];
@@ -264,7 +279,11 @@ mod tests {
         let init_msg = InitMsg {
             denom: "ujack".to_string(),
             denomDelegation: "uscrt".to_string(),
-            everyBlockHeight: 100
+            everyBlockHeight: 100,
+            players: vec![],
+            claimTicket: vec![],
+            blockPlay: 0,
+            blockClaim: 0
         };
         let res = init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
         assert_eq!(0, res.messages.len());
@@ -283,7 +302,11 @@ mod tests {
         let init_msg = InitMsg {
             denom: "ujack".to_string(),
             denomDelegation: "uscrt".to_string(),
-            everyBlockHeight: 100904300345
+            everyBlockHeight: 100904300345,
+            players: vec![],
+            claimTicket: vec![],
+            blockPlay: 0,
+            blockClaim: 0
         };
         let res = init(deps.as_mut(), mock_env(), info.clone(), init_msg).unwrap();
 
@@ -335,10 +358,18 @@ mod tests {
     fn play(){
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(1230_000_000)}]);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
+        let address1 = HumanAddr::from("delegator1");
+        let address2 = HumanAddr::from("delegator3");
+        let address3 = HumanAddr::from("delegator2");
+
         let init_msg = InitMsg {
             denom: "ujack".to_string(),
             denomDelegation: "uscrt".to_string(),
-            everyBlockHeight: 100
+            everyBlockHeight: 100,
+            players: vec![deps.api.canonical_address(&address1).unwrap(), deps.api.canonical_address(&address2).unwrap(), deps.api.canonical_address(&address3).unwrap()],
+            claimTicket: vec![],
+            blockPlay: 0,
+            blockClaim: 0
         };
 
         deps.querier.update_staking("uscrt", &[Validator{
