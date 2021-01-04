@@ -1,12 +1,17 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use crate::state::State;
+use cosmwasm_std::{CanonicalAddr, Storage};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
     pub denom: String,
     pub denomDelegation: String,
-    pub everyBlockHeight: u64
+    pub everyBlockHeight: u64,
+    pub players: Vec<CanonicalAddr>,
+    pub claimTicket: Vec<CanonicalAddr>,
+    pub blockPlay: u64,
+    pub blockClaim: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
