@@ -49,6 +49,7 @@ pub fn handle(
         HandleMsg::Register {} => handle_register(deps, _env, info),
         HandleMsg::Play {} => handle_play(deps, _env, info),
         HandleMsg::Claim {} => handle_claim(deps, _env, info),
+        HandleMsg::Ico {} => handle_ico(deps, _env, info),
     }
 }
 
@@ -77,7 +78,7 @@ pub fn handle_register(
     }
 
     // Ensure message sender is delegating some funds to the lottery validator
-    let allDelegations = &deps.querier.query_all_delegations(&info.sender)?;
+    /*let allDelegations = &deps.querier.query_all_delegations(&info.sender)?;
     if allDelegations.is_empty() {
         return Err(ContractError::NoDelegations{});
     }
@@ -86,13 +87,10 @@ pub fn handle_register(
 
     if delegator.is_empty(){
         return Err(ContractError::EmptyBalance {});
-    }
-    /*
-        TODO: Probably we need to add a condition to check a minimum of staking coin to be able to participate a limit amount in the state
-    */
+    }*/
     // Ensure message sender is sending the rights denom tickets and add register
-    let ticketNumber = info.sent_funds[0].amount.u128();
-
+    //let ticketNumber = info.sent_funds[0].amount.u128();
+    let ticketNumber = sent.u128();
     for d in 0..ticketNumber {
         state.players.push(deps.api.canonical_address(&info.sender.clone())?);
     }
@@ -124,8 +122,12 @@ pub fn handle_claim(
         state.claimTicket = vec![];
         state.blockClaim = _env.block.height + state.everyBlockHeight;
     }
-
-    // Ensure users only can claim one time every x blocks
+    // Ensure sender is a delegator
+    let isDelegator = deps.querier.query_all_delegations(sender)?;
+    if isDelegator.is_empty() {
+        return Err(ContractError::NoDelegations {})
+    }
+    // Ensure sender only can claim one time every x blocks
     if state.claimTicket.iter().any(|address| deps.api.human_address(address).unwrap() == info.sender){
         return Err(ContractError::AlreadyClaimed {});
     }
@@ -241,6 +243,34 @@ pub fn handle_play(
         attributes: vec![attr("action", "jackpot"), attr("to", deps.api.human_address(&winnerAddress).unwrap())],
         data: None,
     })
+}
+
+pub fn handle_ico(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo
+) -> Result<HandleResponse, ContractError> {
+    // Load the state
+    let mut state = config(deps.storage).load()?;
+
+    // Get the funds
+    let sent = match info.sent_funds.len() {
+        0 => Err(ContractError::NoFunds {}),
+        1 => {
+            if info.sent_funds[0].denom == state.denom {
+                Ok(info.sent_funds[0].amount)
+            } else {
+                Err(ContractError::MissingDenom(state.denom.clone()))
+            }
+        }
+        _ => Err(ContractError::ExtraDenom(state.denom.clone())),
+    }?;
+
+    if sent.is_zero() {
+        return Err(ContractError::NoFunds {});
+    }
+
+    OK()
 }
 
 pub fn query(

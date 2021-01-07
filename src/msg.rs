@@ -22,6 +22,7 @@ pub enum HandleMsg {
     /// Owner can run the lottery
     Play {},
     Claim {},
+    Ico {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
