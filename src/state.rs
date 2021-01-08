@@ -12,6 +12,7 @@ pub struct State {
     pub players: Vec<CanonicalAddr>,
     pub blockPlay: u64,
     pub blockClaim: u64,
+    pub blockIcoTimeframe: u64,
     pub everyBlockHeight: u64,
     pub denom: String,
     pub denomDelegation: String,

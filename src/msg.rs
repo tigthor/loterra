@@ -12,6 +12,7 @@ pub struct InitMsg {
     pub claimTicket: Vec<CanonicalAddr>,
     pub blockPlay: u64,
     pub blockClaim: u64,
+    pub blockIcoTimeframe: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -23,6 +24,7 @@ pub enum HandleMsg {
     Play {},
     Claim {},
     Ico {},
+    Buy {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

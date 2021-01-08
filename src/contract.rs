@@ -11,7 +11,22 @@ use schemars::_serde_json::map::Entry::Vacant;
 use std::io::Stderr;
 use std::ops::Mul;
 
+/*fn check_fund(sentFunds: &usize, amount: &Uint128, denom: &str, stateDenom: &str) -> Uint128{
 
+   let sent = match sentFunds {
+        0 => Err(ContractError::NoFunds {}),
+        1 => {
+            if denom == stateDenom {
+                Ok(amount.clone())
+            } else {
+                Err(ContractError::MissingDenom(stateDenom.to_string()))
+            }
+        }
+        _ => Err(ContractError::ExtraDenom(stateDenom.to_string())),
+    };
+
+   sent.unwrap()
+}*/
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -28,6 +43,7 @@ pub fn init(
         players: msg.players,
         blockPlay: msg.blockPlay,
         blockClaim: msg.blockClaim,
+        blockIcoTimeframe: msg.blockIcoTimeframe,
         everyBlockHeight: msg.everyBlockHeight,
         denom: msg.denom,
         denomDelegation: msg.denomDelegation,
@@ -50,6 +66,7 @@ pub fn handle(
         HandleMsg::Play {} => handle_play(deps, _env, info),
         HandleMsg::Claim {} => handle_claim(deps, _env, info),
         HandleMsg::Ico {} => handle_ico(deps, _env, info),
+        HandleMsg::Buy {} => handle_buy(deps, _env, info),
     }
 }
 
@@ -60,41 +77,26 @@ pub fn handle_register(
 ) -> Result<HandleResponse, ContractError> {
 
     let mut state = config(deps.storage).load()?;
-    let ownerAddress = deps.api.human_address( &state.owner)?;
-
+    //let sent = check_fund(&info.sent_funds.len(), &info.sent_funds[0].amount, &info.sent_funds[0].denom, &state.denom);
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
             if info.sent_funds[0].denom == state.denom {
                 Ok(info.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denom.clone()))
+                Err(ContractError::MissingDenom(state.denom.clone().to_string()))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denom.clone())),
+        _ => Err(ContractError::ExtraDenom(state.denom.clone().to_string())),
     }?;
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
     }
 
-    // Ensure message sender is delegating some funds to the lottery validator
-    /*let allDelegations = &deps.querier.query_all_delegations(&info.sender)?;
-    if allDelegations.is_empty() {
-        return Err(ContractError::NoDelegations{});
-    }
-    //let delegation = allDelegations.into_iter().filter(|&delegator| delegator.validator == ownerAddress).collect::<Delegation>();
-    let delegator = allDelegations.iter().filter(|&e| e.validator == ownerAddress.clone()).cloned().collect::<Vec<Delegation>>();
-
-    if delegator.is_empty(){
-        return Err(ContractError::EmptyBalance {});
-    }*/
-    // Ensure message sender is sending the rights denom tickets and add register
-    //let ticketNumber = info.sent_funds[0].amount.u128();
     let ticketNumber = sent.u128();
     for d in 0..ticketNumber {
         state.players.push(deps.api.canonical_address(&info.sender.clone())?);
     }
-
     /*
        TODO: Probably we need shuffle the array for better repartition
    */
@@ -123,7 +125,7 @@ pub fn handle_claim(
         state.blockClaim = _env.block.height + state.everyBlockHeight;
     }
     // Ensure sender is a delegator
-    let isDelegator = deps.querier.query_all_delegations(sender)?;
+    let isDelegator = deps.querier.query_all_delegations(&info.sender)?;
     if isDelegator.is_empty() {
         return Err(ContractError::NoDelegations {})
     }
@@ -152,7 +154,7 @@ pub fn handle_claim(
     // Send the claimed tickets
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "claim"), attr("to", sender)],
+        attributes: vec![attr("action", "claim"), attr("to", &sender)],
         data: None,
     })
 }
@@ -253,24 +255,57 @@ pub fn handle_ico(
     // Load the state
     let mut state = config(deps.storage).load()?;
 
+    if state.blockIcoTimeframe < _env.block.height{
+        return Err(ContractError::TheIcoIsEnded {});
+    }
     // Get the funds
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
-            if info.sent_funds[0].denom == state.denom {
+            if info.sent_funds[0].denom == state.denomDelegation {
                 Ok(info.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denom.clone()))
+                Err(ContractError::MissingDenom(state.denomDelegation.clone()))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denom.clone())),
+        _ => Err(ContractError::ExtraDenom(state.denomDelegation.clone())),
     }?;
 
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
-    }
+    };
 
-    OK()
+    Ok(HandleResponse::default())
+}
+
+pub fn handle_buy(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo
+) -> Result<HandleResponse, ContractError> {
+    // Load the state
+    let mut state = config(deps.storage).load()?;
+
+    // Get the funds
+    let sent = match info.sent_funds.len() {
+        0 => Err(ContractError::NoFunds {}),
+        1 => {
+            if info.sent_funds[0].denom == state.denomDelegation {
+                Ok(info.sent_funds[0].amount)
+            } else {
+                Err(ContractError::MissingDenom(state.denomDelegation.clone()))
+            }
+        }
+        _ => Err(ContractError::ExtraDenom(state.denomDelegation.clone())),
+    }?;
+
+    if sent.is_zero() {
+        return Err(ContractError::NoFunds {});
+    };
+
+
+
+    Ok(HandleResponse::default())
 }
 
 pub fn query(
@@ -313,14 +348,11 @@ mod tests {
             players: vec![],
             claimTicket: vec![],
             blockPlay: 0,
-            blockClaim: 0
+            blockClaim: 0,
+            blockIcoTimeframe: 0
         };
         let res = init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
         assert_eq!(0, res.messages.len());
-
-        let res = query_config(deps.as_ref()).unwrap();
-
-        assert_eq!( "00000000006E00000000007772000000006F650000000000", CanonicalAddr::to_string(&res.owner));
 
     }
     #[test]
@@ -336,7 +368,8 @@ mod tests {
             players: vec![],
             claimTicket: vec![],
             blockPlay: 0,
-            blockClaim: 0
+            blockClaim: 0,
+            blockIcoTimeframe: 0
         };
         let res = init(deps.as_mut(), mock_env(), info.clone(), init_msg).unwrap();
 
@@ -367,22 +400,47 @@ mod tests {
         }
         ]);
 
-        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(1)}]);
+        // Test if this succeed
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
         let res = handle_register(deps.as_mut(), mock_env(), info.clone());
-        //println!("{:?}", res);
+        assert_eq!(0, res.unwrap().messages.len());
 
-        /*match res {
-            Err(ContractError::Unauthorized {}) => {},
-            Err(ContractError::ExtraDenom(_e)) => (),
-            Err(ContractError::MissingDenom(_e)) => (),
-            Err(ContractError::NoFunds {}) => {},
-            Err(ContractError::EmptyBalance {}) => {},
-            Err(ContractError::NoDelegations{}) => {},
-            _ => panic!("Unexpected error")
-        }*/
+        // Test if we have added 3 times the player in the players array
         let res = query_config(deps.as_ref()).unwrap();
-        println!("{:?}", res.players);
+        assert_eq!(3, res.players.len());
 
+        // Test sending 0 ticket NoFunds
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(0)}]);
+        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::NoFunds {}) => {},
+            _ => panic!("Unexpected error")
+        }
+        // Test sending 0 coins NoFunds
+        let info = mock_info(HumanAddr::from("delegator1"), &[]);
+        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::NoFunds {}) => {},
+            _ => panic!("Unexpected error")
+        }
+        // Test sending another coin
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(2)}]);
+        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::MissingDenom (msg)) => {
+                assert_eq!(msg, "ujack".to_string())
+            },
+            _ => panic!("Unexpected error")
+        }
+        // Test sending more tokens than admitted
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}, Coin{ denom: "uscrt".to_string(), amount: Uint128(2)}]);
+        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::ExtraDenom(msg)) => {
+                assert_eq!(msg, "ujack".to_string())
+            },
+            _ => panic!("Unexpected error")
+        }
     }
     #[test]
     fn play(){
@@ -399,7 +457,8 @@ mod tests {
             players: vec![deps.api.canonical_address(&address1).unwrap(), deps.api.canonical_address(&address2).unwrap(), deps.api.canonical_address(&address3).unwrap()],
             claimTicket: vec![],
             blockPlay: 0,
-            blockClaim: 0
+            blockClaim: 0,
+            blockIcoTimeframe: 0
         };
 
         deps.querier.update_staking("uscrt", &[Validator{
