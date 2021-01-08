@@ -36,6 +36,9 @@ pub enum ContractError {
     #[error("Do not send funds with {0}")]
     DoNotSendFunds(String),
 
+    #[error("Ico is ended")]
+    TheIcoIsEnded{},
+
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }
