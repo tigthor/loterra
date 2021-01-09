@@ -326,8 +326,8 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, BankQuerier, MOCK_CONTRACT_ADDR, MockStorage, StakingQuerier};
-    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError, Storage, Api, CanonicalAddr};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, BankQuerier, MOCK_CONTRACT_ADDR, MockStorage, StakingQuerier, MockApi, MockQuerier};
+    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError, Storage, Api, CanonicalAddr, OwnedDeps};
     use std::collections::HashMap;
     use std::borrow::Borrow;
     use cosmwasm_storage::{bucket_read, bucket, singleton, singleton_read};
@@ -336,43 +336,50 @@ mod tests {
     use crate::msg::{HandleMsg, InitMsg, QueryMsg};
 
 
+    const DENOM: &str = "ujack";
+    const DENOM_DELEGATION: &str = "uscrt";
+    const EVERY_BLOCK_EIGHT: u64 = 100;
+    const PLAYERS: Vec<CanonicalAddr> = vec![];
+    const CLAIM_TICKET: Vec<CanonicalAddr> = vec![];
+    const BLOCK_PLAY: u64 = 0;
+    const BLOCK_CLAIM: u64 = 0;
+    const BLOCK_ICO_TIME_FRAME: u64 = 0;
+
+    fn default_init(deps: DepsMut) {
+        do_init(
+            deps
+        )
+    }
+
+
+    fn do_init(deps: DepsMut){
+
+        let init_msg = InitMsg{
+            denom: DENOM.to_string(),
+            denomDelegation: DENOM_DELEGATION.to_string(),
+            everyBlockHeight: EVERY_BLOCK_EIGHT,
+            players: PLAYERS,
+            claimTicket: CLAIM_TICKET,
+            blockPlay: BLOCK_PLAY,
+            blockClaim: BLOCK_PLAY,
+            blockIcoTimeframe: BLOCK_ICO_TIME_FRAME
+        };
+        let info = mock_info(HumanAddr::from("owner"), &[]);
+        init(deps, mock_env(), info, init_msg).unwrap();
+    }
+
 
     #[test]
     fn proper_init (){
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
-        let info = mock_info(HumanAddr::from("owner"), &[]);
-        let init_msg = InitMsg {
-            denom: "ujack".to_string(),
-            denomDelegation: "uscrt".to_string(),
-            everyBlockHeight: 100,
-            players: vec![],
-            claimTicket: vec![],
-            blockPlay: 0,
-            blockClaim: 0,
-            blockIcoTimeframe: 0
-        };
-        let res = init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
-        assert_eq!(0, res.messages.len());
-
+        default_init(deps.as_mut());
+        //assert_eq!(0, res.messages.len());
     }
     #[test]
     fn register() {
 
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
-
-        let info = mock_info(HumanAddr::from("validator1"), &[]);
-        let init_msg = InitMsg {
-            denom: "ujack".to_string(),
-            denomDelegation: "uscrt".to_string(),
-            everyBlockHeight: 100904300345,
-            players: vec![],
-            claimTicket: vec![],
-            blockPlay: 0,
-            blockClaim: 0,
-            blockIcoTimeframe: 0
-        };
-        let res = init(deps.as_mut(), mock_env(), info.clone(), init_msg).unwrap();
-
+        default_init(deps.as_mut());
         deps.querier.update_staking("uscrt", &[Validator{
             address: HumanAddr::from("validator1"),
             commission: Decimal::percent(10),
@@ -391,15 +398,14 @@ mod tests {
             can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
             accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
         },
-        FullDelegation{
-            delegator: HumanAddr::from("delegator1"),
-            validator: HumanAddr::from("validator3"),
-            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
-            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-        }
+            FullDelegation{
+                delegator: HumanAddr::from("delegator1"),
+                validator: HumanAddr::from("validator3"),
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+            }
         ]);
-
         // Test if this succeed
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
         let res = handle_register(deps.as_mut(), mock_env(), info.clone());
@@ -441,6 +447,95 @@ mod tests {
             },
             _ => panic!("Unexpected error")
         }
+    }
+    #[test]
+    fn claim() {
+
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator1"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        }, FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator2"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        },
+            FullDelegation{
+                delegator: HumanAddr::from("delegator1"),
+                validator: HumanAddr::from("validator3"),
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+            }
+        ]);
+        default_init(deps.as_mut());
+
+        // Test error no funds in the contract
+        let info = mock_info(HumanAddr::from("delegator1"), &[]);
+        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        assert_eq!(1, res.unwrap().messages.len());
+
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
+
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator1"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        }, FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator2"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        },
+            FullDelegation{
+                delegator: HumanAddr::from("delegator1"),
+                validator: HumanAddr::from("validator3"),
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+            }
+        ]);
+        default_init(deps.as_mut());
+
+        // Test handle do not send funds
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
+        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+
+        match res {
+            Err(ContractError::DoNotSendFunds(msg)) => {
+                assert_eq!(msg, "Claim".to_string())
+            },
+            _ => panic!("Unexpected error")
+        };
+
+        // Test error no funds in the contract
+        let info = mock_info(HumanAddr::from("delegator1"), &[]);
+        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+
+        match res {
+            Err(ContractError::EmptyBalance {}) => {},
+            _ => panic!("Unexpected error")
+        }
+
+
     }
     #[test]
     fn play(){
