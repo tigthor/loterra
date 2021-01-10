@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Storage};
+use cosmwasm_std::{CanonicalAddr, Storage, Uint128};
 use cosmwasm_storage::{singleton, singleton_read, ReadonlySingleton, Singleton};
 
 pub static CONFIG_KEY: &[u8] = b"config";
@@ -17,7 +17,9 @@ pub struct State {
     pub denom: String,
     pub denomDelegation: String,
     pub denomShare: String,
-    pub claimTicket: Vec<CanonicalAddr>
+    pub claimTicket: Vec<CanonicalAddr>,
+    pub claimReward: Vec<CanonicalAddr>,
+    pub holdersRewards: Uint128
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
