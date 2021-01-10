@@ -48,7 +48,9 @@ pub fn init(
         denom: msg.denom,
         denomDelegation: msg.denomDelegation,
         denomShare: msg.denomShare,
-        claimTicket: msg.claimTicket
+        claimTicket: msg.claimTicket,
+        claimReward: msg.claimReward,
+        holdersRewards: msg.holdersRewards
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -68,6 +70,7 @@ pub fn handle(
         HandleMsg::Claim {} => handle_claim(deps, _env, info),
         HandleMsg::Ico {} => handle_ico(deps, _env, info),
         HandleMsg::Buy {} => handle_buy(deps, _env, info),
+        HandleMsg::Reward {} => handle_reward(deps, _env, info)
     }
 }
 
@@ -76,9 +79,9 @@ pub fn handle_register(
     _env: Env,
     info: MessageInfo
 ) -> Result<HandleResponse, ContractError> {
-
+    // Load the state
     let mut state = config(deps.storage).load()?;
-    //let sent = check_fund(&info.sent_funds.len(), &info.sent_funds[0].amount, &info.sent_funds[0].denom, &state.denom);
+    // Check if some funds are sent
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
@@ -96,11 +99,10 @@ pub fn handle_register(
 
     let ticketNumber = sent.u128();
     for d in 0..ticketNumber {
+        // Update the state
         state.players.push(deps.api.canonical_address(&info.sender.clone())?);
     }
-    /*
-       TODO: Probably we need shuffle the array for better repartition
-   */
+
     // Save the new state
     config(deps.storage).save(&state);
 
@@ -166,76 +168,49 @@ pub fn handle_play(
     _env: Env,
     info: MessageInfo
 ) -> Result<HandleResponse, ContractError> {
-
+    // Load the state
     let mut state = config(deps.storage).load()?;
-    // Ensure message sender is the owner of the contract
-   /* let sender = deps.api.canonical_address(&info.sender).unwrap();
-    if  sender != state.owner {
-        return Err(ContractError::Unauthorized {});
-    }*/
+
     // Ensure the sender not sending funds accidentally
     if !info.sent_funds.is_empty() {
         return Err(ContractError::DoNotSendFunds("Play".to_string()));
     }
     // Make the contract callable for everyone every x blocks
     if _env.block.height > state.blockPlay {
-        // state.claimTicket = vec![];
+        // Update the state
         state.blockPlay = _env.block.height + state.everyBlockHeight;
     }else{
         return Err(ContractError::Unauthorized {});
     }
-
-    // Play the lottery
+    // Sort the winner
     let players = match state.players.len(){
         0 => Err(ContractError::NoPlayers {}),
         _ => Ok(&state.players)
     }?;
     let mut rng = rand::thread_rng();
     let maxRange = players.len() - 1;
-    let range = rng.gen_range(0..maxRange);
+    let winnerRange = rng.gen_range(0..maxRange);
+    let winnerAddress = players[winnerRange].clone();
 
-    let winnerAddress = players[range].clone();
+    // Winning 5 to 99 % of the lottery
+    let percentOfJackpot = rng.gen_range(5..99);
 
-    let winnerDelegations = deps.querier.query_all_delegations(deps.api.human_address(&winnerAddress).unwrap()).unwrap();
-    let winnerDelegation = winnerDelegations.iter().filter(|&e| e.validator == deps.api.human_address(&state.owner).unwrap()).cloned().collect::<Vec<Delegation>>();
-
-    let winnerDelegationAmount = match winnerDelegation.len(){
-        0 => Err(ContractError::NoDelegations {}),
-        1 => {
-            if winnerDelegation[0].amount.denom == state.denomDelegation {
-                Ok(&winnerDelegation[0].amount.amount)
-            } else {
-                Err(ContractError::MissingDenom(state.denom.clone()))
-            }
-        },
-        _ => Err(ContractError::ExtraDelegation {})
-    }?;
-
-    let mut totalInDelegation: Uint128 = Uint128(0);
-    for delegators in players{
-        let delegations = deps.querier.query_all_delegations(deps.api.human_address(&delegators).unwrap()).unwrap();
-        let delegation = delegations.iter().filter(|&e| e.validator == deps.api.human_address(&state.owner).unwrap()).cloned().collect::<Vec<Delegation>>();
-        if !delegation.is_empty() {
-            if delegation[0].amount.denom == state.denomDelegation {
-                totalInDelegation += delegation[0].amount.amount
-            }
-        }
-    }
-
-    let percentOfJackpot = winnerDelegationAmount.u128() as f64 * 100 as f64 / totalInDelegation.u128() as f64;
-
-    // Withdraw (commissions + )? rewards
-    StakingMsg::Withdraw { validator: deps.api.human_address(&state.owner).unwrap(), recipient: None };
-
+    // Get the contract balance
     let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
-    let jackpot = balance.amount.u128() as f64 * (percentOfJackpot as f64 / 100 as f64);
+    // Calculate the gross price
+    let jackpotGross = balance.amount.mul( Decimal::percent(percentOfJackpot));
+    // Calculate the fees for rewarding tokens holders
+    let jackpotFee = jackpotGross.mul(Decimal::percent(10));
+    // Jackpot winner after fees
+    let jackpot = jackpotGross - jackpotFee;
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
         to_address: deps.api.human_address(&winnerAddress).unwrap(),
-        amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: Uint128(jackpot as u128)}]
+        amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: jackpot.unwrap()}]
     };
-
+    // Update the state
+    state.holdersRewards = jackpotFee;
     state.players = vec![];
 
     // Save the new state
@@ -255,11 +230,11 @@ pub fn handle_ico(
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
-
+    // Ico expire after blocktime
     if state.blockIcoTimeframe < _env.block.height{
         return Err(ContractError::TheIcoIsEnded {});
     }
-    // Get the funds
+    // Check if some funds are sent
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
@@ -275,7 +250,7 @@ pub fn handle_ico(
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
     };
-
+    // Get the contract balance prepare the tx
     let balance = deps.querier.query_balance(&_env.contract.address, &state.denomShare).unwrap();
     if balance.amount.is_zero(){
         return Err(ContractError::EmptyBalance {});
@@ -347,6 +322,15 @@ pub fn handle_buy(
     })
 }
 
+pub fn handle_reward(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo
+) -> Result<HandleResponse, ContractError> {
+    Ok(HandleResponse::default())
+}
+
+
 pub fn query(
     deps: Deps,
     _env: Env,
@@ -366,7 +350,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, BankQuerier, MOCK_CONTRACT_ADDR, MockStorage, StakingQuerier, MockApi, MockQuerier};
-    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError, Storage, Api, CanonicalAddr, OwnedDeps, CosmosMsg};
+    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError, Storage, Api, CanonicalAddr, OwnedDeps, CosmosMsg, QuerierResult};
     use std::collections::HashMap;
     use std::borrow::Borrow;
     use cosmwasm_storage::{bucket_read, bucket, singleton, singleton_read};
@@ -375,17 +359,28 @@ mod tests {
     use crate::msg::{HandleMsg, InitMsg, QueryMsg};
 
 
-    const DENOM: &str = "ujack";
-    const DENOM_DELEGATION: &str = "uscrt";
-    const DENOM_SHARE: &str = "upot";
-    const EVERY_BLOCK_EIGHT: u64 = 100;
-    const PLAYERS: Vec<CanonicalAddr> = vec![];
-    const CLAIM_TICKET: Vec<CanonicalAddr> = vec![];
-    const BLOCK_PLAY: u64 = 0;
-    const BLOCK_CLAIM: u64 = 0;
-    const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
+
 
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>, staking: bool) {
+        let player1 = deps.api.canonical_address(&HumanAddr::from("player1")).unwrap();
+        let player2 = deps.api.canonical_address(&HumanAddr::from("player2")).unwrap();
+        let player3 = deps.api.canonical_address(&HumanAddr::from("player3")).unwrap();
+        let player4 = deps.api.canonical_address(&HumanAddr::from("player4")).unwrap();
+        let player5 = deps.api.canonical_address(&HumanAddr::from("player5")).unwrap();
+        let player6 = deps.api.canonical_address(&HumanAddr::from("player6")).unwrap();
+
+        const DENOM: &str = "ujack";
+        const DENOM_DELEGATION: &str = "uscrt";
+        const DENOM_SHARE: &str = "upot";
+        const EVERY_BLOCK_EIGHT: u64 = 100;
+        let PLAYERS: Vec<CanonicalAddr> = vec![player1, player2.clone(), player2.clone(), player3.clone(), player3.clone(), player3.clone(), player3.clone(), player4.clone(), player4.clone(), player4.clone(), player5, player6];
+        const CLAIM_TICKET: Vec<CanonicalAddr> = vec![];
+        const CLAIM_REWARD: Vec<CanonicalAddr> = vec![];
+        const BLOCK_PLAY: u64 = 0;
+        const BLOCK_CLAIM: u64 = 0;
+        const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
+        const HOLDERS_REWARDS: Uint128 = Uint128(0);
+
         let init_msg = InitMsg{
             denom: DENOM.to_string(),
             denomDelegation: DENOM_DELEGATION.to_string(),
@@ -393,9 +388,11 @@ mod tests {
             everyBlockHeight: EVERY_BLOCK_EIGHT,
             players: PLAYERS,
             claimTicket: CLAIM_TICKET,
+            claimReward: CLAIM_REWARD,
             blockPlay: BLOCK_PLAY,
             blockClaim: BLOCK_PLAY,
-            blockIcoTimeframe: BLOCK_ICO_TIME_FRAME
+            blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
+            holdersRewards: HOLDERS_REWARDS
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         if staking {
@@ -464,7 +461,7 @@ mod tests {
         assert_eq!(0, res.unwrap().messages.len());
         // Test if we have added 3 times the player in the players array
         let res = query_config(deps.as_ref()).unwrap();
-        assert_eq!(3, res.players.len());
+        assert_eq!(15, res.players.len());
 
         // Test sending 0 ticket NoFunds
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(0)}]);
@@ -545,7 +542,19 @@ mod tests {
             to_address: HumanAddr::from("delegator1"),
             amount: vec![Coin{ denom: "ujack".to_string(), amount: Uint128(1) }]
         }));
-
+        // Test if state have changed correctly
+        let res = query_config(deps.as_ref()).unwrap();
+        let claimer = deps.api.canonical_address(&HumanAddr::from("delegator1")).unwrap();
+        // Test we added the claimer to the claimed vector
+        assert!(res.claimTicket.len() > 0);
+        // Test we added correct claimer to the claimed vector
+        assert!(res.claimTicket.contains(&claimer));
+        // Test error to claim two times
+        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::AlreadyClaimed {}) => {},
+            _ => panic!("Unexpected error")
+        }
     }
 
     #[test]
@@ -668,80 +677,40 @@ mod tests {
 
     #[test]
     fn play(){
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(1230_000_000)}]);
+        // Success lottery result
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        default_init(&mut deps, false);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
-        let address1 = HumanAddr::from("delegator1");
-        let address2 = HumanAddr::from("delegator3");
-        let address3 = HumanAddr::from("delegator2");
-
-        let init_msg = InitMsg {
-            denom: "ujack".to_string(),
-            denomDelegation: "uscrt".to_string(),
-            denomShare: "upot".to_string(),
-            everyBlockHeight: 100,
-            players: vec![deps.api.canonical_address(&address1).unwrap(), deps.api.canonical_address(&address2).unwrap(), deps.api.canonical_address(&address3).unwrap()],
-            claimTicket: vec![],
-            blockPlay: 0,
-            blockClaim: 0,
-            blockIcoTimeframe: 0
-        };
-
-        deps.querier.update_staking("uscrt", &[Validator{
-            address: HumanAddr::from("validator1"),
-            commission: Decimal::percent(10),
-            max_commission: Decimal::percent(100),
-            max_change_rate: Decimal::percent(100)
-        }], &[FullDelegation{
-            delegator: HumanAddr::from("delegator1"),
-            validator: HumanAddr::from("validator1"),
-            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(54_000_000)},
-            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-        }, FullDelegation{
-            delegator: HumanAddr::from("delegator1"),
-            validator: HumanAddr::from("validator2"),
-            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(120_000_000)},
-            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-        },
-            FullDelegation{
-            delegator: HumanAddr::from("delegator2"),
-            validator: HumanAddr::from("validator1"),
-            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(50_000_000)},
-            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-        },
-            FullDelegation{
-                delegator: HumanAddr::from("delegator2"),
-                validator: HumanAddr::from("validator2"),
-                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(50_000_000)},
-                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-            },
-            FullDelegation{
-            delegator: HumanAddr::from("delegator3"),
-            validator: HumanAddr::from("validator1"),
-            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)},
-            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-        },
-        FullDelegation{
-            delegator: HumanAddr::from("delegator3"),
-            validator: HumanAddr::from("validator2"),
-            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)},
-            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-        }
-        ]);
-
-        let res = init(deps.as_mut(), mock_env(), info.clone(), init_msg).unwrap();
+        let env = mock_env();
+        let res = handle_play(deps.as_mut(), env.clone(), info.clone()).unwrap();
+        assert_eq!(1, res.messages.len());
+        // Test if state have changed correctly
+        let res = query_config(deps.as_ref()).unwrap();
+        // Test fees is now superior to 0
+        assert_ne!(0, res.holdersRewards.u128());
+        // Test block to play superior block height
+        assert!(res.blockPlay > env.block.height);
+        // Test if players array is empty, we need to re init
+        assert_eq!(0, res.players.len());
+        // Can't replay only every x blocks
         let res = handle_play(deps.as_mut(), mock_env(), info.clone());
-        println!("{:?}", res);
-        /*match res {
+        match res {
             Err(ContractError::Unauthorized {}) => {},
-            Err(ContractError::NoPlayers {}) => {},
             _ => panic!("Unexpected error")
-        }*/
+        }
+
+        // Do not send funds with play
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        default_init(&mut deps, false);
+        let info = mock_info(HumanAddr::from("validator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        let env = mock_env();
+        let res = handle_play(deps.as_mut(), env.clone(), info.clone());
+        match res {
+            Err(ContractError::DoNotSendFunds (msg)) => {
+                assert_eq!(msg ,"Play")
+            },
+            _ => panic!("Unexpected error")
+        }
 
     }
 
