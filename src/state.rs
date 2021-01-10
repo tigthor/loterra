@@ -16,6 +16,7 @@ pub struct State {
     pub everyBlockHeight: u64,
     pub denom: String,
     pub denomDelegation: String,
+    pub denomShare: String,
     pub claimTicket: Vec<CanonicalAddr>
 }
 
