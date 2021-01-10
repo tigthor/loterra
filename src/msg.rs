@@ -7,6 +7,7 @@ use cosmwasm_std::{CanonicalAddr, Storage};
 pub struct InitMsg {
     pub denom: String,
     pub denomDelegation: String,
+    pub denomShare: String,
     pub everyBlockHeight: u64,
     pub players: Vec<CanonicalAddr>,
     pub claimTicket: Vec<CanonicalAddr>,
