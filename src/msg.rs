@@ -15,7 +15,8 @@ pub struct InitMsg {
     pub blockPlay: u64,
     pub blockClaim: u64,
     pub blockIcoTimeframe: u64,
-    pub holdersRewards: Uint128
+    pub holdersRewards: Uint128,
+    pub tokenHolderSupply: Uint128
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
