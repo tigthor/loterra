@@ -26,7 +26,7 @@ pub enum HandleMsg {
     Register {},
     /// Run the lottery
     Play {},
-    /// Claim 1 ticket if you are a delegator
+    /// Claim 1 ticket every x block if you are a delegator
     Claim {},
     /// Buy the token holders with USCRT and get 1:1 ratio
     Ico {},

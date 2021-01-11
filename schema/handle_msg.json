@@ -3,33 +3,74 @@
   "title": "HandleMsg",
   "anyOf": [
     {
+      "description": "Registering to the lottery",
       "type": "object",
       "required": [
-        "increment"
+        "register"
       ],
       "properties": {
-        "increment": {
+        "register": {
           "type": "object"
         }
       }
     },
     {
+      "description": "Run the lottery",
       "type": "object",
       "required": [
-        "reset"
+        "play"
       ],
       "properties": {
-        "reset": {
-          "type": "object",
-          "required": [
-            "count"
-          ],
-          "properties": {
-            "count": {
-              "type": "integer",
-              "format": "int32"
-            }
-          }
+        "play": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "description": "Claim 1 ticket every x block if you are a delegator",
+      "type": "object",
+      "required": [
+        "claim"
+      ],
+      "properties": {
+        "claim": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "description": "Buy the token holders with USCRT and get 1:1 ratio",
+      "type": "object",
+      "required": [
+        "ico"
+      ],
+      "properties": {
+        "ico": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "description": "Buy tickets with USCRT, 1 ticket is 1_000_000 USCRT (1SCRT)",
+      "type": "object",
+      "required": [
+        "buy"
+      ],
+      "properties": {
+        "buy": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "description": "Get reward",
+      "type": "object",
+      "required": [
+        "reward"
+      ],
+      "properties": {
+        "reward": {
+          "type": "object"
         }
       }
     }

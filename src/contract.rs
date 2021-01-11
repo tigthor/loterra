@@ -474,6 +474,7 @@ mod tests {
     fn proper_init (){
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
         default_init(&mut deps, false);
+        //println!("{}", 1432439234 % 100);
     }
     #[test]
     fn register() {
