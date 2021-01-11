@@ -9,24 +9,7 @@ use std::fs::canonicalize;
 use rand::Rng;
 use schemars::_serde_json::map::Entry::Vacant;
 use std::io::Stderr;
-use std::ops::Mul;
-
-/*fn check_fund(sentFunds: &usize, amount: &Uint128, denom: &str, stateDenom: &str) -> Uint128{
-
-   let sent = match sentFunds {
-        0 => Err(ContractError::NoFunds {}),
-        1 => {
-            if denom == stateDenom {
-                Ok(amount.clone())
-            } else {
-                Err(ContractError::MissingDenom(stateDenom.to_string()))
-            }
-        }
-        _ => Err(ContractError::ExtraDenom(stateDenom.to_string())),
-    };
-
-   sent.unwrap()
-}*/
+use std::ops::{Mul, Sub};
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -179,6 +162,7 @@ pub fn handle_play(
     // Make the contract callable for everyone every x blocks
     if _env.block.height > state.blockPlay {
         // Update the state
+        state.claimReward = vec![];
         state.blockPlay = _env.block.height + state.everyBlockHeight;
     }else{
         return Err(ContractError::Unauthorized {});
@@ -344,20 +328,8 @@ pub fn handle_reward(
         return Err(ContractError::Unauthorized {});
     }
 
-    /*if _env.block.height > state.blockClaim {
-        state.claimTicket = vec![];
-        state.blockClaim = _env.block.height + state.everyBlockHeight;
-    }*/
-
-
     // Ensure sender have some reward tokens
     let balanceSender = deps.querier.query_balance(info.sender.clone(), &state.denomShare).unwrap();
-    println!("{}", balanceSender.amount.u128());
-    /*let funds = match balanceSender.amount {
-        Uint128(0) => Err(ContractError::Unauthorized {}),
-        _ => Ok(balance.amount)
-    }?;*/
-
     if balanceSender.amount.is_zero(){
         return Err(ContractError::Unauthorized {});
     }
@@ -375,26 +347,27 @@ pub fn handle_reward(
     if balanceContract.amount.is_zero(){
         return Err(ContractError::EmptyBalance {});
     }
-    let shareHolderPercentage = balanceSender.amount.mul(Decimal::percent(balanceSender.amount.u128() as u64 * 100));
-    println!("{}", shareHolderPercentage.u128());
-    println!("{}", balanceSender.amount.u128() as u64 * 100);
-
-    let shareHolder = shareHolderPercentage.u128() / state.tokenHolderSupply.u128();
-    println!("{}", shareHolder);
-    //let reward = state.holdersRewards.mul();
-
+    // Get the percentage of shareholder
+    let shareHolderPercentage = balanceSender.amount.u128() as u64 * 100 / state.tokenHolderSupply.u128() as u64;
+    if shareHolderPercentage == 0 {
+        return Err(ContractError::SharesTooLow {});
+    }
+    // Calculate the reward
+    let reward = state.holdersRewards.mul(Decimal::percent(shareHolderPercentage));
+    // Update the holdersReward
+    state.holdersRewards =  state.holdersRewards.sub(reward).unwrap();
     // Save the new state
     config(deps.storage).save(&state);
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
         to_address: deps.api.human_address(&sender).unwrap(),
-        amount: vec![Coin{ denom: state.denom.clone(), amount: Uint128(1)}]
+        amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: reward}]
     };
     // Send the claimed tickets
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "claim"), attr("to", &sender)],
+        attributes: vec![attr("action", "reward"), attr("to", &sender)],
         data: None,
     })
 }
@@ -448,7 +421,7 @@ mod tests {
         const BLOCK_PLAY: u64 = 0;
         const BLOCK_CLAIM: u64 = 0;
         const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
-        const HOLDERS_REWARDS: Uint128 = Uint128(0);
+        const HOLDERS_REWARDS: Uint128 = Uint128(5_221);
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(10_000_000);
 
         let init_msg = InitMsg{
@@ -496,24 +469,6 @@ mod tests {
         }
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
     }
-
-
-   /* fn do_init(deps: DepsMut){
-
-        let init_msg = InitMsg{
-            denom: DENOM.to_string(),
-            denomDelegation: DENOM_DELEGATION.to_string(),
-            everyBlockHeight: EVERY_BLOCK_EIGHT,
-            players: PLAYERS,
-            claimTicket: CLAIM_TICKET,
-            blockPlay: BLOCK_PLAY,
-            blockClaim: BLOCK_PLAY,
-            blockIcoTimeframe: BLOCK_ICO_TIME_FRAME
-        };
-        let info = mock_info(HumanAddr::from("owner"), &[]);
-        init(deps, mock_env(), info, init_msg).unwrap();
-    }*/
-
 
     #[test]
     fn proper_init (){
@@ -746,7 +701,6 @@ mod tests {
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin { denom: "uscrt".to_string(), amount: Uint128(5_961_532) }]);
         let res = handle_buy(deps.as_mut(), mock_env(), info.clone()).unwrap();
         assert_eq!(1, res.messages.len());
-        println!("{:?}", res);
         assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
             from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
             to_address: HumanAddr::from("delegator1"),
@@ -796,18 +750,75 @@ mod tests {
     }
     #[test]
     fn reward(){
-        // Success lottery result
+        // Test no funds in the contract
+        let mut deps = mock_dependencies(&[]);
+        deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(4_532_004) }]);
+        default_init(&mut deps, false);
+        let info = mock_info(HumanAddr::from("validator1"), &[]);
+        let env = mock_env();
+        let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
+        match res {
+            Err(ContractError::EmptyBalance {}) => {},
+            _ => panic!("Unexpected error")
+        }
+
+        // Test no token holder detected
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
-        deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000) }]);
+        deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "ujack".to_string(), amount: Uint128(4_532_004) }]);
+        default_init(&mut deps, false);
+        let info = mock_info(HumanAddr::from("validator1"), &[]);
+        let env = mock_env();
+        let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
+        match res {
+            Err(ContractError::Unauthorized {}) => {},
+            _ => panic!("Unexpected error")
+        }
+
+        // Test do not send funds with reward
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(4_532_004) }]);
+        default_init(&mut deps, false);
+        let info = mock_info(HumanAddr::from("validator1"), &[Coin{ denom: "upot".to_string(), amount: Uint128(4_532_004) }]);
+        let env = mock_env();
+        let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
+        match res {
+            Err(ContractError::DoNotSendFunds (msg)) => {
+                assert_eq!(msg, "Reward")
+            },
+            _ => panic!("Unexpected error")
+        }
+
+        // Test shares too low
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(4_532)}]);
+        default_init(&mut deps, false);
+        let info = mock_info(HumanAddr::from("validator1"), &[]);
+        let env = mock_env();
+        let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
+        match res {
+            Err(ContractError::SharesTooLow {}) => {},
+            _ => panic!("Unexpected error")
+        }
+
+        // Test success lottery result
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(4_532_004) }]);
         default_init(&mut deps, false);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let env = mock_env();
         let res = handle_reward(deps.as_mut(), env.clone(), info.clone()).unwrap();
         assert_eq!(1, res.messages.len());
+        assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
+            from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
+            to_address: HumanAddr::from("validator1"),
+            amount: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(2349) }]
+        }));
         // Test if state have changed correctly
         let res = query_config(deps.as_ref()).unwrap();
-
-
-
+        // Test if claimReward is not empty and the right address was added correctly
+        assert_ne!(0, res.claimReward.len());
+        assert!(res.claimReward.contains(&deps.api.canonical_address(&HumanAddr::from("validator1")).unwrap()));
+        // Test reward amount was updated with success
+        assert_ne!(5_221, res.holdersRewards.u128());
     }
 }
