@@ -820,5 +820,12 @@ mod tests {
         assert!(res.claimReward.contains(&deps.api.canonical_address(&HumanAddr::from("validator1")).unwrap()));
         // Test reward amount was updated with success
         assert_ne!(5_221, res.holdersRewards.u128());
+
+        // Test error can't claim two times
+        let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
+        match res {
+            Err(ContractError::AlreadyClaimed {}) => {},
+            _ => panic!("Unexpected error")
+        }
     }
 }
