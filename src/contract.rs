@@ -50,7 +50,8 @@ pub fn init(
         denomShare: msg.denomShare,
         claimTicket: msg.claimTicket,
         claimReward: msg.claimReward,
-        holdersRewards: msg.holdersRewards
+        holdersRewards: msg.holdersRewards,
+        tokenHolderSupply: msg.tokenHolderSupply
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -266,6 +267,10 @@ pub fn handle_ico(
         amount: vec![Coin{ denom: state.denomShare.clone(), amount: sent}]
     };
 
+    state.tokenHolderSupply += sent;
+    // Save the new state
+    config(deps.storage).save(&state);
+
     Ok(HandleResponse {
         messages: vec![msg.into()],
         attributes: vec![attr("action", "ico"), attr("to", &info.sender)],
@@ -327,7 +332,71 @@ pub fn handle_reward(
     _env: Env,
     info: MessageInfo
 ) -> Result<HandleResponse, ContractError> {
-    Ok(HandleResponse::default())
+    // Load the state
+    let mut state = config(deps.storage).load()?;
+    // convert the sender to canonical address
+    let sender = deps.api.canonical_address(&info.sender).unwrap();
+    // Ensure the sender not sending funds accidentally
+    if !info.sent_funds.is_empty() {
+        return Err(ContractError::DoNotSendFunds("Reward".to_string()));
+    }
+    if state.tokenHolderSupply.is_zero() {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    /*if _env.block.height > state.blockClaim {
+        state.claimTicket = vec![];
+        state.blockClaim = _env.block.height + state.everyBlockHeight;
+    }*/
+
+
+    // Ensure sender have some reward tokens
+    let balanceSender = deps.querier.query_balance(info.sender.clone(), &state.denomShare).unwrap();
+    println!("{}", balanceSender.amount.u128());
+    /*let funds = match balanceSender.amount {
+        Uint128(0) => Err(ContractError::Unauthorized {}),
+        _ => Ok(balance.amount)
+    }?;*/
+
+    if balanceSender.amount.is_zero(){
+        return Err(ContractError::Unauthorized {});
+    }
+
+    // Ensure sender only can claim one time every x blocks
+    if state.claimReward.iter().any(|address| deps.api.human_address(address).unwrap() == info.sender.clone()){
+        return Err(ContractError::AlreadyClaimed {});
+    }
+    // Add the sender to claimed state
+    state.claimReward.push(sender.clone());
+
+    // Get the contract balance
+    let balanceContract = deps.querier.query_balance(_env.contract.address.clone(), &state.denomDelegation)?;
+    // Cancel if no amount in the contract
+    if balanceContract.amount.is_zero(){
+        return Err(ContractError::EmptyBalance {});
+    }
+    let shareHolderPercentage = balanceSender.amount.mul(Decimal::percent(balanceSender.amount.u128() as u64 * 100));
+    println!("{}", shareHolderPercentage.u128());
+    println!("{}", balanceSender.amount.u128() as u64 * 100);
+
+    let shareHolder = shareHolderPercentage.u128() / state.tokenHolderSupply.u128();
+    println!("{}", shareHolder);
+    //let reward = state.holdersRewards.mul();
+
+    // Save the new state
+    config(deps.storage).save(&state);
+
+    let msg = BankMsg::Send {
+        from_address: _env.contract.address.clone(),
+        to_address: deps.api.human_address(&sender).unwrap(),
+        amount: vec![Coin{ denom: state.denom.clone(), amount: Uint128(1)}]
+    };
+    // Send the claimed tickets
+    Ok(HandleResponse {
+        messages: vec![msg.into()],
+        attributes: vec![attr("action", "claim"), attr("to", &sender)],
+        data: None,
+    })
 }
 
 
@@ -380,6 +449,7 @@ mod tests {
         const BLOCK_CLAIM: u64 = 0;
         const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
         const HOLDERS_REWARDS: Uint128 = Uint128(0);
+        const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(10_000_000);
 
         let init_msg = InitMsg{
             denom: DENOM.to_string(),
@@ -392,7 +462,8 @@ mod tests {
             blockPlay: BLOCK_PLAY,
             blockClaim: BLOCK_PLAY,
             blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
-            holdersRewards: HOLDERS_REWARDS
+            holdersRewards: HOLDERS_REWARDS,
+            tokenHolderSupply: TOKEN_HOLDER_SUPPLY
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         if staking {
@@ -613,6 +684,16 @@ mod tests {
             to_address: HumanAddr::from("delegator1"),
             amount: vec![Coin{ denom: "upot".to_string(), amount: Uint128(2_000_000) }]
         }));
+        // Test if state have changed correctly
+        let res = query_config(deps.as_ref()).unwrap();
+        assert_ne!(0, res.tokenHolderSupply.u128());
+        assert_eq!(12_000_000, res.tokenHolderSupply.u128());
+
+        // Test if state have changed correctly
+        let res = handle_ico(deps.as_mut(), mock_env(), info.clone()).unwrap();
+        let res = query_config(deps.as_ref()).unwrap();
+        // Test if tokenHolderSupply incremented correctly after multiple buys
+        assert_eq!(14_000_000, res.tokenHolderSupply.u128());
     }
     #[test]
     fn buy () {
@@ -713,5 +794,20 @@ mod tests {
         }
 
     }
+    #[test]
+    fn reward(){
+        // Success lottery result
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000) }]);
+        default_init(&mut deps, false);
+        let info = mock_info(HumanAddr::from("validator1"), &[]);
+        let env = mock_env();
+        let res = handle_reward(deps.as_mut(), env.clone(), info.clone()).unwrap();
+        assert_eq!(1, res.messages.len());
+        // Test if state have changed correctly
+        let res = query_config(deps.as_ref()).unwrap();
 
+
+
+    }
 }

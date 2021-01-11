@@ -19,7 +19,8 @@ pub struct State {
     pub denomShare: String,
     pub claimTicket: Vec<CanonicalAddr>,
     pub claimReward: Vec<CanonicalAddr>,
-    pub holdersRewards: Uint128
+    pub holdersRewards: Uint128,
+    pub tokenHolderSupply: Uint128
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
