@@ -6,10 +6,12 @@ use crate::state::{config, config_read, State};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
 use std::fs::canonicalize;
-use rand::Rng;
 use schemars::_serde_json::map::Entry::Vacant;
 use std::io::Stderr;
 use std::ops::{Mul, Sub};
+use drand_verify::{verify, g1_from_fixed, g1_from_variable};
+use hex_literal::hex;
+use sha2::{Digest, Sha256};
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -34,7 +36,10 @@ pub fn init(
         claimTicket: msg.claimTicket,
         claimReward: msg.claimReward,
         holdersRewards: msg.holdersRewards,
-        tokenHolderSupply: msg.tokenHolderSupply
+        tokenHolderSupply: msg.tokenHolderSupply,
+        drandPublicKey: msg.drandPublicKey,
+        drandPeriod: msg.drandPeriod,
+        drandGenesisTime: msg.drandGenesisTime
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -50,7 +55,11 @@ pub fn handle(
 ) -> Result<HandleResponse, ContractError> {
     match msg {
         HandleMsg::Register {} => handle_register(deps, _env, info),
-        HandleMsg::Play {} => handle_play(deps, _env, info),
+        HandleMsg::Play {
+            round,
+            previous_signature,
+            signature,
+        } => handle_play(deps, _env, info, round, previous_signature, signature),
         HandleMsg::Claim {} => handle_claim(deps, _env, info),
         HandleMsg::Ico {} => handle_ico(deps, _env, info),
         HandleMsg::Buy {} => handle_buy(deps, _env, info),
@@ -79,6 +88,10 @@ pub fn handle_register(
     }?;
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
+    }
+    // Check if the lottery is about to play and cancel new ticket to enter until play
+    if _env.block.height >= state.blockPlay {
+        return Err(ContractError::LotteryAboutToStart {});
     }
 
     let ticketNumber = sent.u128();
@@ -146,11 +159,20 @@ pub fn handle_claim(
     })
 }
 
+// Derives a 32 byte randomness from the beacon's signature
+fn derive_randomness(signature: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(signature);
+    hasher.finalize().into()
+}
 
 pub fn handle_play(
     deps: DepsMut,
     _env: Env,
-    info: MessageInfo
+    info: MessageInfo,
+    round: u64,
+    previous_signature: Binary,
+    signature: Binary
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
@@ -167,18 +189,38 @@ pub fn handle_play(
     }else{
         return Err(ContractError::Unauthorized {});
     }
+    // Get the current round and check if it is a valid round.
+    let fromGenesis = _env.block.time - state.drandGenesisTime;
+    let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 1.0;
+    if round < nextRound as u64 {
+        return Err(ContractError::InvalidRound {});
+    }
+
+    let pk = g1_from_variable(&state.drandPublicKey).unwrap();
+
+    let valid = verify(&pk, round, &previous_signature, &signature).unwrap_or(false);
+
+    if !valid {
+        return Err(ContractError::InvalidSignature {});
+    }
+    let randomness = derive_randomness(&signature);
+
+    println!("{:?}", randomness);
+
+
+
     // Sort the winner
     let players = match state.players.len(){
         0 => Err(ContractError::NoPlayers {}),
         _ => Ok(&state.players)
     }?;
-    let mut rng = rand::thread_rng();
+    // let mut rng = rand::thread_rng();
     let maxRange = players.len() - 1;
-    let winnerRange = rng.gen_range(0..maxRange);
-    let winnerAddress = players[winnerRange].clone();
+    // let winnerRange = rng.gen_range(0..maxRange);
+    let winnerAddress = players[0].clone();//players[winnerRange].clone();
 
     // Winning 5 to 99 % of the lottery
-    let percentOfJackpot = rng.gen_range(5..99);
+    let percentOfJackpot = 5; //rng.gen_range(5..99);
 
     // Get the contract balance
     let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
@@ -392,14 +434,18 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, BankQuerier, MOCK_CONTRACT_ADDR, MockStorage, StakingQuerier, MockApi, MockQuerier};
-    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError, Storage, Api, CanonicalAddr, OwnedDeps, CosmosMsg, QuerierResult};
+    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError, Storage, Api, CanonicalAddr, OwnedDeps, CosmosMsg, QuerierResult, Binary};
     use std::collections::HashMap;
     use std::borrow::Borrow;
     use cosmwasm_storage::{bucket_read, bucket, singleton, singleton_read};
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
     use crate::msg::{HandleMsg, InitMsg, QueryMsg};
+    // DRAND
+    use drand_verify::{verify, g1_from_fixed, g1_from_variable};
 
+    use hex_literal::hex;
+    use sha2::{Digest, Sha256};
 
 
 
@@ -418,11 +464,27 @@ mod tests {
         let PLAYERS: Vec<CanonicalAddr> = vec![player1, player2.clone(), player2.clone(), player3.clone(), player3.clone(), player3.clone(), player3.clone(), player4.clone(), player4.clone(), player4.clone(), player5, player6];
         const CLAIM_TICKET: Vec<CanonicalAddr> = vec![];
         const CLAIM_REWARD: Vec<CanonicalAddr> = vec![];
-        const BLOCK_PLAY: u64 = 0;
+        const BLOCK_PLAY: u64 = 15000;
         const BLOCK_CLAIM: u64 = 0;
         const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
         const HOLDERS_REWARDS: Uint128 = Uint128(5_221);
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(10_000_000);
+        let PUBLIC_KEY: Binary = vec![
+            134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71, 151,
+            138, 124, 113, 188, 92, 206, 150, 54, 107, 93, 122, 86, 153, 55, 197, 41, 238, 218,
+            102, 199, 41, 55, 132, 169, 64, 40, 1, 175, 49,
+        ].into(); //Binary::from(hex!("868f005eb8e6e4ca0a47c8a77ceaa5309a47978a7c71bc5cce96366b5d7a569937c529eeda66c7293784a9402801af31"));
+        const GENESIS_TIME: u64 = 1595431050;
+        const PERIOD: u64 = 30;
+
+        fn pubkey () -> Binary {
+            vec![
+                134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71, 151,
+                138, 124, 113, 188, 92, 206, 150, 54, 107, 93, 122, 86, 153, 55, 197, 41, 238, 218,
+                102, 199, 41, 55, 132, 169, 64, 40, 1, 175, 49,
+            ].into()
+        }
+
 
         let init_msg = InitMsg{
             denom: DENOM.to_string(),
@@ -436,7 +498,10 @@ mod tests {
             blockClaim: BLOCK_PLAY,
             blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
             holdersRewards: HOLDERS_REWARDS,
-            tokenHolderSupply: TOKEN_HOLDER_SUPPLY
+            tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
+            drandPublicKey: PUBLIC_KEY,
+            drandPeriod: PERIOD,
+            drandGenesisTime: GENESIS_TIME
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         if staking {
@@ -469,12 +534,51 @@ mod tests {
         }
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
     }
+    /// Derives a 32 byte randomness from the beacon's signature
+    fn derive_randomness(signature: &[u8]) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(signature);
+        hasher.finalize().into()
+    }
+    #[test]
+    fn random (){
+        //println!("{}", 1432439234 % 100);
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
+        default_init(&mut deps, false);
 
+        let res = query_config(deps.as_ref()).unwrap();
+
+        // DRAND
+        let PK_LEO_MAINNET: [u8; 48] = hex!("868f005eb8e6e4ca0a47c8a77ceaa5309a47978a7c71bc5cce96366b5d7a569937c529eeda66c7293784a9402801af31");
+        const GENESIS_TIME: u64 = 1595431050;
+        const PERIOD: f64 = 30.0;
+
+        //let pk = g1_from_fixed(PK_LEO_MAINNET).unwrap();
+        let pk = g1_from_variable(&res.drandPublicKey).unwrap();
+        let previous_signature = hex::decode("9491284489e453531c2429245dc6a9c4667f4cc2ab36295e7652de566d8ea2e16617690472d99b7d4604ecb8a8a249190e3a9c224bda3a9ea6c367c8ab6432c8f177838c20429e51fedcb8dacd5d9c7dc08b5147d6abbfc3db4b59d832290be2").unwrap();
+        let signature = hex::decode("b1af60ff60d52b38ef13f8597df977c950997b562ec8bf31b765dedf3e138801a6582b53737b654d1df047c1786acd94143c9a02c173185dcea2fa2801223180d34130bf8c6566d26773296cdc9666fdbf095417bfce6ba90bb83929081abca3").unwrap();
+        let round: u64 = 501672;
+        let result = verify(&pk, round, &previous_signature, &signature).unwrap();
+        let mut env = mock_env();
+        env.block.time = 1610566920;
+        let now = env.block.time;
+        let fromGenesis = env.block.time - GENESIS_TIME;
+        // let time = 1610566920 - 1595431050;
+        let round = (fromGenesis as f64 / PERIOD) + 1.0;
+
+        assert_eq!(result, true);
+        println!("{:?}", pk);
+        println!("{:?}", hex::encode(derive_randomness(&signature)));
+        println!("{:?}", env);
+        // println!("{}", time);
+        println!("{}", round.floor());
+        println!("{}", fromGenesis);
+    }
     #[test]
     fn proper_init (){
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
         default_init(&mut deps, false);
-        //println!("{}", 1432439234 % 100);
+        println!("{:?}", mock_env())
     }
     #[test]
     fn register() {
@@ -520,6 +624,16 @@ mod tests {
             Err(ContractError::ExtraDenom(msg)) => {
                 assert_eq!(msg, "ujack".to_string())
             },
+            _ => panic!("Unexpected error")
+        }
+        // Test trying to play the lottery when the lottery is about to start
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(2)}]);
+        let mut env = mock_env();
+        // If block eight is inferior block to play the lottery is about to start and we can't admit new register until the lottery play cause the result can be leaked at every moment.
+        env.block.height = 16000;
+        let res = handle_register(deps.as_mut(), env, info.clone());
+        match res {
+            Err(ContractError::LotteryAboutToStart {}) => {},
             _ => panic!("Unexpected error")
         }
     }
@@ -713,13 +827,30 @@ mod tests {
 
     #[test]
     fn play(){
+        // Expired round
+        //let previous_signature = hex::decode("9491284489e453531c2429245dc6a9c4667f4cc2ab36295e7652de566d8ea2e16617690472d99b7d4604ecb8a8a249190e3a9c224bda3a9ea6c367c8ab6432c8f177838c20429e51fedcb8dacd5d9c7dc08b5147d6abbfc3db4b59d832290be2").unwrap().into();
+        //let signature = hex::decode("b1af60ff60d52b38ef13f8597df977c950997b562ec8bf31b765dedf3e138801a6582b53737b654d1df047c1786acd94143c9a02c173185dcea2fa2801223180d34130bf8c6566d26773296cdc9666fdbf095417bfce6ba90bb83929081abca3").unwrap().into();
+        //let round: u64 = 501672;
+        // Valid round
+        let signature = hex::decode("97feb5cf8a6175a22f3f2705b639797ffb4c3c3774320ddaeb8f68a1c4cc78a86f4f2c10b5a83c6a76f5cda902e8cc0213844686142207db34f0c0c56e4086cdd4ec3e241e65503450d445483d062d69e4be4e0e23914819a6352638b0ddaffe").unwrap().into();
+        let previous_signature= hex::decode("955d1a9b9e00f889c061ff9dc2e2281854201342610ed72a5c990371baaac3dd75c57a15a5126550f6c26e6571f5bc2b0a96321317e369b957d4bbe725302db18670b531668b1ea4bc4fcf547a71f3e193982663568283598ffa5f4a77ba4283").unwrap().into();
+        let round = 504805;
+        let msg = HandleMsg::Play {
+            round: round,
+            previous_signature: previous_signature,
+            signature: signature
+        };
         // Success lottery result
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         default_init(&mut deps, false);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
-        let env = mock_env();
-        let res = handle_play(deps.as_mut(), env.clone(), info.clone()).unwrap();
-        assert_eq!(1, res.messages.len());
+        let mut env = mock_env();
+        env.block.height = 15005;
+        env.block.time = 1610566920;
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+        print!("{:?}", res);
+        //let res = handle_play(deps.as_mut(), env.clone(), info.clone()).unwrap();
+         assert_eq!(1, res.messages.len());
         // Test if state have changed correctly
         let res = query_config(deps.as_ref()).unwrap();
         // Test fees is now superior to 0
@@ -729,7 +860,8 @@ mod tests {
         // Test if players array is empty, we need to re init
         assert_eq!(0, res.players.len());
         // Can't replay only every x blocks
-        let res = handle_play(deps.as_mut(), mock_env(), info.clone());
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+        //let res = handle_play(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::Unauthorized {}) => {},
             _ => panic!("Unexpected error")
@@ -740,7 +872,8 @@ mod tests {
         default_init(&mut deps, false);
         let info = mock_info(HumanAddr::from("validator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         let env = mock_env();
-        let res = handle_play(deps.as_mut(), env.clone(), info.clone());
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+        //let res = handle_play(deps.as_mut(), env.clone(), info.clone());
         match res {
             Err(ContractError::DoNotSendFunds (msg)) => {
                 assert_eq!(msg ,"Play")
