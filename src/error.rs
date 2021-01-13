@@ -38,8 +38,18 @@ pub enum ContractError {
 
     #[error("Ico is ended")]
     TheIcoIsEnded{},
-    #[error("you need at least 1% of total shares")]
+
+    #[error("You need at least 1% of total shares")]
     SharesTooLow{},
+
+    #[error("The lottery is about to start wait until the end")]
+    LotteryAboutToStart{},
+
+    #[error("Drand signature is invalid")]
+    InvalidSignature{},
+
+    #[error("Drand round is invalid")]
+    InvalidRound{},
 
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.

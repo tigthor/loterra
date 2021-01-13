@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use crate::state::State;
-use cosmwasm_std::{CanonicalAddr, Storage, Uint128};
+use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -16,7 +16,10 @@ pub struct InitMsg {
     pub blockClaim: u64,
     pub blockIcoTimeframe: u64,
     pub holdersRewards: Uint128,
-    pub tokenHolderSupply: Uint128
+    pub tokenHolderSupply: Uint128,
+    pub drandPublicKey: Binary,
+    pub drandPeriod: u64,
+    pub drandGenesisTime: u64
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -25,7 +28,11 @@ pub enum HandleMsg {
     /// Registering to the lottery
     Register {},
     /// Run the lottery
-    Play {},
+    Play {
+        round: u64,
+        previous_signature: Binary,
+        signature: Binary,
+    },
     /// Claim 1 ticket every x block if you are a delegator
     Claim {},
     /// Buy the token holders with USCRT and get 1:1 ratio
