@@ -49,8 +49,22 @@ pub enum HandleMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     Config {},
+    LatestDrand {},
+    GetRandomness {
+        round: u64
+    }
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GetResponse {
+    pub randomness: Binary
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct LatestResponse {
+    pub round: u64,
+    pub randomness: Binary
+}
 // We define a custom struct for each query response
 pub type ConfigResponse = State;
 

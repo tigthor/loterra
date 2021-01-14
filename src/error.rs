@@ -57,6 +57,9 @@ pub enum ContractError {
     #[error("Delegation too low need at least {0}")]
     DelegationTooLow(String),
 
+    #[error("No beacon")]
+    NoBeacon{},
+
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

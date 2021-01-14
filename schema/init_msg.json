@@ -8,13 +8,18 @@
     "blockPlay",
     "claimReward",
     "claimTicket",
+    "delegatorMinAmountInDelegation",
     "denom",
     "denomDelegation",
     "denomShare",
+    "drandGenesisTime",
+    "drandPeriod",
+    "drandPublicKey",
     "everyBlockHeight",
     "holdersRewards",
     "players",
-    "tokenHolderSupply"
+    "tokenHolderSupply",
+    "validatorMinAmountToAllowClaim"
   ],
   "properties": {
     "blockClaim": {
@@ -44,6 +49,9 @@
         "$ref": "#/definitions/CanonicalAddr"
       }
     },
+    "delegatorMinAmountInDelegation": {
+      "$ref": "#/definitions/Uint128"
+    },
     "denom": {
       "type": "string"
     },
@@ -52,6 +60,19 @@
     },
     "denomShare": {
       "type": "string"
+    },
+    "drandGenesisTime": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "drandPeriod": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "drandPublicKey": {
+      "$ref": "#/definitions/Binary"
     },
     "everyBlockHeight": {
       "type": "integer",
@@ -69,6 +90,11 @@
     },
     "tokenHolderSupply": {
       "$ref": "#/definitions/Uint128"
+    },
+    "validatorMinAmountToAllowClaim": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     }
   },
   "definitions": {
