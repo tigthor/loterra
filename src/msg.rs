@@ -20,7 +20,8 @@ pub struct InitMsg {
     pub drandPublicKey: Binary,
     pub drandPeriod: u64,
     pub drandGenesisTime: u64,
-    pub validatorMinAmountToAllowClaim: u64
+    pub validatorMinAmountToAllowClaim: u64,
+    pub delegatorMinAmountInDelegation: Uint128
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

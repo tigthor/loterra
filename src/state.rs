@@ -24,7 +24,8 @@ pub struct State {
     pub drandPublicKey: Binary,
     pub drandPeriod: u64,
     pub drandGenesisTime: u64,
-    pub validatorMinAmountToAllowClaim: u64
+    pub validatorMinAmountToAllowClaim: u64,
+    pub delegatorMinAmountInDelegation: Uint128
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
