@@ -12,6 +12,38 @@
           "type": "object"
         }
       }
+    },
+    {
+      "type": "object",
+      "required": [
+        "latest_drand"
+      ],
+      "properties": {
+        "latest_drand": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "get_randomness"
+      ],
+      "properties": {
+        "get_randomness": {
+          "type": "object",
+          "required": [
+            "round"
+          ],
+          "properties": {
+            "round": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
     }
   ]
 }

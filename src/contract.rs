@@ -1,8 +1,10 @@
-use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery};
+use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse,
+                   MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError,
+                   AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse};
-use crate::state::{config, config_read, State};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse};
+use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
 use std::fs::canonicalize;
@@ -10,8 +12,8 @@ use schemars::_serde_json::map::Entry::Vacant;
 use std::io::Stderr;
 use std::ops::{Mul, Sub};
 use drand_verify::{verify, g1_from_fixed, g1_from_variable};
-use hex_literal::hex;
 use sha2::{Digest, Sha256};
+
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -146,7 +148,6 @@ pub fn handle_claim(
     if delegator[0].amount.amount < state.delegatorMinAmountInDelegation {
         return Err(ContractError::DelegationTooLow("1000".to_string()));
     }
-    //println!("{:?}", validatorBalance);
     // Ensure sender only can claim one time every x blocks
     if state.claimTicket.iter().any(|address| deps.api.human_address(address).unwrap() == info.sender){
         return Err(ContractError::AlreadyClaimed {});
@@ -194,7 +195,6 @@ pub fn handle_play(
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
-
     // Ensure the sender not sending funds accidentally
     if !info.sent_funds.is_empty() {
         return Err(ContractError::DoNotSendFunds("Play".to_string()));
@@ -223,9 +223,12 @@ pub fn handle_play(
         return Err(ContractError::InvalidSignature {});
     }
     let randomness = derive_randomness(&signature);
-    let randomnessHash = hex::encode(derive_randomness(&signature));
-    let d: Vec<char> = randomnessHash.chars().collect();
-    println!("{:?}", randomnessHash);
+    //let randomnessHash = hex::encode(derive_randomness(&signature));
+    //save beacon for other users usage
+    beacons_storage(deps.storage).set(&round.to_be_bytes(), &randomness);
+
+    //let d: Vec<char> = randomnessHash.chars().collect();
+    //println!("{:?}", randomnessHash);
 
 
 
@@ -439,16 +442,37 @@ pub fn query(
     deps: Deps,
     _env: Env,
     msg: QueryMsg,
-) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::Config {} => to_binary(&query_config(deps)?),
-    }
+) -> Result<Binary, ContractError> {
+    let response = match msg {
+        QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
+        QueryMsg::LatestDrand {} => to_binary(&query_latest(deps)?)?,
+        QueryMsg::GetRandomness {round} => to_binary(&query_get(deps, round)?)?
+    };
+    Ok(response)
 }
 
-fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
+fn query_config(deps: Deps) -> Result<ConfigResponse, ContractError> {
     let state = config_read(deps.storage).load()?;
     Ok(state)
 }
+fn query_get(deps: Deps, round: u64) -> Result<GetResponse, ContractError>{
+    let beacons = beacons_storage_read(deps.storage);
+    let randomness = beacons.get(&round.to_be_bytes()).unwrap_or_default();
+    Ok(GetResponse {
+        randomness: randomness.into(),
+    })
+}
+
+fn query_latest(deps: Deps) -> Result<LatestResponse, ContractError>{
+    let store = beacons_storage_read(deps.storage);
+    let mut iter = store.range(None, None, Order::Descending);
+    let (key, value) =  iter.next().ok_or(ContractError::NoBeacon {})?;
+    Ok(LatestResponse {
+        round: u64::from_be_bytes(Binary(key).to_array()?),
+        randomness: value.into(),
+    })
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -790,6 +814,29 @@ mod tests {
             _ => panic!("Unexpected error")
         }
 
+        // Test you are staking the right denom
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator2"),
+            amount: Coin{ denom: "ucoin".to_string(), amount: Uint128(10_050_000)},
+            can_redelegate: Coin{ denom: "ucoin".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "ucoin".to_string(), amount: Uint128(0)},]
+        }]);
+        default_init(&mut deps);
+        let info = mock_info(HumanAddr::from("delegator1"), &[]);
+        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::NoDelegations {}) => {},
+            _ => panic!("Unexpected error")
+        }
+
         // Test success claim
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
         deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
@@ -993,7 +1040,7 @@ mod tests {
         env.block.height = 15005;
         env.block.time = 1610566920;
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
-        print!("{:?}", res);
+        println!("{:?}", res);
         //let res = handle_play(deps.as_mut(), env.clone(), info.clone()).unwrap();
          assert_eq!(1, res.messages.len());
         // Test if state have changed correctly
@@ -1004,6 +1051,10 @@ mod tests {
         assert!(res.blockPlay > env.block.height);
         // Test if players array is empty, we need to re init
         assert_eq!(0, res.players.len());
+        // Test if round was saved
+        let res = query_latest(deps.as_ref()).unwrap();
+        println!("{:?}", res);
+        assert_eq!(504530, res.round);
         // Can't replay only every x blocks
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
         //let res = handle_play(deps.as_mut(), mock_env(), info.clone());
