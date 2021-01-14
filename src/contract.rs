@@ -40,7 +40,8 @@ pub fn init(
         drandPublicKey: msg.drandPublicKey,
         drandPeriod: msg.drandPeriod,
         drandGenesisTime: msg.drandGenesisTime,
-        validatorMinAmountToAllowClaim: msg.validatorMinAmountToAllowClaim
+        validatorMinAmountToAllowClaim: msg.validatorMinAmountToAllowClaim,
+        delegatorMinAmountInDelegation: msg.delegatorMinAmountInDelegation
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -131,14 +132,19 @@ pub fn handle_claim(
         return Err(ContractError::NoDelegations {})
     }
     delegator.sort_by(|a, b| b.amount.amount.cmp(&a.amount.amount));
-    // check minimum to delegation
-    if delegator[0].amount.amount < 1000 {
-        return Err(ContractError::DelegationTooLow("1000".to_string()));
-    }
+
     // Ensure validator are owning 10000 upot min and the user stake the majority of his funds to this validator
     let validatorBalance = deps.querier.query_balance(&delegator[0].validator, &state.denomShare).unwrap();
     if validatorBalance.amount.u128() < state.validatorMinAmountToAllowClaim as u128 {
         return Err(ContractError::ValidatorNotAuthorized(state.validatorMinAmountToAllowClaim.to_string()));
+    }
+    // Ensure is delegating the right denom
+    if delegator[0].amount.denom != state.denomDelegation {
+        return Err(ContractError::NoDelegations {});
+    }
+    // Ensure delegating the minimum admitted
+    if delegator[0].amount.amount < state.delegatorMinAmountInDelegation {
+        return Err(ContractError::DelegationTooLow("1000".to_string()));
     }
     //println!("{:?}", validatorBalance);
     // Ensure sender only can claim one time every x blocks
@@ -463,7 +469,7 @@ mod tests {
 
 
 
-    fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>, staking: bool) {
+    fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
         let player1 = deps.api.canonical_address(&HumanAddr::from("player1")).unwrap();
         let player2 = deps.api.canonical_address(&HumanAddr::from("player2")).unwrap();
         let player3 = deps.api.canonical_address(&HumanAddr::from("player3")).unwrap();
@@ -491,6 +497,7 @@ mod tests {
         const GENESIS_TIME: u64 = 1595431050;
         const PERIOD: u64 = 30;
         const VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM: u64 = 10_000;
+        const DELEGATOR_MIN_AMOUNT_IN_DELEGATION: Uint128 = Uint128(10_000);
 
         fn pubkey () -> Binary {
             vec![
@@ -517,37 +524,10 @@ mod tests {
             drandPublicKey: PUBLIC_KEY,
             drandPeriod: PERIOD,
             drandGenesisTime: GENESIS_TIME,
-            validatorMinAmountToAllowClaim: VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM
+            validatorMinAmountToAllowClaim: VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM,
+            delegatorMinAmountInDelegation: DELEGATOR_MIN_AMOUNT_IN_DELEGATION
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
-        if staking {
-            deps.querier.update_staking("uscrt", &[Validator{
-                address: HumanAddr::from("validator1"),
-                commission: Decimal::percent(10),
-                max_commission: Decimal::percent(100),
-                max_change_rate: Decimal::percent(100)
-            }], &[FullDelegation{
-                delegator: HumanAddr::from("delegator1"),
-                validator: HumanAddr::from("validator1"),
-                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(1_000_000)},
-                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-            }, FullDelegation{
-                delegator: HumanAddr::from("delegator1"),
-                validator: HumanAddr::from("validator2"),
-                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(15_050_030)},
-                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-            },
-                FullDelegation{
-                    delegator: HumanAddr::from("delegator1"),
-                    validator: HumanAddr::from("validator3"),
-                    amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(2_004_000)},
-                    can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
-                    accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
-                }
-            ]);
-        }
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
     }
     /// Derives a 32 byte randomness from the beacon's signature
@@ -560,7 +540,7 @@ mod tests {
     fn random (){
         //println!("{}", 1432439234 % 100);
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
 
         let res = query_config(deps.as_ref()).unwrap();
 
@@ -593,14 +573,14 @@ mod tests {
     #[test]
     fn proper_init (){
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         println!("{:?}", mock_env())
     }
     #[test]
     fn register() {
 
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
 
         // Test if this succeed
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
@@ -655,11 +635,36 @@ mod tests {
     }
     #[test]
     fn claim() {
-
         // Test handle do not send funds
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
         deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
-        default_init(&mut deps, true);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator1"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(1_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        }, FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator2"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(15_050_030)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        },
+            FullDelegation{
+                delegator: HumanAddr::from("delegator1"),
+                validator: HumanAddr::from("validator3"),
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(2_004_000)},
+                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+            }
+        ]);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -672,7 +677,13 @@ mod tests {
         // Test error to claim if you are not staking
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
         deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
-        default_init(&mut deps, false);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[]);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -683,7 +694,33 @@ mod tests {
         // Test error no funds in the contract
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
         deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
-        default_init(&mut deps, true);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator1"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(1_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        }, FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator2"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(15_050_030)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        },
+            FullDelegation{
+                delegator: HumanAddr::from("delegator1"),
+                validator: HumanAddr::from("validator3"),
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(2_004_000)},
+                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+            }
+        ]);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -693,7 +730,33 @@ mod tests {
         // Test validator is not holding the sufficient amount to allow his users to claim tickets
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
         deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000)}]);
-        default_init(&mut deps, true);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator1"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(1_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        }, FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator2"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(15_050_030)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        },
+            FullDelegation{
+                delegator: HumanAddr::from("delegator1"),
+                validator: HumanAddr::from("validator3"),
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(2_004_000)},
+                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+            }
+        ]);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -702,11 +765,61 @@ mod tests {
             },
             _ => panic!("Unexpected error")
         }
+        // Test you are staking less than 1000 scrt
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator2"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(1_050)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        }]);
+        default_init(&mut deps);
+        let info = mock_info(HumanAddr::from("delegator1"), &[]);
+        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::DelegationTooLow(msg)) =>{
+                assert_eq!(msg, "1000")
+            },
+            _ => panic!("Unexpected error")
+        }
 
         // Test success claim
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
         deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
-        default_init(&mut deps, true);
+        deps.querier.update_staking("uscrt", &[Validator{
+            address: HumanAddr::from("validator1"),
+            commission: Decimal::percent(10),
+            max_commission: Decimal::percent(100),
+            max_change_rate: Decimal::percent(100)
+        }], &[FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator1"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(1_000_000)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        }, FullDelegation{
+            delegator: HumanAddr::from("delegator1"),
+            validator: HumanAddr::from("validator2"),
+            amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(15_050_030)},
+            can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+            accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+        },
+            FullDelegation{
+                delegator: HumanAddr::from("delegator1"),
+                validator: HumanAddr::from("validator3"),
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(2_004_000)},
+                can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
+                accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
+            }
+        ]);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone()).unwrap();
         assert_eq!(1, res.messages.len());
@@ -734,7 +847,7 @@ mod tests {
     fn ico (){
         //Test if balance is empty
         let mut deps = mock_dependencies(&[Coin{ denom: "upot".to_string(), amount: Uint128(0)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(1_000_000)}]);
         let res = handle_ico(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -743,7 +856,7 @@ mod tests {
         }
         // Test if sender sent more funds than the balance can send
         let mut deps = mock_dependencies(&[Coin{ denom: "upot".to_string(), amount: Uint128(1_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(2_000_000)}]);
         let res = handle_ico(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -753,7 +866,7 @@ mod tests {
 
         // Test the sender is sending some correct funds
         let mut deps = mock_dependencies(&[Coin{ denom: "upot".to_string(), amount: Uint128(1_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "other".to_string(), amount: Uint128(2_000_000)}]);
         let res = handle_ico(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -765,7 +878,7 @@ mod tests {
 
         // Test the sender is sending more than one tokens
         let mut deps = mock_dependencies(&[Coin{ denom: "upot".to_string(), amount: Uint128(1_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(2_000_000)}, Coin{ denom: "other".to_string(), amount: Uint128(2_000_000)}]);
         let res = handle_ico(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -777,7 +890,7 @@ mod tests {
 
         // Test success
         let mut deps = mock_dependencies(&[Coin{ denom: "upot".to_string(), amount: Uint128(10_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(2_000_000)}]);
         let res = handle_ico(deps.as_mut(), mock_env(), info.clone()).unwrap();
         assert_eq!(1, res.messages.len());
@@ -801,7 +914,7 @@ mod tests {
     fn buy () {
         //Test if balance is empty
         let mut deps = mock_dependencies(&[Coin { denom: "ujack".to_string(), amount: Uint128(0) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin { denom: "uscrt".to_string(), amount: Uint128(1_000_000) }]);
         let res = handle_buy(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -810,7 +923,7 @@ mod tests {
         }
         // Test if sender sent more funds than the balance can send
         let mut deps = mock_dependencies(&[Coin { denom: "ujack".to_string(), amount: Uint128(1_000_000) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin { denom: "uscrt".to_string(), amount: Uint128(2_000_000) }]);
         let res = handle_buy(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -820,7 +933,7 @@ mod tests {
 
         // Test the sender is sending some correct funds
         let mut deps = mock_dependencies(&[Coin { denom: "ujack".to_string(), amount: Uint128(1_000_000) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin { denom: "other".to_string(), amount: Uint128(5_561_532) }]);
         let res = handle_buy(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -832,7 +945,7 @@ mod tests {
 
         // Test the sender is sending more than one tokens
         let mut deps = mock_dependencies(&[Coin { denom: "ujack".to_string(), amount: Uint128(1_000_000) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin { denom: "uscrt".to_string(), amount: Uint128(2_000_000) }, Coin { denom: "other".to_string(), amount: Uint128(2_000_000) }]);
         let res = handle_buy(deps.as_mut(), mock_env(), info.clone());
         match res {
@@ -844,7 +957,7 @@ mod tests {
 
         // Test success
         let mut deps = mock_dependencies(&[Coin { denom: "ujack".to_string(), amount: Uint128(10_000_000) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin { denom: "uscrt".to_string(), amount: Uint128(5_961_532) }]);
         let res = handle_buy(deps.as_mut(), mock_env(), info.clone()).unwrap();
         assert_eq!(1, res.messages.len());
@@ -874,7 +987,7 @@ mod tests {
         };
         // Success lottery result
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let mut env = mock_env();
         env.block.height = 15005;
@@ -901,7 +1014,7 @@ mod tests {
 
         // Do not send funds with play
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("validator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         let env = mock_env();
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
@@ -919,7 +1032,7 @@ mod tests {
         // Test no funds in the contract
         let mut deps = mock_dependencies(&[]);
         deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(4_532_004) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let env = mock_env();
         let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
@@ -931,7 +1044,7 @@ mod tests {
         // Test no token holder detected
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "ujack".to_string(), amount: Uint128(4_532_004) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let env = mock_env();
         let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
@@ -943,7 +1056,7 @@ mod tests {
         // Test do not send funds with reward
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(4_532_004) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("validator1"), &[Coin{ denom: "upot".to_string(), amount: Uint128(4_532_004) }]);
         let env = mock_env();
         let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
@@ -957,7 +1070,7 @@ mod tests {
         // Test shares too low
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(4_532)}]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let env = mock_env();
         let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
@@ -969,7 +1082,7 @@ mod tests {
         // Test success lottery result
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         deps.querier.update_balance(HumanAddr::from("validator1"), vec![Coin{ denom: "upot".to_string(), amount: Uint128(4_532_004) }]);
-        default_init(&mut deps, false);
+        default_init(&mut deps);
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let env = mock_env();
         let res = handle_reward(deps.as_mut(), env.clone(), info.clone()).unwrap();
