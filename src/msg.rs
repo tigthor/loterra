@@ -19,7 +19,8 @@ pub struct InitMsg {
     pub tokenHolderSupply: Uint128,
     pub drandPublicKey: Binary,
     pub drandPeriod: u64,
-    pub drandGenesisTime: u64
+    pub drandGenesisTime: u64,
+    pub validatorMinAmountToAllowClaim: u64
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
