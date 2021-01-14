@@ -54,6 +54,9 @@ pub enum ContractError {
     #[error("You need to delegate the majority of your funds to a validator who own {0}")]
     ValidatorNotAuthorized(String),
 
+    #[error("Delegation too low need at least {0}")]
+    DelegationTooLow(String),
+
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }
