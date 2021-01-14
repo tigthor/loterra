@@ -23,7 +23,8 @@ pub struct State {
     pub tokenHolderSupply: Uint128,
     pub drandPublicKey: Binary,
     pub drandPeriod: u64,
-    pub drandGenesisTime: u64
+    pub drandGenesisTime: u64,
+    pub validatorMinAmountToAllowClaim: u64
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {

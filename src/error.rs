@@ -51,6 +51,9 @@ pub enum ContractError {
     #[error("Drand round is invalid")]
     InvalidRound{},
 
+    #[error("You need to delegate the majority of your funds to a validator who own {0}")]
+    ValidatorNotAuthorized(String),
+
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

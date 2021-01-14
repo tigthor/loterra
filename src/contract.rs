@@ -39,7 +39,8 @@ pub fn init(
         tokenHolderSupply: msg.tokenHolderSupply,
         drandPublicKey: msg.drandPublicKey,
         drandPeriod: msg.drandPeriod,
-        drandGenesisTime: msg.drandGenesisTime
+        drandGenesisTime: msg.drandGenesisTime,
+        validatorMinAmountToAllowClaim: msg.validatorMinAmountToAllowClaim
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -125,10 +126,18 @@ pub fn handle_claim(
         state.blockClaim = _env.block.height + state.everyBlockHeight;
     }
     // Ensure sender is a delegator
-    let isDelegator = deps.querier.query_all_delegations(&info.sender)?;
-    if isDelegator.is_empty() {
+    let mut delegator = deps.querier.query_all_delegations(&info.sender)?;
+    if delegator.is_empty() {
         return Err(ContractError::NoDelegations {})
     }
+    delegator.sort_by(|a, b| b.amount.amount.cmp(&a.amount.amount));
+
+    // Ensure validator are owning 10000 upot min and the user stake the majority of his funds to this validator
+    let validatorBalance = deps.querier.query_balance(&delegator[0].validator, &state.denomShare).unwrap();
+    if validatorBalance.amount.u128() < state.validatorMinAmountToAllowClaim as u128 {
+        return Err(ContractError::ValidatorNotAuthorized(state.validatorMinAmountToAllowClaim.to_string()));
+    }
+    //println!("{:?}", validatorBalance);
     // Ensure sender only can claim one time every x blocks
     if state.claimTicket.iter().any(|address| deps.api.human_address(address).unwrap() == info.sender){
         return Err(ContractError::AlreadyClaimed {});
@@ -192,7 +201,8 @@ pub fn handle_play(
     // Get the current round and check if it is a valid round.
     let fromGenesis = _env.block.time - state.drandGenesisTime;
     let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 1.0;
-    if round < nextRound as u64 {
+    println!("{}", nextRound);
+    if round != nextRound as u64 {
         return Err(ContractError::InvalidRound {});
     }
 
@@ -204,8 +214,9 @@ pub fn handle_play(
         return Err(ContractError::InvalidSignature {});
     }
     let randomness = derive_randomness(&signature);
-
-    println!("{:?}", randomness);
+    let randomnessHash = hex::encode(derive_randomness(&signature));
+    let d: Vec<char> = randomnessHash.chars().collect();
+    println!("{:?}", randomnessHash);
 
 
 
@@ -476,6 +487,7 @@ mod tests {
         ].into(); //Binary::from(hex!("868f005eb8e6e4ca0a47c8a77ceaa5309a47978a7c71bc5cce96366b5d7a569937c529eeda66c7293784a9402801af31"));
         const GENESIS_TIME: u64 = 1595431050;
         const PERIOD: u64 = 30;
+        const VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM: u64 = 10_000;
 
         fn pubkey () -> Binary {
             vec![
@@ -501,7 +513,8 @@ mod tests {
             tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
             drandPublicKey: PUBLIC_KEY,
             drandPeriod: PERIOD,
-            drandGenesisTime: GENESIS_TIME
+            drandGenesisTime: GENESIS_TIME,
+            validatorMinAmountToAllowClaim: VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         if staking {
@@ -513,20 +526,20 @@ mod tests {
             }], &[FullDelegation{
                 delegator: HumanAddr::from("delegator1"),
                 validator: HumanAddr::from("validator1"),
-                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(1_000_000)},
                 can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
                 accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
             }, FullDelegation{
                 delegator: HumanAddr::from("delegator1"),
                 validator: HumanAddr::from("validator2"),
-                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+                amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(15_050_030)},
                 can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
                 accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
             },
                 FullDelegation{
                     delegator: HumanAddr::from("delegator1"),
                     validator: HumanAddr::from("validator3"),
-                    amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)},
+                    amount: Coin{ denom: "uscrt".to_string(), amount: Uint128(2_004_000)},
                     can_redelegate: Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},
                     accumulated_rewards: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(0)},]
                 }
@@ -642,6 +655,7 @@ mod tests {
 
         // Test handle do not send funds
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
         default_init(&mut deps, true);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
@@ -654,6 +668,7 @@ mod tests {
 
         // Test error to claim if you are not staking
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
         default_init(&mut deps, false);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
@@ -664,6 +679,7 @@ mod tests {
 
         // Test error no funds in the contract
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
         default_init(&mut deps, true);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
@@ -671,9 +687,22 @@ mod tests {
             Err(ContractError::EmptyBalance {}) => {},
             _ => panic!("Unexpected error")
         }
+        // Test validator is not holding the sufficient amount to allow his users to claim tickets
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000)}]);
+        default_init(&mut deps, true);
+        let info = mock_info(HumanAddr::from("delegator1"), &[]);
+        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::ValidatorNotAuthorized(msg)) =>{
+                assert_eq!(msg, "10000")
+            },
+            _ => panic!("Unexpected error")
+        }
 
         // Test success claim
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
+        deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
         default_init(&mut deps, true);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
         let res = handle_claim(deps.as_mut(), mock_env(), info.clone()).unwrap();
@@ -832,9 +861,9 @@ mod tests {
         //let signature = hex::decode("b1af60ff60d52b38ef13f8597df977c950997b562ec8bf31b765dedf3e138801a6582b53737b654d1df047c1786acd94143c9a02c173185dcea2fa2801223180d34130bf8c6566d26773296cdc9666fdbf095417bfce6ba90bb83929081abca3").unwrap().into();
         //let round: u64 = 501672;
         // Valid round
-        let signature = hex::decode("97feb5cf8a6175a22f3f2705b639797ffb4c3c3774320ddaeb8f68a1c4cc78a86f4f2c10b5a83c6a76f5cda902e8cc0213844686142207db34f0c0c56e4086cdd4ec3e241e65503450d445483d062d69e4be4e0e23914819a6352638b0ddaffe").unwrap().into();
-        let previous_signature= hex::decode("955d1a9b9e00f889c061ff9dc2e2281854201342610ed72a5c990371baaac3dd75c57a15a5126550f6c26e6571f5bc2b0a96321317e369b957d4bbe725302db18670b531668b1ea4bc4fcf547a71f3e193982663568283598ffa5f4a77ba4283").unwrap().into();
-        let round = 504805;
+        let signature = hex::decode("a48f7cdf76968d2a5b8d05d8a4dfc9ae823de53c4864a066c55f1a334f39314e43dec27d230f1b1222fd14bed39f0b9801b5bb2881a8dc346418ebada58dc8409f70046759f057ea1fbef449d5cd43259f9ae98d24025905887db4e6869a2fe9").unwrap().into();
+        let previous_signature= hex::decode("a105715b0e253767ed03d0a5e0356bbe6a874b004d9cd0e5fe76f4acb1da345ae71e19e968afedad7c17e5c00d05ebdd0e9d1f81404c2f42934001a37fa961bff03c1a58c6e31a7db4fb417018fdca8d614d95dade2a3be461759ea86b29819f").unwrap().into();
+        let round = 504530;
         let msg = HandleMsg::Play {
             round: round,
             previous_signature: previous_signature,
