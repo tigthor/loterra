@@ -131,7 +131,10 @@ pub fn handle_claim(
         return Err(ContractError::NoDelegations {})
     }
     delegator.sort_by(|a, b| b.amount.amount.cmp(&a.amount.amount));
-
+    // check minimum to delegation
+    if delegator[0].amount.amount < 1000 {
+        return Err(ContractError::DelegationTooLow("1000".to_string()));
+    }
     // Ensure validator are owning 10000 upot min and the user stake the majority of his funds to this validator
     let validatorBalance = deps.querier.query_balance(&delegator[0].validator, &state.denomShare).unwrap();
     if validatorBalance.amount.u128() < state.validatorMinAmountToAllowClaim as u128 {
