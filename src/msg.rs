@@ -5,8 +5,9 @@ use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
-    pub denom: String,
+    pub denomTicket: String,
     pub denomDelegation: String,
+    pub denomDelegationDecimal: Uint128,
     pub denomShare: String,
     pub everyBlockHeight: u64,
     pub players: Vec<CanonicalAddr>,
@@ -28,7 +29,9 @@ pub struct InitMsg {
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
     /// Registering to the lottery
-    Register {},
+    Register {
+        combination: String,
+    },
     /// Run the lottery
     Play {
         round: u64,
@@ -48,10 +51,17 @@ pub enum HandleMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
+    /// Get the config state
     Config {},
+    /// Get the last randomness
     LatestDrand {},
+    /// Get a specific randomness
     GetRandomness {
         round: u64
+    },
+    /// Combination lottery numbers and address
+    Combination {
+        number: String
     }
 }
 
@@ -64,6 +74,11 @@ pub struct GetResponse {
 pub struct LatestResponse {
     pub round: u64,
     pub randomness: Binary
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct CombinationResponse {
+    pub address: CanonicalAddr
 }
 // We define a custom struct for each query response
 pub type ConfigResponse = State;
