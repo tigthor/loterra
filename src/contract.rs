@@ -3,7 +3,7 @@ use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, Ha
                    AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, CombinationResponse, AllCombinationResponse};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse};
 use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
@@ -483,14 +483,13 @@ fn query_latest(deps: Deps) -> Result<LatestResponse, ContractError>{
 
 fn query_all_combination(deps: Deps) -> Result<AllCombinationResponse, ContractError>{
     let combination = combination_storage_read(deps.storage)
-        .range(None, None, Order::Descending).into_iter().flat_map(|(a, _)| String::from_utf8(a.clone())).collect();
+        .range(None, None, Order::Descending).into_iter()
+        .flat_map(|(a, _)| String::from_utf8(a.clone()))
+        .collect();
 
     Ok(AllCombinationResponse{
         combination: combination
     })
-
-
-
 }
 
 
@@ -647,7 +646,7 @@ mod tests {
 
         // Test if we have added 3 times the player in the players array
         let res = query_config(deps.as_ref()).unwrap();
-        assert_eq!(15, res.players.len());
+        assert_eq!(18, res.players.len());
 
         // Test sending 0 ticket NoFunds
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(0)}]);
