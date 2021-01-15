@@ -60,9 +60,7 @@ pub enum QueryMsg {
         round: u64
     },
     /// Combination lottery numbers and address
-    Combination {
-        number: String
-    }
+    Combination {}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -77,8 +75,8 @@ pub struct LatestResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct CombinationResponse {
-    pub address: CanonicalAddr
+pub struct AllCombinationResponse {
+    pub combination: Vec<String>,
 }
 // We define a custom struct for each query response
 pub type ConfigResponse = State;
