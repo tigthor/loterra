@@ -6,6 +6,7 @@ use cosmwasm_storage::{singleton, singleton_read, ReadonlySingleton, Singleton, 
 
 pub static CONFIG_KEY: &[u8] = b"config";
 const BEACONS_KEY: &[u8] = b"beacons";
+const COMBINATION_KEY: &[u8] = b"combination";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -15,8 +16,9 @@ pub struct State {
     pub blockClaim: u64,
     pub blockIcoTimeframe: u64,
     pub everyBlockHeight: u64,
-    pub denom: String,
+    pub denomTicket: String,
     pub denomDelegation: String,
+    pub denomDelegationDecimal: Uint128,
     pub denomShare: String,
     pub claimTicket: Vec<CanonicalAddr>,
     pub claimReward: Vec<CanonicalAddr>,
@@ -44,6 +46,13 @@ pub fn beacons_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage{
     prefixed_read(storage, BEACONS_KEY)
 }
 
+pub fn combination_storage(storage: &mut dyn Storage) -> PrefixedStorage{
+    prefixed(storage, COMBINATION_KEY)
+}
+
+pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage{
+    prefixed_read(storage, COMBINATION_KEY)
+}
 
 
 /*pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {

@@ -3,8 +3,8 @@ use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, Ha
                    AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse};
-use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, CombinationResponse};
+use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
 use std::fs::canonicalize;
@@ -32,8 +32,9 @@ pub fn init(
         blockClaim: msg.blockClaim,
         blockIcoTimeframe: msg.blockIcoTimeframe,
         everyBlockHeight: msg.everyBlockHeight,
-        denom: msg.denom,
+        denomTicket: msg.denomTicket,
         denomDelegation: msg.denomDelegation,
+        denomDelegationDecimal: msg.denomDelegationDecimal,
         denomShare: msg.denomShare,
         claimTicket: msg.claimTicket,
         claimReward: msg.claimReward,
@@ -58,7 +59,9 @@ pub fn handle(
     msg: HandleMsg,
 ) -> Result<HandleResponse, ContractError> {
     match msg {
-        HandleMsg::Register {} => handle_register(deps, _env, info),
+        HandleMsg::Register {
+            combination
+        } => handle_register(deps, _env, info, combination),
         HandleMsg::Play {
             round,
             previous_signature,
@@ -74,21 +77,24 @@ pub fn handle(
 pub fn handle_register(
     deps: DepsMut,
     _env: Env,
-    info: MessageInfo
+    info: MessageInfo,
+    combination: String
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
+    //save beacon for other users usage
+    combination_storage(deps.storage).set(&combination.as_bytes(), &info.sender.as_bytes());
     // Check if some funds are sent
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
-            if info.sent_funds[0].denom == state.denom {
+            if info.sent_funds[0].denom == state.denomTicket {
                 Ok(info.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denom.clone().to_string()))
+                Err(ContractError::MissingDenom(state.denomTicket.clone().to_string()))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denom.clone().to_string())),
+        _ => Err(ContractError::ExtraDenom(state.denomTicket.clone().to_string())),
     }?;
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
@@ -146,7 +152,7 @@ pub fn handle_claim(
     }
     // Ensure delegating the minimum admitted
     if delegator[0].amount.amount < state.delegatorMinAmountInDelegation {
-        return Err(ContractError::DelegationTooLow("1000".to_string()));
+        return Err(ContractError::DelegationTooLow(state.delegatorMinAmountInDelegation.to_string()));
     }
     // Ensure sender only can claim one time every x blocks
     if state.claimTicket.iter().any(|address| deps.api.human_address(address).unwrap() == info.sender){
@@ -156,7 +162,7 @@ pub fn handle_claim(
     state.claimTicket.push(sender.clone());
 
     // Get the contract balance
-    let balance = deps.querier.query_balance(_env.contract.address.clone(), &state.denom)?;
+    let balance = deps.querier.query_balance(_env.contract.address.clone(), &state.denomTicket)?;
     // Cancel if no amount in the contract
     if balance.amount.is_zero(){
         return Err(ContractError::EmptyBalance {});
@@ -168,7 +174,7 @@ pub fn handle_claim(
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
         to_address: deps.api.human_address(&sender).unwrap(),
-        amount: vec![Coin{ denom: state.denom.clone(), amount: Uint128(1)}]
+        amount: vec![Coin{ denom: state.denomTicket.clone(), amount: Uint128(1)}]
     };
     // Send the claimed tickets
     Ok(HandleResponse {
@@ -352,7 +358,7 @@ pub fn handle_buy(
         return Err(ContractError::NoFunds {});
     };
 
-    let balance = deps.querier.query_balance(&_env.contract.address, &state.denom).unwrap();
+    let balance = deps.querier.query_balance(&_env.contract.address, &state.denomTicket).unwrap();
     if balance.amount.is_zero(){
         return Err(ContractError::EmptyBalance {});
     }
@@ -361,12 +367,12 @@ pub fn handle_buy(
         return Err(ContractError::EmptyBalance {});
     }
 
-    let amountToSend = sent.u128() / 1_000_000;
+    let amountToSend = sent.u128() / state.denomDelegationDecimal.u128();
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
         to_address: info.sender.clone(),
-        amount: vec![Coin{ denom: state.denom.clone(), amount: Uint128(amountToSend)}]
+        amount: vec![Coin{ denom: state.denomTicket.clone(), amount: Uint128(amountToSend)}]
     };
 
     Ok(HandleResponse {
@@ -446,7 +452,8 @@ pub fn query(
     let response = match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
         QueryMsg::LatestDrand {} => to_binary(&query_latest(deps)?)?,
-        QueryMsg::GetRandomness {round} => to_binary(&query_get(deps, round)?)?
+        QueryMsg::GetRandomness {round} => to_binary(&query_get(deps, round)?)?,
+        QueryMsg::Combination { number } =>  to_binary(&query_combination(deps, number)?)?
     };
     Ok(response)
 }
@@ -470,6 +477,14 @@ fn query_latest(deps: Deps) -> Result<LatestResponse, ContractError>{
     Ok(LatestResponse {
         round: u64::from_be_bytes(Binary(key).to_array()?),
         randomness: value.into(),
+    })
+}
+
+fn query_combination(deps: Deps, number: String) -> Result<CombinationResponse, ContractError>{
+    let combination = combination_storage_read(deps.storage);
+    let address = combination.get(&number.as_bytes()).unwrap_or_default();
+    Ok(CombinationResponse{
+        address: address.into()
     })
 }
 
@@ -501,8 +516,9 @@ mod tests {
         let player5 = deps.api.canonical_address(&HumanAddr::from("player5")).unwrap();
         let player6 = deps.api.canonical_address(&HumanAddr::from("player6")).unwrap();
 
-        const DENOM: &str = "ujack";
+        const DENOM_TICKET: &str = "ujack";
         const DENOM_DELEGATION: &str = "uscrt";
+        const DENOM_DELEGATION_DECIMAL: Uint128 = Uint128(1_000_000);
         const DENOM_SHARE: &str = "upot";
         const EVERY_BLOCK_EIGHT: u64 = 100;
         let PLAYERS: Vec<CanonicalAddr> = vec![player1, player2.clone(), player2.clone(), player3.clone(), player3.clone(), player3.clone(), player3.clone(), player4.clone(), player4.clone(), player4.clone(), player5, player6];
@@ -533,8 +549,9 @@ mod tests {
 
 
         let init_msg = InitMsg{
-            denom: DENOM.to_string(),
+            denomTicket: DENOM_TICKET.to_string(),
             denomDelegation: DENOM_DELEGATION.to_string(),
+            denomDelegationDecimal: DENOM_DELEGATION_DECIMAL,
             denomShare: DENOM_SHARE.to_string(),
             everyBlockHeight: EVERY_BLOCK_EIGHT,
             players: PLAYERS,
@@ -602,35 +619,43 @@ mod tests {
     }
     #[test]
     fn register() {
-
+        let msg = HandleMsg::Register {
+            combination: "1e3fabc43".to_string()
+        };
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
         default_init(&mut deps);
 
         // Test if this succeed
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
-        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
-        assert_eq!(0, res.unwrap().messages.len());
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
+        println!("{:?}", res);
+        assert_eq!(0, res.messages.len());
+
+        // check if the address is saved success
+        let res = query_combination(deps.as_ref(), "1e3fabc43".to_string()).unwrap();
+        println!("{:?}", res.address);
+
         // Test if we have added 3 times the player in the players array
         let res = query_config(deps.as_ref()).unwrap();
         assert_eq!(15, res.players.len());
 
         // Test sending 0 ticket NoFunds
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(0)}]);
-        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
             Err(ContractError::NoFunds {}) => {},
             _ => panic!("Unexpected error")
         }
         // Test sending 0 coins NoFunds
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
-        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
             Err(ContractError::NoFunds {}) => {},
             _ => panic!("Unexpected error")
         }
         // Test sending another coin
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(2)}]);
-        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
             Err(ContractError::MissingDenom (msg)) => {
                 assert_eq!(msg, "ujack".to_string())
@@ -639,7 +664,7 @@ mod tests {
         }
         // Test sending more tokens than admitted
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}, Coin{ denom: "uscrt".to_string(), amount: Uint128(2)}]);
-        let res = handle_register(deps.as_mut(), mock_env(), info.clone());
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
             Err(ContractError::ExtraDenom(msg)) => {
                 assert_eq!(msg, "ujack".to_string())
@@ -651,7 +676,7 @@ mod tests {
         let mut env = mock_env();
         // If block eight is inferior block to play the lottery is about to start and we can't admit new register until the lottery play cause the result can be leaked at every moment.
         env.block.height = 16000;
-        let res = handle_register(deps.as_mut(), env, info.clone());
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
         match res {
             Err(ContractError::LotteryAboutToStart {}) => {},
             _ => panic!("Unexpected error")
