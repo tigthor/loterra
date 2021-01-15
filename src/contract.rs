@@ -3,7 +3,7 @@ use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, Ha
                    AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, CombinationResponse};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, CombinationResponse, AllCombinationResponse};
 use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
@@ -13,6 +13,7 @@ use std::io::Stderr;
 use std::ops::{Mul, Sub};
 use drand_verify::{verify, g1_from_fixed, g1_from_variable};
 use sha2::{Digest, Sha256};
+
 
 
 // Note, you can use StdResult in some functions where you do not
@@ -453,7 +454,7 @@ pub fn query(
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
         QueryMsg::LatestDrand {} => to_binary(&query_latest(deps)?)?,
         QueryMsg::GetRandomness {round} => to_binary(&query_get(deps, round)?)?,
-        QueryMsg::Combination { number } =>  to_binary(&query_combination(deps, number)?)?
+        QueryMsg::Combination {} =>  to_binary(&query_all_combination(deps)?)?
     };
     Ok(response)
 }
@@ -480,12 +481,16 @@ fn query_latest(deps: Deps) -> Result<LatestResponse, ContractError>{
     })
 }
 
-fn query_combination(deps: Deps, number: String) -> Result<CombinationResponse, ContractError>{
-    let combination = combination_storage_read(deps.storage);
-    let address = combination.get(&number.as_bytes()).unwrap_or_default();
-    Ok(CombinationResponse{
-        address: address.into()
+fn query_all_combination(deps: Deps) -> Result<AllCombinationResponse, ContractError>{
+    let combination = combination_storage_read(deps.storage)
+        .range(None, None, Order::Descending).into_iter().flat_map(|(a, _)| String::from_utf8(a.clone())).collect();
+
+    Ok(AllCombinationResponse{
+        combination: combination
     })
+
+
+
 }
 
 
@@ -630,10 +635,15 @@ mod tests {
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
         println!("{:?}", res);
         assert_eq!(0, res.messages.len());
-
+        // check if we can add multiple players
+        let msg = HandleMsg::Register {
+            combination: "650ef45efd".to_string()
+        };
+        let info = mock_info(HumanAddr::from("delegator12"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
         // check if the address is saved success
-        let res = query_combination(deps.as_ref(), "1e3fabc43".to_string()).unwrap();
-        println!("{:?}", res.address);
+        let res = query_all_combination(deps.as_ref()).unwrap();
+        println!("{:?}", res);
 
         // Test if we have added 3 times the player in the players array
         let res = query_config(deps.as_ref()).unwrap();
@@ -681,6 +691,13 @@ mod tests {
             Err(ContractError::LotteryAboutToStart {}) => {},
             _ => panic!("Unexpected error")
         }
+        // Test if multiple players are added to the player array
+        let msg = HandleMsg::Register {
+            combination: "1e3fabc43".to_string()
+        };
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
+        default_init(&mut deps);
+
     }
     #[test]
     fn claim() {

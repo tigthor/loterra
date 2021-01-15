@@ -1,8 +1,10 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary};
+use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary, Order};
 use cosmwasm_storage::{singleton, singleton_read, ReadonlySingleton, Singleton, PrefixedStorage, prefixed, ReadonlyPrefixedStorage, prefixed_read};
+use crate::error::ContractError;
+use crate::msg::QueryMsg::Combination;
 
 pub static CONFIG_KEY: &[u8] = b"config";
 const BEACONS_KEY: &[u8] = b"beacons";
@@ -54,6 +56,13 @@ pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorag
     prefixed_read(storage, COMBINATION_KEY)
 }
 
+/*pub fn all_combination_storage_read(storage: &dyn Storage) -> Result<Vec<String>, ContractError>{
+    prefixed_read(storage, COMBINATION_KEY)
+        .range(None,None, Order::Ascending)
+        .map(|(k, _)|{
+            String::from_utf8(k)
+        }).collect()
+}*/
 
 /*pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
     singleton(storage, CONFIG_KEY)
