@@ -226,8 +226,8 @@ pub fn handle_play(
     /*
         TODO: remove this test lines
      */
-    let combination = "92efe19029";
-    let combination2 = "aef2341284";
+    let combination = "92efe1";
+    let combination2 = "aef234";
     combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
     combination_storage(deps.storage).save(&combination2.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
     /*
@@ -628,7 +628,7 @@ mod tests {
         const PERIOD: u64 = 30;
         const VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM: u64 = 10_000;
         const DELEGATOR_MIN_AMOUNT_IN_DELEGATION: Uint128 = Uint128(10_000);
-        const COMBINATION_LEN: u8 = 10;
+        const COMBINATION_LEN: u8 = 6;
         fn pubkey () -> Binary {
             vec![
                 134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71, 151,
@@ -716,14 +716,14 @@ mod tests {
 
         // Test if this succeed
         let msg = HandleMsg::Register {
-            combination: "1e3fabc43f".to_string()
+            combination: "1e3fab".to_string()
         };
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(1)}]);
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
         assert_eq!(0, res.messages.len());
         // check if we can add multiple players
         let msg = HandleMsg::Register {
-            combination: "1e3fabc43f".to_string()
+            combination: "1e3fab".to_string()
         };
         let info = mock_info(HumanAddr::from("delegator12"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(1)}]);
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
@@ -776,20 +776,20 @@ mod tests {
         }
         // Test if multiple players are added to the player array
         let msg = HandleMsg::Register {
-            combination: "1e3fabc43".to_string()
+            combination: "1e3fab".to_string()
         };
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
         default_init(&mut deps);
 
         // Test if we get error if combination is not authorized
         let msg = HandleMsg::Register {
-            combination: "1e3fabc43g".to_string()
+            combination: "1e3fabgvcc".to_string()
         };
         let info = mock_info(HumanAddr::from("delegator12"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
             Err(ContractError::CombinationNotAuthorized(msg)) => {
-                assert_eq!("10", msg);
+                assert_eq!("6", msg);
             },
             _ => panic!("Unexpected error")
         }
