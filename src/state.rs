@@ -13,6 +13,7 @@ const COMBINATION_KEY: &[u8] = b"combination";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub owner: CanonicalAddr,
+    // We not use players anymore
     pub players: Vec<CanonicalAddr>,
     pub blockPlay: u64,
     pub blockClaim: u64,

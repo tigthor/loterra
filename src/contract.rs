@@ -12,7 +12,7 @@ use std::ops::{Mul, Sub};
 use drand_verify::{verify, g1_from_fixed, g1_from_variable};
 use sha2::{Digest, Sha256};
 use regex::Regex;
-
+use hex;
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -82,31 +82,13 @@ pub fn handle_register(
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
-    //save combination
-    //combination_storage(deps.storage).set(&combination.as_bytes(), x.to_be_bytes());
-
-    //let combination = combination_storage(deps.storage).get(&combination.as_bytes()).unwrap();
 
     // Regex to check if the combination is allowed
     let regexBuild = format!(r"\b[a-f0-9]{{{}}}\b", state.combinationLen);
     let re = Regex::new(regexBuild.as_str()).unwrap();
-    let c = re.is_match(&combination);
-    println!("{}", c);
-    
-    // Save combination and addresses to the bucket
-    let keyExist = combination_storage(deps.storage).load(&combination.as_bytes());
-    if keyExist.is_ok(){
-        let mut combinationStorage = keyExist.unwrap();
-        combinationStorage.addresses.push(deps.api.canonical_address(&info.sender)?);
-        combination_storage(deps.storage).save(&combination.as_bytes(), &combinationStorage);
+    if !re.is_match(&combination) {
+        return Err(ContractError::CombinationNotAuthorized(state.combinationLen.to_string()));
     }
-    else{
-        combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
-    }
-
-    //keyExist.addresses.push(deps.api.canonical_address(&info.sender)?);
-    //combination_storage(deps.storage).save(&combination.as_bytes(), &keyExist);
-    //combination_storage(deps.storage).update(&combination.as_bytes(), keyExist);
 
     // Check if some funds are sent
     let sent = match info.sent_funds.len() {
@@ -123,19 +105,34 @@ pub fn handle_register(
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
     }
+    /*
+        TODO: Check if sent is 1 ticket
+     */
+
     // Check if the lottery is about to play and cancel new ticket to enter until play
     if _env.block.height >= state.blockPlay {
         return Err(ContractError::LotteryAboutToStart {});
     }
 
-    let ticketNumber = sent.u128();
+    // Save combination and addresses to the bucket
+    let keyExist = combination_storage(deps.storage).load(&combination.as_bytes());
+    if keyExist.is_ok(){
+        let mut combinationStorage = keyExist.unwrap();
+        combinationStorage.addresses.push(deps.api.canonical_address(&info.sender)?);
+        combination_storage(deps.storage).save(&combination.as_bytes(), &combinationStorage);
+    }
+    else{
+        combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
+    }
+
+    /*let ticketNumber = sent.u128();
     for d in 0..ticketNumber {
         // Update the state
         state.players.push(deps.api.canonical_address(&info.sender.clone())?);
-    }
+    }*/
 
     // Save the new state
-    config(deps.storage).save(&state);
+    // config(deps.storage).save(&state);
 
     Ok(HandleResponse::default())
 }
@@ -225,6 +222,21 @@ pub fn handle_play(
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
+
+    /*
+        TODO: remove this test lines
+     */
+    let combination = "92efe19029";
+    let combination2 = "aef2341284";
+    combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
+    combination_storage(deps.storage).save(&combination2.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
+    /*
+        END: of the test line
+     */
+
+    // Load combinations
+    let store = query_all_combination(deps.as_ref()).unwrap();
+
     // Ensure the sender not sending funds accidentally
     if !info.sent_funds.is_empty() {
         return Err(ContractError::DoNotSendFunds("Play".to_string()));
@@ -256,6 +268,39 @@ pub fn handle_play(
     //let randomnessHash = hex::encode(derive_randomness(&signature));
     //save beacon for other users usage
     beacons_storage(deps.storage).set(&round.to_be_bytes(), &randomness);
+    let randomnessHash = hex::encode(randomness);
+    println!("{}", randomnessHash);
+    //let winningCombination = randomnessHash.char_indices().rev().nth(state.combinationLen as usize).map(|(i, _)| i)
+    //    .expect("string with more than 10 characters");
+
+    //let m = randomnessHash.char_indices().rev().take(10).map(|(f, e)|e);
+    let n = randomnessHash.char_indices().rev().nth(state.combinationLen as usize - 1).map(|(i, _)| i).unwrap();
+    let winningCombination = &randomnessHash[n..];
+
+    /* let count = store.combination.iter().map(|e| {
+        e.key.chars()
+    }) */
+    println!("{:?}, {}, {:?}", winningCombination.chars(), winningCombination.len(), winningCombination.chars().next());
+
+    let mut count = 0;
+    for combination in store.combination{
+        for x in 0..winningCombination.len(){
+            if combination.key.chars().nth(x).unwrap() == winningCombination.chars().nth(x).unwrap(){
+                count += 1;
+            }
+        }
+
+        /*match count {
+            6 => "70%",
+            5 => "10%",
+            4 => "5%",
+            3 => "1%",
+            2 => "5 ticket",
+            1 => "1 ticket",
+            _ => ""
+        }*/
+    }
+    println!("{}", count);
 
     //let d: Vec<char> = randomnessHash.chars().collect();
     //println!("{:?}", randomnessHash);
@@ -665,30 +710,27 @@ mod tests {
     }
     #[test]
     fn register() {
-        let msg = HandleMsg::Register {
-            combination: "1e3fabc43f".to_string()
-        };
+
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
         default_init(&mut deps);
 
         // Test if this succeed
-        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
+        let msg = HandleMsg::Register {
+            combination: "1e3fabc43f".to_string()
+        };
+        let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(1)}]);
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
-        println!("{:?}", res);
         assert_eq!(0, res.messages.len());
         // check if we can add multiple players
         let msg = HandleMsg::Register {
-            combination: "1e3fabc43m".to_string()
+            combination: "1e3fabc43f".to_string()
         };
-        let info = mock_info(HumanAddr::from("delegator12"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
+        let info = mock_info(HumanAddr::from("delegator12"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(1)}]);
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
-        // check if the address is saved success
+        // Load all combination
         let res = query_all_combination(deps.as_ref()).unwrap();
-        println!("{:?}", res);
-
-        // Test if we have added 3 times the player in the players array
-        let res = query_config(deps.as_ref()).unwrap();
-        assert_eq!(18, res.players.len());
+        // Test if the address is saved success
+        assert_eq!(2, res.combination[0].addresses.len());
 
         // Test sending 0 ticket NoFunds
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(0)}]);
@@ -739,6 +781,18 @@ mod tests {
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
         default_init(&mut deps);
 
+        // Test if we get error if combination is not authorized
+        let msg = HandleMsg::Register {
+            combination: "1e3fabc43g".to_string()
+        };
+        let info = mock_info(HumanAddr::from("delegator12"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::CombinationNotAuthorized(msg)) => {
+                assert_eq!("10", msg);
+            },
+            _ => panic!("Unexpected error")
+        }
     }
     #[test]
     fn claim() {

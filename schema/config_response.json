@@ -8,10 +8,12 @@
     "blockPlay",
     "claimReward",
     "claimTicket",
+    "combinationLen",
     "delegatorMinAmountInDelegation",
-    "denom",
     "denomDelegation",
+    "denomDelegationDecimal",
     "denomShare",
+    "denomTicket",
     "drandGenesisTime",
     "drandPeriod",
     "drandPublicKey",
@@ -50,16 +52,24 @@
         "$ref": "#/definitions/CanonicalAddr"
       }
     },
+    "combinationLen": {
+      "type": "integer",
+      "format": "uint8",
+      "minimum": 0.0
+    },
     "delegatorMinAmountInDelegation": {
       "$ref": "#/definitions/Uint128"
-    },
-    "denom": {
-      "type": "string"
     },
     "denomDelegation": {
       "type": "string"
     },
+    "denomDelegationDecimal": {
+      "$ref": "#/definitions/Uint128"
+    },
     "denomShare": {
+      "type": "string"
+    },
+    "denomTicket": {
       "type": "string"
     },
     "drandGenesisTime": {

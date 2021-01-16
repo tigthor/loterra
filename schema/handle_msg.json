@@ -10,7 +10,15 @@
       ],
       "properties": {
         "register": {
-          "type": "object"
+          "type": "object",
+          "required": [
+            "combination"
+          ],
+          "properties": {
+            "combination": {
+              "type": "string"
+            }
+          }
         }
       }
     },

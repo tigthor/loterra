@@ -39,7 +39,7 @@ thiserror = { version = "1.0.21" }
 # Drand dependencies
 drand-verify = "0.1.0"
 sha2 = "0.9"
-hex = { version = "0.4", optional = true }
+hex = "0.4"
 wasm-bindgen = { version = "0.2.67", optional = true }
 regex = "1.4.3"
 

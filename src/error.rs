@@ -60,6 +60,8 @@ pub enum ContractError {
     #[error("No beacon")]
     NoBeacon{},
 
+    #[error("Not authorized use combination of [a-f] and [0-9] with length {0}")]
+    CombinationNotAuthorized(String),
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

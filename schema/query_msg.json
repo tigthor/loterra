@@ -3,6 +3,7 @@
   "title": "QueryMsg",
   "anyOf": [
     {
+      "description": "Get the config state",
       "type": "object",
       "required": [
         "config"
@@ -14,6 +15,7 @@
       }
     },
     {
+      "description": "Get the last randomness",
       "type": "object",
       "required": [
         "latest_drand"
@@ -25,6 +27,7 @@
       }
     },
     {
+      "description": "Get a specific randomness",
       "type": "object",
       "required": [
         "get_randomness"
@@ -42,6 +45,18 @@
               "minimum": 0.0
             }
           }
+        }
+      }
+    },
+    {
+      "description": "Combination lottery numbers and address",
+      "type": "object",
+      "required": [
+        "combination"
+      ],
+      "properties": {
+        "combination": {
+          "type": "object"
         }
       }
     }
