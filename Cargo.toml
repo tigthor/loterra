@@ -38,16 +38,10 @@ serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.21" }
 # Drand dependencies
 drand-verify = "0.1.0"
-# Needed due to missing re-exports in paired
-fff = "0.2.0"
-# Needed due to missing re-exports in paired
-groupy = "0.3.0"
-# paired = { path = "../paired" }
-# paired = { git = "https://github.com/webmaster128/paired", branch = "add-missing-symbols" }
-paired = "0.21"
 sha2 = "0.9"
 hex = { version = "0.4", optional = true }
 wasm-bindgen = { version = "0.2.67", optional = true }
+regex = "1.4.3"
 
 [dev-dependencies]
 cosmwasm-schema = { version = "0.12.2" }

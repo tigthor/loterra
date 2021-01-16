@@ -22,7 +22,8 @@ pub struct InitMsg {
     pub drandPeriod: u64,
     pub drandGenesisTime: u64,
     pub validatorMinAmountToAllowClaim: u64,
-    pub delegatorMinAmountInDelegation: Uint128
+    pub delegatorMinAmountInDelegation: Uint128,
+    pub combinationLen: u8
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -75,8 +76,15 @@ pub struct LatestResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct CombinationInfo {
+    pub key: String,
+    pub addresses: Vec<CanonicalAddr>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AllCombinationResponse {
-    pub combination: Vec<String>,
+    pub combination: Vec<CombinationInfo>,
+
 }
 // We define a custom struct for each query response
 pub type ConfigResponse = State;

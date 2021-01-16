@@ -2,9 +2,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary, Order};
-use cosmwasm_storage::{singleton, singleton_read, ReadonlySingleton, Singleton, PrefixedStorage, prefixed, ReadonlyPrefixedStorage, prefixed_read};
+use cosmwasm_storage::{singleton, singleton_read, ReadonlySingleton, Singleton, PrefixedStorage, prefixed, ReadonlyPrefixedStorage, prefixed_read, Bucket, ReadonlyBucket, bucket_read, bucket};
 use crate::error::ContractError;
-use crate::msg::QueryMsg::Combination;
+
 
 pub static CONFIG_KEY: &[u8] = b"config";
 const BEACONS_KEY: &[u8] = b"beacons";
@@ -30,7 +30,8 @@ pub struct State {
     pub drandPeriod: u64,
     pub drandGenesisTime: u64,
     pub validatorMinAmountToAllowClaim: u64,
-    pub delegatorMinAmountInDelegation: Uint128
+    pub delegatorMinAmountInDelegation: Uint128,
+    pub combinationLen: u8,
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
@@ -48,26 +49,23 @@ pub fn beacons_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage{
     prefixed_read(storage, BEACONS_KEY)
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct Combination {
+    pub addresses: Vec<CanonicalAddr>,
+}
+pub fn combination_storage(storage: &mut dyn Storage) -> Bucket<Combination>{
+    bucket(storage, COMBINATION_KEY)
+}
+
+pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Combination>{
+    bucket_read(storage, COMBINATION_KEY)
+}
+/*
 pub fn combination_storage(storage: &mut dyn Storage) -> PrefixedStorage{
     prefixed(storage, COMBINATION_KEY)
 }
 
 pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage{
     prefixed_read(storage, COMBINATION_KEY)
-}
-
-/*pub fn all_combination_storage_read(storage: &dyn Storage) -> Result<Vec<String>, ContractError>{
-    prefixed_read(storage, COMBINATION_KEY)
-        .range(None,None, Order::Ascending)
-        .map(|(k, _)|{
-            String::from_utf8(k)
-        }).collect()
 }*/
 
-/*pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
-    singleton(storage, CONFIG_KEY)
-}
-
-pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State> {
-    singleton_read(storage, CONFIG_KEY)
-}*/
