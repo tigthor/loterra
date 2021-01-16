@@ -1,10 +1,8 @@
-use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse,
-                   MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError,
-                   AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order};
+use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order, CanonicalAddr};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse};
-use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo};
+use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage, Combination};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
 use std::fs::canonicalize;
@@ -13,7 +11,7 @@ use std::io::Stderr;
 use std::ops::{Mul, Sub};
 use drand_verify::{verify, g1_from_fixed, g1_from_variable};
 use sha2::{Digest, Sha256};
-
+use regex::Regex;
 
 
 // Note, you can use StdResult in some functions where you do not
@@ -45,7 +43,8 @@ pub fn init(
         drandPeriod: msg.drandPeriod,
         drandGenesisTime: msg.drandGenesisTime,
         validatorMinAmountToAllowClaim: msg.validatorMinAmountToAllowClaim,
-        delegatorMinAmountInDelegation: msg.delegatorMinAmountInDelegation
+        delegatorMinAmountInDelegation: msg.delegatorMinAmountInDelegation,
+        combinationLen: msg.combinationLen
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -83,8 +82,32 @@ pub fn handle_register(
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
-    //save beacon for other users usage
-    combination_storage(deps.storage).set(&combination.as_bytes(), &info.sender.as_bytes());
+    //save combination
+    //combination_storage(deps.storage).set(&combination.as_bytes(), x.to_be_bytes());
+
+    //let combination = combination_storage(deps.storage).get(&combination.as_bytes()).unwrap();
+
+    // Regex to check if the combination is allowed
+    let regexBuild = format!(r"\b[a-f0-9]{{{}}}\b", state.combinationLen);
+    let re = Regex::new(regexBuild.as_str()).unwrap();
+    let c = re.is_match(&combination);
+    println!("{}", c);
+    
+    // Save combination and addresses to the bucket
+    let keyExist = combination_storage(deps.storage).load(&combination.as_bytes());
+    if keyExist.is_ok(){
+        let mut combinationStorage = keyExist.unwrap();
+        combinationStorage.addresses.push(deps.api.canonical_address(&info.sender)?);
+        combination_storage(deps.storage).save(&combination.as_bytes(), &combinationStorage);
+    }
+    else{
+        combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
+    }
+
+    //keyExist.addresses.push(deps.api.canonical_address(&info.sender)?);
+    //combination_storage(deps.storage).save(&combination.as_bytes(), &keyExist);
+    //combination_storage(deps.storage).update(&combination.as_bytes(), keyExist);
+
     // Check if some funds are sent
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
@@ -463,6 +486,7 @@ fn query_config(deps: Deps) -> Result<ConfigResponse, ContractError> {
     let state = config_read(deps.storage).load()?;
     Ok(state)
 }
+// Query beacon by round
 fn query_get(deps: Deps, round: u64) -> Result<GetResponse, ContractError>{
     let beacons = beacons_storage_read(deps.storage);
     let randomness = beacons.get(&round.to_be_bytes()).unwrap_or_default();
@@ -470,7 +494,7 @@ fn query_get(deps: Deps, round: u64) -> Result<GetResponse, ContractError>{
         randomness: randomness.into(),
     })
 }
-
+// Query latest beacon
 fn query_latest(deps: Deps) -> Result<LatestResponse, ContractError>{
     let store = beacons_storage_read(deps.storage);
     let mut iter = store.range(None, None, Order::Descending);
@@ -480,8 +504,25 @@ fn query_latest(deps: Deps) -> Result<LatestResponse, ContractError>{
         randomness: value.into(),
     })
 }
-
 fn query_all_combination(deps: Deps) -> Result<AllCombinationResponse, ContractError>{
+    let combinations = combination_storage_read(deps.storage)
+        .range(None, None, Order::Descending)
+        .flat_map(|item|{
+            item.and_then(|(k, combination)|{
+               Ok(CombinationInfo{
+                   key: String::from_utf8(k)?,
+                   addresses: combination.addresses
+               })
+            })
+        }).collect();
+
+
+    Ok(AllCombinationResponse{
+        combination: combinations,
+    })
+}
+
+/*fn query_all_combination(deps: Deps) -> Result<AllCombinationResponse, ContractError>{
     let combination = combination_storage_read(deps.storage)
         .range(None, None, Order::Descending).into_iter()
         .flat_map(|(a, _)| String::from_utf8(a.clone()))
@@ -490,7 +531,7 @@ fn query_all_combination(deps: Deps) -> Result<AllCombinationResponse, ContractE
     Ok(AllCombinationResponse{
         combination: combination
     })
-}
+}*/
 
 
 #[cfg(test)]
@@ -542,7 +583,7 @@ mod tests {
         const PERIOD: u64 = 30;
         const VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM: u64 = 10_000;
         const DELEGATOR_MIN_AMOUNT_IN_DELEGATION: Uint128 = Uint128(10_000);
-
+        const COMBINATION_LEN: u8 = 10;
         fn pubkey () -> Binary {
             vec![
                 134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71, 151,
@@ -570,7 +611,8 @@ mod tests {
             drandPeriod: PERIOD,
             drandGenesisTime: GENESIS_TIME,
             validatorMinAmountToAllowClaim: VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM,
-            delegatorMinAmountInDelegation: DELEGATOR_MIN_AMOUNT_IN_DELEGATION
+            delegatorMinAmountInDelegation: DELEGATOR_MIN_AMOUNT_IN_DELEGATION,
+            combinationLen: COMBINATION_LEN
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
@@ -624,7 +666,7 @@ mod tests {
     #[test]
     fn register() {
         let msg = HandleMsg::Register {
-            combination: "1e3fabc43".to_string()
+            combination: "1e3fabc43f".to_string()
         };
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
         default_init(&mut deps);
@@ -636,7 +678,7 @@ mod tests {
         assert_eq!(0, res.messages.len());
         // check if we can add multiple players
         let msg = HandleMsg::Register {
-            combination: "650ef45efd".to_string()
+            combination: "1e3fabc43m".to_string()
         };
         let info = mock_info(HumanAddr::from("delegator12"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
