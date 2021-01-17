@@ -566,6 +566,16 @@ pub fn handle_jackpot(
     }
 
     println!("{}, {}", jackpotAmount, state.jackpotReward.u128());
+    // Get the balance of the contract
+    let balance = deps.querier.query_balance(_env.contract.address, &state.denomDelegation).unwrap();
+    // Ensure the contract have the balance
+    if balance.amount.is_zero() {
+        return Err(ContractError::EmptyBalance {});
+    }
+    // Ensure the contract have sufficient balance to handle the transaction
+    if balance.amount < jackpotAmount {
+       return Err(ContractError::NoFunds {});
+    }
 
 /*
     let msg = BankMsg::Send {
