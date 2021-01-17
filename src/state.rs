@@ -41,6 +41,7 @@ pub struct State {
     //pub prizeSecondRankWinnerPercentage: u64,
 
 
+
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
