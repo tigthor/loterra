@@ -9,6 +9,7 @@ use crate::error::ContractError;
 pub static CONFIG_KEY: &[u8] = b"config";
 const BEACONS_KEY: &[u8] = b"beacons";
 const COMBINATION_KEY: &[u8] = b"combination";
+const WINNER_KEY: &[u8] = b"winner";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -33,6 +34,13 @@ pub struct State {
     pub validatorMinAmountToAllowClaim: u64,
     pub delegatorMinAmountInDelegation: Uint128,
     pub combinationLen: u8,
+    pub jackpotReward: Uint128,
+    pub jackpotPercentageReward: u64,
+    pub tokenHolderPercentageFeeReward: u64,
+    //pub prizeFirstRankWinnerPercentage: u64,
+    //pub prizeSecondRankWinnerPercentage: u64,
+
+
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
@@ -60,6 +68,19 @@ pub fn combination_storage(storage: &mut dyn Storage) -> Bucket<Combination>{
 
 pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Combination>{
     bucket_read(storage, COMBINATION_KEY)
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct Winner {
+    pub addresses: Vec<CanonicalAddr>,
+}
+
+pub fn winner_storage(storage: &mut dyn Storage) -> Bucket<Winner>{
+    bucket(storage, WINNER_KEY)
+}
+
+pub fn winner_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Winner>{
+    bucket_read(storage, WINNER_KEY)
 }
 /*
 pub fn combination_storage(storage: &mut dyn Storage) -> PrefixedStorage{

@@ -23,7 +23,10 @@ pub struct InitMsg {
     pub drandGenesisTime: u64,
     pub validatorMinAmountToAllowClaim: u64,
     pub delegatorMinAmountInDelegation: Uint128,
-    pub combinationLen: u8
+    pub combinationLen: u8,
+    pub jackpotReward: Uint128,
+    pub jackpotPercentageReward: u64,
+    pub tokenHolderPercentageFeeReward: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -61,7 +64,9 @@ pub enum QueryMsg {
         round: u64
     },
     /// Combination lottery numbers and address
-    Combination {}
+    Combination {},
+    /// Winner lottery rank and address
+    Winner {}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -84,8 +89,19 @@ pub struct CombinationInfo {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AllCombinationResponse {
     pub combination: Vec<CombinationInfo>,
-
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct WinnerInfo {
+    pub rank: String,
+    pub addresses: Vec<CanonicalAddr>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct AllWinnerResponse {
+    pub winner: Vec<WinnerInfo>,
+}
+
 // We define a custom struct for each query response
 pub type ConfigResponse = State;
 
