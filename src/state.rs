@@ -37,11 +37,10 @@ pub struct State {
     pub jackpotReward: Uint128,
     pub jackpotPercentageReward: u64,
     pub tokenHolderPercentageFeeReward: u64,
-    //pub prizeFirstRankWinnerPercentage: u64,
-    //pub prizeSecondRankWinnerPercentage: u64,
-
-
-
+    pub feeForDrandWorkerInPercentage: u64,
+    pub prizeFirstRankWinnerPercentage: u64,
+    pub prizeSecondRankWinnerPercentage: u64,
+    pub prizeThirdRankWinnerPercentage: u64,
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
