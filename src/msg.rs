@@ -27,6 +27,10 @@ pub struct InitMsg {
     pub jackpotReward: Uint128,
     pub jackpotPercentageReward: u64,
     pub tokenHolderPercentageFeeReward: u64,
+    pub feeForDrandWorkerInPercentage: u64,
+    pub prizeFirstRankWinnerPercentage: u64,
+    pub prizeSecondRankWinnerPercentage: u64,
+    pub prizeThirdRankWinnerPercentage: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -43,13 +47,15 @@ pub enum HandleMsg {
         signature: Binary,
     },
     /// Claim 1 ticket every x block if you are a delegator
-    Claim {},
+    Ticket {},
     /// Buy the token holders with USCRT and get 1:1 ratio
     Ico {},
     /// Buy tickets with USCRT, 1 ticket is 1_000_000 USCRT (1SCRT)
     Buy {},
-    /// Get reward
-    Reward {}
+    /// Claim holder reward
+    Reward {},
+    /// Claim jackpot
+    Jackpot {}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -93,7 +99,7 @@ pub struct AllCombinationResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct WinnerInfo {
-    pub rank: String,
+    pub rank: u8,
     pub addresses: Vec<CanonicalAddr>,
 }
 

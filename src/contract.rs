@@ -49,7 +49,11 @@ pub fn init(
         combinationLen: msg.combinationLen,
         jackpotReward: msg.jackpotReward,
         jackpotPercentageReward: msg.jackpotPercentageReward,
-        tokenHolderPercentageFeeReward: msg.tokenHolderPercentageFeeReward
+        tokenHolderPercentageFeeReward: msg.tokenHolderPercentageFeeReward,
+        feeForDrandWorkerInPercentage: msg.feeForDrandWorkerInPercentage,
+        prizeFirstRankWinnerPercentage: msg.prizeFirstRankWinnerPercentage,
+        prizeSecondRankWinnerPercentage: msg.prizeSecondRankWinnerPercentage,
+        prizeThirdRankWinnerPercentage: msg.prizeThirdRankWinnerPercentage
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -72,10 +76,11 @@ pub fn handle(
             previous_signature,
             signature,
         } => handle_play(deps, _env, info, round, previous_signature, signature),
-        HandleMsg::Claim {} => handle_claim(deps, _env, info),
+        HandleMsg::Ticket {} => handle_ticket(deps, _env, info),
         HandleMsg::Ico {} => handle_ico(deps, _env, info),
         HandleMsg::Buy {} => handle_buy(deps, _env, info),
-        HandleMsg::Reward {} => handle_reward(deps, _env, info)
+        HandleMsg::Reward {} => handle_reward(deps, _env, info),
+        HandleMsg::Jackpot {} => handle_jackpot(deps, _env, info)
     }
 }
 
@@ -130,19 +135,10 @@ pub fn handle_register(
         combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
     }
 
-    /*let ticketNumber = sent.u128();
-    for d in 0..ticketNumber {
-        // Update the state
-        state.players.push(deps.api.canonical_address(&info.sender.clone())?);
-    }*/
-
-    // Save the new state
-    // config(deps.storage).save(&state);
-
     Ok(HandleResponse::default())
 }
 
-pub fn handle_claim(
+pub fn handle_ticket(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo
@@ -216,21 +212,7 @@ fn derive_randomness(signature: &[u8]) -> [u8; 32] {
     hasher.update(signature);
     hasher.finalize().into()
 }
-/*fn empty_combination_bucket(deps: DepsMut){
-    // Load combinations
-    let mut combination = combination_storage(deps.storage);
-    let mut store = query_all_combination(deps.as_ref()).unwrap();
 
-   /* let mut iter = combination
-        .range(None, None, Order::Ascending)
-        .map(|item| item.and_then(|(k, _)| Ok(k.as_ref())
-        )).collect();
-*/
-
-    let x = store.combination.iter().map(|d| combination.remove(d.key.as_bytes()));
-    println!("{:?}", store.combination);
-
-}*/
 pub fn handle_play(
     deps: DepsMut,
     _env: Env,
@@ -241,16 +223,14 @@ pub fn handle_play(
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
+    // reset holders reward
+    state.holdersRewards = Uint128(0);
     // Load combinations
-    //let store = query_all_combination(deps.as_ref()).unwrap();
-    //empty_combination_bucket(deps);
-    //store.combination.iter().map(|d| storage.remove(b"476ad8"));
     let store = query_all_combination(deps.as_ref()).unwrap();
-    println!("{:?} o", store.combination);
+
     if store.combination.is_empty() {
         return Err(ContractError::NoPlayers {});
     }
-
 
     // Ensure the sender not sending funds accidentally
     if !info.sent_funds.is_empty() {
@@ -267,47 +247,37 @@ pub fn handle_play(
     // Get the current round and check if it is a valid round.
     let fromGenesis = _env.block.time - state.drandGenesisTime;
     let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 1.0;
-    println!("{}", nextRound);
+
     if round != nextRound as u64 {
         return Err(ContractError::InvalidRound {});
     }
-
     let pk = g1_from_variable(&state.drandPublicKey).unwrap();
-
     let valid = verify(&pk, round, &previous_signature, &signature).unwrap_or(false);
 
     if !valid {
         return Err(ContractError::InvalidSignature {});
     }
     let randomness = derive_randomness(&signature);
-    //let randomnessHash = hex::encode(derive_randomness(&signature));
+
     //save beacon for other users usage
     beacons_storage(deps.storage).set(&round.to_be_bytes(), &randomness);
     let randomnessHash = hex::encode(randomness);
-    println!("{}", randomnessHash);
-    //let winningCombination = randomnessHash.char_indices().rev().nth(state.combinationLen as usize).map(|(i, _)| i)
-    //    .expect("string with more than 10 characters");
 
-    //let m = randomnessHash.char_indices().rev().take(10).map(|(f, e)|e);
     let n = randomnessHash.char_indices().rev().nth(state.combinationLen as usize - 1).map(|(i, _)| i).unwrap();
     let winningCombination = &randomnessHash[n..];
 
-    /* let count = store.combination.iter().map(|e| {
-        e.key.chars()
-    }) */
-    println!("{:?}, {}, {:?}", winningCombination.chars(), winningCombination.len(), winningCombination.chars().next());
-
     // Set jackpot amount
     let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
-    println!("{}", balance.amount.u128());
     // Max amount winners can claim
-    let balanceAdjusted = balance.amount.mul(Decimal::percent(state.jackpotPercentageReward));
+    let jackpot = balance.amount.mul(Decimal::percent(state.jackpotPercentageReward));
+    // Drand worker fee
+    let feeForDrandWorker = jackpot.mul(Decimal::percent(state.feeForDrandWorkerInPercentage));
     // Amount token holders can claim of the reward is a fee
-    let tokenHolderFeeReward = balanceAdjusted.mul(Decimal::percent(state.tokenHolderPercentageFeeReward));
-
-
-    println!("{}", balanceAdjusted.u128());
-    println!("{}", tokenHolderFeeReward.u128());
+    let tokenHolderFeeReward = jackpot.mul(Decimal::percent(state.tokenHolderPercentageFeeReward));
+    // Total fees if winner of the jackpot
+    let totalFee = jackpot.mul(Decimal::percent(state.feeForDrandWorkerInPercentage + state.tokenHolderPercentageFeeReward));
+    // The jackpot after worker fee applied
+    let mut jackpotAfter = (jackpot - feeForDrandWorker).unwrap();
 
     let mut count = 0;
     for combination in store.combination {
@@ -320,71 +290,44 @@ pub fn handle_play(
         if count == winningCombination.len() {
             // Set the reward for token holders
             state.holdersRewards = tokenHolderFeeReward;
-            winner_storage(deps.storage).save("1".as_bytes(), &Winner{ addresses: combination.addresses });
+            // Set the new jackpot after fee
+            jackpotAfter = (jackpot - totalFee).unwrap();
+            winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ addresses: combination.addresses });
         }
         else if count == winningCombination.len() - 1 {
-            winner_storage(deps.storage).save("2".as_bytes(), &Winner{ addresses: combination.addresses });
+            winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ addresses: combination.addresses });
         }
         else if count == winningCombination.len() - 2 {
-            winner_storage(deps.storage).save("3".as_bytes(), &Winner{ addresses: combination.addresses });
+            winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ addresses: combination.addresses });
         }
-        else if count == winningCombination.len() - 3 {
-            winner_storage(deps.storage).save("4".as_bytes(), &Winner{ addresses: combination.addresses });
-        }
-        else if count == winningCombination.len() - 4 {
-            winner_storage(deps.storage).save("5".as_bytes(), &Winner{ addresses: combination.addresses });
-        }
+
         // Re init the counter for the next players
         count = 0;
     }
 
-    //state.jackpotAmount =
-    // Empty combination for the next play
+    let msg = BankMsg::Send {
+        from_address: _env.contract.address.clone(),
+        to_address: info.sender.clone(), //deps.api.human_address(&winnerAddress).unwrap(),
+        amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: feeForDrandWorker}]
+    };
+    // Update the state
+    state.jackpotReward = jackpotAfter;
+
+    // Get all keys in the bucket combination
     let keys = combination_storage(deps.storage)
         .range(None, None, Order::Ascending)
         .flat_map(|item| item.and_then(|(key, _)|{ Ok(key)})).collect::<Vec<Vec<u8>>>();
+    // Empty combination for the next play
     for x in keys {
         combination_storage(deps.storage).remove(x.as_ref())
     }
-    
-
-    // Sort the winner
-    let players = match state.players.len(){
-        0 => Err(ContractError::NoPlayers {}),
-        _ => Ok(&state.players)
-    }?;
-    // let mut rng = rand::thread_rng();
-    let maxRange = players.len() - 1;
-    // let winnerRange = rng.gen_range(0..maxRange);
-    let winnerAddress = players[0].clone();//players[winnerRange].clone();
-
-    // Winning 5 to 99 % of the lottery
-    let percentOfJackpot = 5; //rng.gen_range(5..99);
-
-    // Get the contract balance
-    let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
-    // Calculate the gross price
-    let jackpotGross = balance.amount.mul( Decimal::percent(percentOfJackpot));
-    // Calculate the fees for rewarding tokens holders
-    let jackpotFee = jackpotGross.mul(Decimal::percent(10));
-    // Jackpot winner after fees
-    let jackpot = jackpotGross - jackpotFee;
-
-    let msg = BankMsg::Send {
-        from_address: _env.contract.address.clone(),
-        to_address: deps.api.human_address(&winnerAddress).unwrap(),
-        amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: jackpot.unwrap()}]
-    };
-    // Update the state
-    state.holdersRewards = jackpotFee;
-    state.players = vec![];
 
     // Save the new state
     config(deps.storage).save(&state);
 
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "jackpot"), attr("to", deps.api.human_address(&winnerAddress).unwrap())],
+        attributes: vec![attr("action", "reward"), attr("to", &info.sender)],
         data: None,
     })
 }
@@ -554,6 +497,96 @@ pub fn handle_reward(
 }
 
 
+pub fn handle_jackpot(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo
+) -> Result<HandleResponse, ContractError> {
+    // Load state
+    let state = config(deps.storage).load()?;
+    // Load winners
+    let store = query_all_winner(deps.as_ref()).unwrap();
+    // Ensure the sender is not sending funds
+    if !info.sent_funds.is_empty() {
+        return Err(ContractError::DoNotSendFunds("Jackpot".to_string()));
+    }
+    // Ensure there is jackpot reward to claim
+    if state.jackpotReward.is_zero(){
+        return Err(ContractError::Unauthorized {});
+    }
+    // Ensure there is some winner
+    if store.winner.is_empty() {
+        return Err(ContractError::Unauthorized {})
+    }
+
+
+    let mut jackpotAmount: Uint128 = Uint128(0);
+    for winner in store.winner.clone() {
+        if winner.addresses.contains(&deps.api.canonical_address(&info.sender).unwrap()){
+            println!("{:?}", winner.addresses);
+            println!("{}", winner.rank);
+            match winner.rank {
+                1 => {
+                    let prizeFirstRank = state.prizeFirstRankWinnerPercentage / winner.addresses.len() as u64;
+                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeFirstRank));
+                    // Remove the address from the array and save
+                    let mut newAddress = winner.addresses.clone();
+                    newAddress.iter()
+                        .position(|n| n == &deps.api.canonical_address(&info.sender).unwrap())
+                        .map(|e| newAddress.remove(e))
+                        .is_some();
+                    winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ addresses: newAddress });
+
+                },
+                2 => {
+                    let prizeSecondRank = state.prizeSecondRankWinnerPercentage / winner.addresses.len() as u64;
+                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeSecondRank));
+                    // Remove the address from the array and save
+                    let mut newAddress = winner.addresses.clone();
+                    newAddress.iter()
+                        .position(|n| n == &deps.api.canonical_address(&info.sender).unwrap())
+                        .map(|e| newAddress.remove(e))
+                        .is_some();
+                    winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ addresses: newAddress });
+                },
+                3 =>{
+                    let prizeThirdRank = state.prizeThirdRankWinnerPercentage / winner.addresses.len() as u64;
+                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeThirdRank));
+                    // Remove the address from the array and save
+                    let mut newAddress = winner.addresses.clone();
+                    newAddress.iter()
+                        .position(|n| n == &deps.api.canonical_address(&info.sender).unwrap())
+                        .map(|e| newAddress.remove(e))
+                        .is_some();
+                    winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ addresses: newAddress });
+                },
+                _ => ()
+            }
+        }
+    }
+
+    println!("{}, {}", jackpotAmount, state.jackpotReward.u128());
+
+/*
+    let msg = BankMsg::Send {
+        from_address: _env.contract.address.clone(),
+        to_address: deps.api.human_address(&deps.api.canonical_address(&info.sender).unwrap()).unwrap(),
+        amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: reward}]
+    };
+
+    // Send the jackpot
+    Ok(HandleResponse {
+        messages: vec![msg.into()],
+        attributes: vec![attr("action", "reward"), attr("to", &sender)],
+        data: None,
+    })
+
+        */
+
+    Ok(HandleResponse::default())
+}
+
+
 pub fn query(
     deps: Deps,
     _env: Env,
@@ -615,7 +648,7 @@ fn query_all_winner(deps: Deps) -> Result<AllWinnerResponse, ContractError> {
         .flat_map(|item|{
             item.and_then(|(k, winner)|{
                 Ok(WinnerInfo{
-                    rank: String::from_utf8(k)?,
+                    rank: u8::from_be_bytes(Binary(k).to_array()?),
                     addresses: winner.addresses
                 })
             })
@@ -676,9 +709,13 @@ mod tests {
         const VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM: u64 = 10_000;
         const DELEGATOR_MIN_AMOUNT_IN_DELEGATION: Uint128 = Uint128(10_000);
         const COMBINATION_LEN: u8 = 6;
-        const JACKPOT_REWARD: Uint128 = Uint128(0);
+        const JACKPOT_REWARD: Uint128 = Uint128(8_000_000);
         const JACKPOT_PERCENTAGE_REWARD: u64 = 80;
         const TOKEN_HOLDER_PERCENTAGE_FEE_REWARD: u64 = 10;
+        const FEE_FOR_DRAND_WORKER_IN_PERCENTAGE: u64 = 1;
+        const PRIZE_FIRST_RANK_WINNER_PERCENTAGE: u64 = 85;
+        const PRIZE_SECOND_RANK_WINNER_PERCENTAGE: u64 = 10;
+        const PRIZE_THIRD_RANK_WINNER_PERCENTAGE: u64 = 5;
 
         fn pubkey () -> Binary {
             vec![
@@ -711,7 +748,11 @@ mod tests {
             combinationLen: COMBINATION_LEN,
             jackpotReward: JACKPOT_REWARD,
             jackpotPercentageReward: JACKPOT_PERCENTAGE_REWARD,
-            tokenHolderPercentageFeeReward: TOKEN_HOLDER_PERCENTAGE_FEE_REWARD
+            tokenHolderPercentageFeeReward: TOKEN_HOLDER_PERCENTAGE_FEE_REWARD,
+            feeForDrandWorkerInPercentage: FEE_FOR_DRAND_WORKER_IN_PERCENTAGE,
+            prizeFirstRankWinnerPercentage: PRIZE_FIRST_RANK_WINNER_PERCENTAGE,
+            prizeSecondRankWinnerPercentage: PRIZE_SECOND_RANK_WINNER_PERCENTAGE,
+            prizeThirdRankWinnerPercentage: PRIZE_THIRD_RANK_WINNER_PERCENTAGE
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
@@ -849,7 +890,7 @@ mod tests {
         }
     }
     #[test]
-    fn claim() {
+    fn ticket() {
         // Test handle do not send funds
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(100_000_000)}]);
         deps.querier.update_balance("validator2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
@@ -881,7 +922,7 @@ mod tests {
         ]);
         default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]);
-        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::DoNotSendFunds(msg)) => {
                 assert_eq!(msg, "Claim".to_string())
@@ -900,7 +941,7 @@ mod tests {
         }], &[]);
         default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
-        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::NoDelegations {}) => {},
             _ => panic!("Unexpected error")
@@ -937,7 +978,7 @@ mod tests {
         ]);
         default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
-        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::EmptyBalance {}) => {},
             _ => panic!("Unexpected error")
@@ -973,7 +1014,7 @@ mod tests {
         ]);
         default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
-        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::ValidatorNotAuthorized(msg)) =>{
                 assert_eq!(msg, "10000")
@@ -997,10 +1038,10 @@ mod tests {
         }]);
         default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
-        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::DelegationTooLow(msg)) =>{
-                assert_eq!(msg, "1000")
+                assert_eq!(msg, "10000")
             },
             _ => panic!("Unexpected error")
         }
@@ -1022,7 +1063,7 @@ mod tests {
         }]);
         default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
-        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::NoDelegations {}) => {},
             _ => panic!("Unexpected error")
@@ -1059,7 +1100,7 @@ mod tests {
         ]);
         default_init(&mut deps);
         let info = mock_info(HumanAddr::from("delegator1"), &[]);
-        let res = handle_claim(deps.as_mut(), mock_env(), info.clone()).unwrap();
+        let res = handle_ticket(deps.as_mut(), mock_env(), info.clone()).unwrap();
         assert_eq!(1, res.messages.len());
         assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
             from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
@@ -1074,7 +1115,7 @@ mod tests {
         // Test we added correct claimer to the claimed vector
         assert!(res.claimTicket.contains(&claimer));
         // Test error to claim two times
-        let res = handle_claim(deps.as_mut(), mock_env(), info.clone());
+        let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::AlreadyClaimed {}) => {},
             _ => panic!("Unexpected error")
@@ -1235,6 +1276,10 @@ mod tests {
         let addresses2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
         combination_storage(&mut deps.storage).save(&combination.as_bytes(), &Combination{ addresses: addresses1 });
         combination_storage(&mut deps.storage).save(&combination2.as_bytes(), &Combination{ addresses: addresses2 });
+        // Test if combination have been added correctly
+        let res = query_all_combination(deps.as_ref()).unwrap();
+        assert_eq!(2,  res.combination.len());
+
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let mut env = mock_env();
         env.block.height = 15005;
@@ -1242,26 +1287,34 @@ mod tests {
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
         println!("{:?}", res);
         assert_eq!(1, res.messages.len());
-
         // Test if winners have been added correctly
         let res = query_all_winner(deps.as_ref()).unwrap();
-        assert_eq!(1,  res.winner[0].addresses.len());
+        assert_eq!(2,  res.winner.len());
+        // Test if combination have been removed correctly
+        let res = query_all_combination(deps.as_ref()).unwrap();
+        assert_eq!(0,  res.combination.len());
 
         // Test if state have changed correctly
         let res = query_config(deps.as_ref()).unwrap();
+        println!("{}", res.holdersRewards.u128());
         // Test fees is now superior to 0
         assert_ne!(0, res.holdersRewards.u128());
         // Test block to play superior block height
         assert!(res.blockPlay > env.block.height);
-        // Test if players array is empty, we need to re init
-        assert_eq!(0, res.players.len());
         // Test if round was saved
         let res = query_latest(deps.as_ref()).unwrap();
         println!("{:?}", res);
         assert_eq!(504530, res.round);
+
         // Can't replay only every x blocks
+        // Init the bucket with players to storage
+        let combination= "476ad8";
+        let combination2 = "476ad3";
+        let addresses1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
+        let addresses2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
+        combination_storage(&mut deps.storage).save(&combination.as_bytes(), &Combination{ addresses: addresses1 });
+        combination_storage(&mut deps.storage).save(&combination2.as_bytes(), &Combination{ addresses: addresses2 });
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
-        //let res = handle_play(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::Unauthorized {}) => {},
             _ => panic!("Unexpected error")
@@ -1368,5 +1421,24 @@ mod tests {
             Err(ContractError::AlreadyClaimed {}) => {},
             _ => panic!("Unexpected error")
         }
+    }
+    #[test]
+    fn jackpot() {
+        // Test no funds in the contract
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        default_init(&mut deps);
+        // Init winner storage
+        let key1: u8 = 1;
+        let key2: u8 = 2;
+        let winner1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
+        let winner2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
+        winner_storage(&mut deps.storage).save(&key1.to_be_bytes(), &Winner{ addresses: winner1 });
+        winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ addresses: winner2 });
+
+        let info = mock_info(HumanAddr::from("address2"), &[]);
+        let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone());
+
+        println!("{:?}", res);
+
     }
 }
