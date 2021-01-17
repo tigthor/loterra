@@ -13,6 +13,8 @@ use drand_verify::{verify, g1_from_fixed, g1_from_variable};
 use sha2::{Digest, Sha256};
 use regex::Regex;
 use hex;
+use regex::internal::Input;
+use serde::de::Unexpected::Str;
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -214,7 +216,21 @@ fn derive_randomness(signature: &[u8]) -> [u8; 32] {
     hasher.update(signature);
     hasher.finalize().into()
 }
+/*fn empty_combination_bucket(deps: DepsMut){
+    // Load combinations
+    let mut combination = combination_storage(deps.storage);
+    let mut store = query_all_combination(deps.as_ref()).unwrap();
 
+   /* let mut iter = combination
+        .range(None, None, Order::Ascending)
+        .map(|item| item.and_then(|(k, _)| Ok(k.as_ref())
+        )).collect();
+*/
+
+    let x = store.combination.iter().map(|d| combination.remove(d.key.as_bytes()));
+    println!("{:?}", store.combination);
+
+}*/
 pub fn handle_play(
     deps: DepsMut,
     _env: Env,
@@ -226,11 +242,15 @@ pub fn handle_play(
     // Load the state
     let mut state = config(deps.storage).load()?;
     // Load combinations
+    //let store = query_all_combination(deps.as_ref()).unwrap();
+    //empty_combination_bucket(deps);
+    //store.combination.iter().map(|d| storage.remove(b"476ad8"));
     let store = query_all_combination(deps.as_ref()).unwrap();
-
+    println!("{:?} o", store.combination);
     if store.combination.is_empty() {
         return Err(ContractError::NoPlayers {});
     }
+
 
     // Ensure the sender not sending funds accidentally
     if !info.sent_funds.is_empty() {
@@ -277,6 +297,18 @@ pub fn handle_play(
     }) */
     println!("{:?}, {}, {:?}", winningCombination.chars(), winningCombination.len(), winningCombination.chars().next());
 
+    // Set jackpot amount
+    let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
+    println!("{}", balance.amount.u128());
+    // Max amount winners can claim
+    let balanceAdjusted = balance.amount.mul(Decimal::percent(state.jackpotPercentageReward));
+    // Amount token holders can claim of the reward is a fee
+    let tokenHolderFeeReward = balanceAdjusted.mul(Decimal::percent(state.tokenHolderPercentageFeeReward));
+
+
+    println!("{}", balanceAdjusted.u128());
+    println!("{}", tokenHolderFeeReward.u128());
+
     let mut count = 0;
     for combination in store.combination {
         for x in 0..winningCombination.len(){
@@ -286,13 +318,11 @@ pub fn handle_play(
         }
 
         if count == winningCombination.len() {
-            println!("wowowowowowowo");
-            println!("{:?}", combination.addresses);
+            // Set the reward for token holders
+            state.holdersRewards = tokenHolderFeeReward;
             winner_storage(deps.storage).save("1".as_bytes(), &Winner{ addresses: combination.addresses });
         }
         else if count == winningCombination.len() - 1 {
-            println!("incredible you was really near");
-            println!("{:?}", combination.addresses);
             winner_storage(deps.storage).save("2".as_bytes(), &Winner{ addresses: combination.addresses });
         }
         else if count == winningCombination.len() - 2 {
@@ -306,32 +336,17 @@ pub fn handle_play(
         }
         // Re init the counter for the next players
         count = 0;
-        /*match count {
-            6 => "70%",
-            5 => "10%",
-            4 => "5%",
-            3 => "1%",
-            2 => "5 ticket",
-            1 => "1 ticket",
-            _ => ""
-        }*/
     }
-    println!("{}", count);
 
-    // Set jackpot amount
-    let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
-    println!("{}", balance.amount.u128());
-    // Max amount winners can claim
-    let balanceAdjusted = balance.amount.mul(Decimal::percent(state.jackpotPercentageReward));
-    // Amount token holders can claim of the reward is a fee
-    let tokenHolderFeeReward = balanceAdjusted.mul(Decimal::percent(state.tokenHolderPercentageFeeReward));
-    // Set the reward for token holders
-    state.holdersRewards = tokenHolderFeeReward;
-
-    println!("{}", balanceAdjusted.u128());
-    println!("{}", tokenHolderFeeReward.u128());
     //state.jackpotAmount =
-
+    // Empty combination for the next play
+    let keys = combination_storage(deps.storage)
+        .range(None, None, Order::Ascending)
+        .flat_map(|item| item.and_then(|(key, _)|{ Ok(key)})).collect::<Vec<Vec<u8>>>();
+    for x in keys {
+        combination_storage(deps.storage).remove(x.as_ref())
+    }
+    
 
     // Sort the winner
     let players = match state.players.len(){
@@ -1227,6 +1242,10 @@ mod tests {
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
         println!("{:?}", res);
         assert_eq!(1, res.messages.len());
+
+        // Test if winners have been added correctly
+        let res = query_all_winner(deps.as_ref()).unwrap();
+        assert_eq!(1,  res.winner[0].addresses.len());
 
         // Test if state have changed correctly
         let res = query_config(deps.as_ref()).unwrap();
