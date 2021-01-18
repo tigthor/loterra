@@ -577,7 +577,7 @@ pub fn handle_jackpot(
                     ticketWinning += Uint128(1);
                     // Remove the address from the array and save
                     let newAddresses = remove_from_storage(&deps, &info, &winner);
-                    winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
+                    winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
                 },
                 _ => ()
             }
