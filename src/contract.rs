@@ -608,14 +608,8 @@ pub fn handle_jackpot(
         let ticketBalance = deps.querier.query_balance(&_env.contract.address, &state.denomTicket).unwrap();
         // Ensure the contract have the balance
         if ticketBalance.amount.is_zero() || ticketBalance.amount < ticketWinning  {
-            //return Err(ContractError::EmptyBalance {});
-            ticketWinning = Uint128(0)
+            return Ok(HandleResponse::default());
         }
-        // Ensure the contract have sufficient balance to handle the transaction
-        /*if ticketBalance.amount < ticketWinning {
-            return Err(ContractError::NoFunds {});
-        }*/
-
         amountToSend.push(Coin{ denom: state.denomTicket, amount: ticketWinning });
     }
 
@@ -1465,7 +1459,7 @@ mod tests {
     #[test]
     fn jackpot() {
         // Test no funds in the contract
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(10)}]);
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(0)}]);
         default_init(&mut deps);
         // Init winner storage
         let key1: u8 = 4;
