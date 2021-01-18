@@ -10,7 +10,6 @@ pub struct InitMsg {
     pub denomDelegationDecimal: Uint128,
     pub denomShare: String,
     pub everyBlockHeight: u64,
-    pub players: Vec<CanonicalAddr>,
     pub claimTicket: Vec<CanonicalAddr>,
     pub claimReward: Vec<CanonicalAddr>,
     pub blockPlay: u64,
@@ -28,9 +27,7 @@ pub struct InitMsg {
     pub jackpotPercentageReward: u64,
     pub tokenHolderPercentageFeeReward: u64,
     pub feeForDrandWorkerInPercentage: u64,
-    pub prizeFirstRankWinnerPercentage: u64,
-    pub prizeSecondRankWinnerPercentage: u64,
-    pub prizeThirdRankWinnerPercentage: u64,
+    pub prizeRankWinnerPercentage: Vec<u64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

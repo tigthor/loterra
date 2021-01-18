@@ -14,8 +14,6 @@ const WINNER_KEY: &[u8] = b"winner";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub owner: CanonicalAddr,
-    // We not use players anymore
-    pub players: Vec<CanonicalAddr>,
     pub blockPlay: u64,
     pub blockClaim: u64,
     pub blockIcoTimeframe: u64,
@@ -38,9 +36,8 @@ pub struct State {
     pub jackpotPercentageReward: u64,
     pub tokenHolderPercentageFeeReward: u64,
     pub feeForDrandWorkerInPercentage: u64,
-    pub prizeFirstRankWinnerPercentage: u64,
-    pub prizeSecondRankWinnerPercentage: u64,
-    pub prizeThirdRankWinnerPercentage: u64,
+    pub prizeRankWinnerPercentage: Vec<u64>,
+
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
