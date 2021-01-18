@@ -28,7 +28,6 @@ pub fn init(
 
     let state = State {
         owner: deps.api.canonical_address(&info.sender)?,
-        players: msg.players,
         blockPlay: msg.blockPlay,
         blockClaim: msg.blockClaim,
         blockIcoTimeframe: msg.blockIcoTimeframe,
@@ -51,9 +50,7 @@ pub fn init(
         jackpotPercentageReward: msg.jackpotPercentageReward,
         tokenHolderPercentageFeeReward: msg.tokenHolderPercentageFeeReward,
         feeForDrandWorkerInPercentage: msg.feeForDrandWorkerInPercentage,
-        prizeFirstRankWinnerPercentage: msg.prizeFirstRankWinnerPercentage,
-        prizeSecondRankWinnerPercentage: msg.prizeSecondRankWinnerPercentage,
-        prizeThirdRankWinnerPercentage: msg.prizeThirdRankWinnerPercentage
+        prizeRankWinnerPercentage: msg.prizeRankWinnerPercentage
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -300,6 +297,12 @@ pub fn handle_play(
         else if count == winningCombination.len() - 2 {
             winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ addresses: combination.addresses });
         }
+        else if count == winningCombination.len() - 3 {
+            winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ addresses: combination.addresses });
+        }
+        else if count == winningCombination.len() - 4 {
+            winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ addresses: combination.addresses });
+        }
 
         // Re init the counter for the next players
         count = 0;
@@ -496,7 +499,17 @@ pub fn handle_reward(
     })
 }
 
+fn remove_from_storage(deps: &DepsMut, info: &MessageInfo, winner: &WinnerInfo) -> Vec<CanonicalAddr>{
 
+    // Remove the address from the array and save
+    let mut newAddress = winner.addresses.clone();
+    newAddress.iter()
+        .position(|n| n == &deps.api.canonical_address(&info.sender).unwrap())
+        .map(|e| newAddress.remove(e))
+        .is_some();
+
+    return newAddress;
+}
 pub fn handle_jackpot(
     deps: DepsMut,
     _env: Env,
@@ -521,44 +534,50 @@ pub fn handle_jackpot(
 
 
     let mut jackpotAmount: Uint128 = Uint128(0);
+    let mut ticketWinning: Uint128 = Uint128(0);
     for winner in store.winner.clone() {
         if winner.addresses.contains(&deps.api.canonical_address(&info.sender).unwrap()){
             println!("{:?}", winner.addresses);
             println!("{}", winner.rank);
             match winner.rank {
                 1 => {
-                    let prizeFirstRank = state.prizeFirstRankWinnerPercentage / winner.addresses.len() as u64;
-                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeFirstRank));
+                    // Prizes first rank
+                    let prizeRank = state.prizeRankWinnerPercentage[0] / winner.addresses.len() as u64;
+                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeRank));
                     // Remove the address from the array and save
-                    let mut newAddress = winner.addresses.clone();
-                    newAddress.iter()
-                        .position(|n| n == &deps.api.canonical_address(&info.sender).unwrap())
-                        .map(|e| newAddress.remove(e))
-                        .is_some();
-                    winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ addresses: newAddress });
-
+                    let newAddresses = remove_from_storage(&deps, &info, &winner);
+                    winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
                 },
                 2 => {
-                    let prizeSecondRank = state.prizeSecondRankWinnerPercentage / winner.addresses.len() as u64;
-                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeSecondRank));
+                    // Prizes second rank
+                    let prizeRank = state.prizeRankWinnerPercentage[1] / winner.addresses.len() as u64;
+                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeRank));
                     // Remove the address from the array and save
-                    let mut newAddress = winner.addresses.clone();
-                    newAddress.iter()
-                        .position(|n| n == &deps.api.canonical_address(&info.sender).unwrap())
-                        .map(|e| newAddress.remove(e))
-                        .is_some();
-                    winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ addresses: newAddress });
+                    let newAddresses = remove_from_storage(&deps, &info, &winner);
+                    winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
                 },
                 3 =>{
-                    let prizeThirdRank = state.prizeThirdRankWinnerPercentage / winner.addresses.len() as u64;
-                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeThirdRank));
+                    // Prizes third rank
+                    let prizeRank =  state.prizeRankWinnerPercentage[2] / winner.addresses.len() as u64;
+                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeRank));
                     // Remove the address from the array and save
-                    let mut newAddress = winner.addresses.clone();
-                    newAddress.iter()
-                        .position(|n| n == &deps.api.canonical_address(&info.sender).unwrap())
-                        .map(|e| newAddress.remove(e))
-                        .is_some();
-                    winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ addresses: newAddress });
+                    let newAddresses = remove_from_storage(&deps, &info, &winner);
+                    winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
+                },
+                4 =>{
+                    // Prizes four rank
+                    let prizeRank =  state.prizeRankWinnerPercentage[3] / winner.addresses.len() as u64;
+                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeRank));
+                    // Remove the address from the array and save
+                    let newAddresses = remove_from_storage(&deps, &info, &winner);
+                    winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
+                },
+                5 => {
+                    // Prizes five rank
+                    ticketWinning += Uint128(1);
+                    // Remove the address from the array and save
+                    let newAddresses = remove_from_storage(&deps, &info, &winner);
+                    winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
                 },
                 _ => ()
             }
@@ -566,34 +585,56 @@ pub fn handle_jackpot(
     }
 
     println!("{}, {}", jackpotAmount, state.jackpotReward.u128());
-    // Get the balance of the contract
-    let balance = deps.querier.query_balance(_env.contract.address, &state.denomDelegation).unwrap();
-    // Ensure the contract have the balance
-    if balance.amount.is_zero() {
-        return Err(ContractError::EmptyBalance {});
-    }
-    // Ensure the contract have sufficient balance to handle the transaction
-    if balance.amount < jackpotAmount {
-       return Err(ContractError::NoFunds {});
+    // Build the amount transaction
+    let mut amountToSend: Vec<Coin> = vec![];
+
+    if !jackpotAmount.is_zero(){
+        // Get the contract balance
+        let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
+        // Ensure the contract have the balance
+        if balance.amount.is_zero() {
+            return Err(ContractError::EmptyBalance {});
+        }
+        // Ensure the contract have sufficient balance to handle the transaction
+        if balance.amount < jackpotAmount {
+            return Err(ContractError::NoFunds {});
+        }
+        amountToSend.push(Coin{ denom: state.denomDelegation, amount: jackpotAmount });
     }
 
-/*
+    if !ticketWinning.is_zero(){
+        // Get the contract ticket balance
+        let ticketBalance = deps.querier.query_balance(&_env.contract.address, &state.denomTicket).unwrap();
+        // Ensure the contract have the balance
+        if ticketBalance.amount.is_zero() {
+            return Err(ContractError::EmptyBalance {});
+        }
+        // Ensure the contract have sufficient balance to handle the transaction
+        if ticketBalance.amount < ticketWinning {
+            return Err(ContractError::NoFunds {});
+        }
+
+        amountToSend.push(Coin{ denom: state.denomTicket, amount: ticketWinning });
+    }
+
+    // Check if no problem
+    if amountToSend.is_empty(){
+        return Err(ContractError::Unauthorized {});
+    }
+
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
         to_address: deps.api.human_address(&deps.api.canonical_address(&info.sender).unwrap()).unwrap(),
-        amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: reward}]
+        amount: amountToSend
     };
 
     // Send the jackpot
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "reward"), attr("to", &sender)],
+        attributes: vec![attr("action", "jackpot reward"), attr("to", &info.sender)],
         data: None,
     })
 
-        */
-
-    Ok(HandleResponse::default())
 }
 
 
@@ -689,19 +730,11 @@ mod tests {
 
 
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
-        let player1 = deps.api.canonical_address(&HumanAddr::from("player1")).unwrap();
-        let player2 = deps.api.canonical_address(&HumanAddr::from("player2")).unwrap();
-        let player3 = deps.api.canonical_address(&HumanAddr::from("player3")).unwrap();
-        let player4 = deps.api.canonical_address(&HumanAddr::from("player4")).unwrap();
-        let player5 = deps.api.canonical_address(&HumanAddr::from("player5")).unwrap();
-        let player6 = deps.api.canonical_address(&HumanAddr::from("player6")).unwrap();
-
         const DENOM_TICKET: &str = "ujack";
         const DENOM_DELEGATION: &str = "uscrt";
         const DENOM_DELEGATION_DECIMAL: Uint128 = Uint128(1_000_000);
         const DENOM_SHARE: &str = "upot";
         const EVERY_BLOCK_EIGHT: u64 = 100;
-        let PLAYERS: Vec<CanonicalAddr> = vec![player1, player2.clone(), player2.clone(), player3.clone(), player3.clone(), player3.clone(), player3.clone(), player4.clone(), player4.clone(), player4.clone(), player5, player6];
         const CLAIM_TICKET: Vec<CanonicalAddr> = vec![];
         const CLAIM_REWARD: Vec<CanonicalAddr> = vec![];
         const BLOCK_PLAY: u64 = 15000;
@@ -723,9 +756,7 @@ mod tests {
         const JACKPOT_PERCENTAGE_REWARD: u64 = 80;
         const TOKEN_HOLDER_PERCENTAGE_FEE_REWARD: u64 = 10;
         const FEE_FOR_DRAND_WORKER_IN_PERCENTAGE: u64 = 1;
-        const PRIZE_FIRST_RANK_WINNER_PERCENTAGE: u64 = 85;
-        const PRIZE_SECOND_RANK_WINNER_PERCENTAGE: u64 = 10;
-        const PRIZE_THIRD_RANK_WINNER_PERCENTAGE: u64 = 5;
+        let PRIZE_RANK_WINNER_PERCENTAGE: Vec<u64> = vec![84, 10, 5, 1] ;
 
         fn pubkey () -> Binary {
             vec![
@@ -742,7 +773,6 @@ mod tests {
             denomDelegationDecimal: DENOM_DELEGATION_DECIMAL,
             denomShare: DENOM_SHARE.to_string(),
             everyBlockHeight: EVERY_BLOCK_EIGHT,
-            players: PLAYERS,
             claimTicket: CLAIM_TICKET,
             claimReward: CLAIM_REWARD,
             blockPlay: BLOCK_PLAY,
@@ -760,9 +790,7 @@ mod tests {
             jackpotPercentageReward: JACKPOT_PERCENTAGE_REWARD,
             tokenHolderPercentageFeeReward: TOKEN_HOLDER_PERCENTAGE_FEE_REWARD,
             feeForDrandWorkerInPercentage: FEE_FOR_DRAND_WORKER_IN_PERCENTAGE,
-            prizeFirstRankWinnerPercentage: PRIZE_FIRST_RANK_WINNER_PERCENTAGE,
-            prizeSecondRankWinnerPercentage: PRIZE_SECOND_RANK_WINNER_PERCENTAGE,
-            prizeThirdRankWinnerPercentage: PRIZE_THIRD_RANK_WINNER_PERCENTAGE
+            prizeRankWinnerPercentage: PRIZE_RANK_WINNER_PERCENTAGE
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
@@ -1435,11 +1463,11 @@ mod tests {
     #[test]
     fn jackpot() {
         // Test no funds in the contract
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(10_000_000)}]);
         default_init(&mut deps);
         // Init winner storage
         let key1: u8 = 1;
-        let key2: u8 = 2;
+        let key2: u8 = 5;
         let winner1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
         let winner2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
         winner_storage(&mut deps.storage).save(&key1.to_be_bytes(), &Winner{ addresses: winner1 });
