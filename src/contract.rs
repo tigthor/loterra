@@ -225,6 +225,18 @@ pub fn handle_play(
     // Load combinations
     let store = query_all_combination(deps.as_ref()).unwrap();
 
+    /*
+        Empty previous winners
+    */
+    // Get all keys in the bucket combination
+    let keys = winner_storage(deps.storage)
+        .range(None, None, Order::Ascending)
+        .flat_map(|item| item.and_then(|(key, _)|{ Ok(key)})).collect::<Vec<Vec<u8>>>();
+    // Empty combination for the next play
+    for x in keys {
+        winner_storage(deps.storage).remove(x.as_ref())
+    }
+    
     if store.combination.is_empty() {
         return Err(ContractError::NoPlayers {});
     }
@@ -535,15 +547,11 @@ pub fn handle_jackpot(
 
     let mut jackpotAmount: Uint128 = Uint128(0);
     let mut ticketWinning: Uint128 = Uint128(0);
-
-
     for winner in store.winner.clone() {
-        println!("{:?}", winner.addresses);
-        println!("{}", winner.rank);
+
         for address in winner.addresses.clone() {
+
             if address == deps.api.canonical_address(&info.sender).unwrap() {
-                println!("{:?}", address);
-                println!("{}", address);
                 match winner.rank {
                     1 => {
                         // Prizes first rank
@@ -1522,7 +1530,7 @@ mod tests {
         assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
             from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
             to_address: HumanAddr::from("address3"),
-            amount: vec![Coin{ denom: "ujack".to_string(), amount: Uint128(3) }]
+            amount: vec![Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]
         }));
 
         /*
