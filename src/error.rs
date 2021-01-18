@@ -65,6 +65,9 @@ pub enum ContractError {
 
     #[error("Sorry you have no prizes")]
     NoPrizes{},
+
+    #[error("No one won prizes")]
+    NoWinners{},
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }
