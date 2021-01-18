@@ -542,32 +542,33 @@ pub fn handle_jackpot(
             match winner.rank {
                 1 => {
                     // Prizes first rank
-                    let prizeRank = state.prizeRankWinnerPercentage[0] / winner.addresses.len() as u64;
-                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeRank));
+                    let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[0])).u128() / winner.addresses.len() as u128;
+                    jackpotAmount += Uint128(prize);
                     // Remove the address from the array and save
                     let newAddresses = remove_from_storage(&deps, &info, &winner);
                     winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
                 },
                 2 => {
                     // Prizes second rank
-                    let prizeRank = state.prizeRankWinnerPercentage[1] / winner.addresses.len() as u64;
-                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeRank));
+                    let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[1])).u128() / winner.addresses.len() as u128;
+                    jackpotAmount += Uint128(prize);
                     // Remove the address from the array and save
                     let newAddresses = remove_from_storage(&deps, &info, &winner);
                     winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
                 },
                 3 =>{
                     // Prizes third rank
-                    let prizeRank =  state.prizeRankWinnerPercentage[2] / winner.addresses.len() as u64;
-                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeRank));
+                    let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[2])).u128() / winner.addresses.len() as u128;
+                    jackpotAmount += Uint128(prize);
                     // Remove the address from the array and save
                     let newAddresses = remove_from_storage(&deps, &info, &winner);
                     winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
                 },
                 4 =>{
                     // Prizes four rank
-                    let prizeRank =  state.prizeRankWinnerPercentage[3] / winner.addresses.len() as u64;
-                    jackpotAmount += state.jackpotReward.mul(Decimal::percent(prizeRank));
+                    let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[3])).u128() / winner.addresses.len() as u128;
+                    jackpotAmount += Uint128(prize);
+
                     // Remove the address from the array and save
                     let newAddresses = remove_from_storage(&deps, &info, &winner);
                     winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ addresses: newAddresses });
@@ -606,13 +607,14 @@ pub fn handle_jackpot(
         // Get the contract ticket balance
         let ticketBalance = deps.querier.query_balance(&_env.contract.address, &state.denomTicket).unwrap();
         // Ensure the contract have the balance
-        if ticketBalance.amount.is_zero() {
-            return Err(ContractError::EmptyBalance {});
+        if ticketBalance.amount.is_zero() || ticketBalance.amount < ticketWinning  {
+            //return Err(ContractError::EmptyBalance {});
+            ticketWinning = Uint128(0)
         }
         // Ensure the contract have sufficient balance to handle the transaction
-        if ticketBalance.amount < ticketWinning {
+        /*if ticketBalance.amount < ticketWinning {
             return Err(ContractError::NoFunds {});
-        }
+        }*/
 
         amountToSend.push(Coin{ denom: state.denomTicket, amount: ticketWinning });
     }
@@ -1463,12 +1465,12 @@ mod tests {
     #[test]
     fn jackpot() {
         // Test no funds in the contract
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(10_000_000)}]);
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(10)}]);
         default_init(&mut deps);
         // Init winner storage
-        let key1: u8 = 1;
+        let key1: u8 = 4;
         let key2: u8 = 5;
-        let winner1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
+        let winner1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap()];
         let winner2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
         winner_storage(&mut deps.storage).save(&key1.to_be_bytes(), &Winner{ addresses: winner1 });
         winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ addresses: winner2 });
