@@ -607,15 +607,14 @@ pub fn handle_jackpot(
         // Get the contract ticket balance
         let ticketBalance = deps.querier.query_balance(&_env.contract.address, &state.denomTicket).unwrap();
         // Ensure the contract have the balance
-        if ticketBalance.amount.is_zero() || ticketBalance.amount < ticketWinning  {
-            return Ok(HandleResponse::default());
+        if !ticketBalance.amount.is_zero() || ticketBalance.amount > ticketWinning  {
+            amountToSend.push(Coin{ denom: state.denomTicket, amount: ticketWinning });
         }
-        amountToSend.push(Coin{ denom: state.denomTicket, amount: ticketWinning });
     }
 
-    // Check if no problem
+    // Check if no amount to send return ok
     if amountToSend.is_empty(){
-        return Err(ContractError::Unauthorized {});
+        return Ok(HandleResponse::default());
     }
 
     let msg = BankMsg::Send {
