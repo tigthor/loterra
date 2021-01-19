@@ -95,13 +95,6 @@ pub struct AllCombinationResponse {
     pub combination: Vec<CombinationInfo>,
 }
 
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct WinnerInfoQuery {
-    pub claimed: bool,
-    pub addresses: CanonicalAddr,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct WinnerInfo {
     pub rank: u8,
