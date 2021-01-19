@@ -67,9 +67,14 @@ pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Combina
     bucket_read(storage, COMBINATION_KEY)
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct WinnerInfoState {
+    pub claimed: bool,
+    pub address: CanonicalAddr,
+}
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct Winner {
-    pub addresses: Vec<CanonicalAddr>,
+    pub winners: Vec<WinnerInfoState>,
 }
 
 pub fn winner_storage(storage: &mut dyn Storage) -> Bucket<Winner>{
