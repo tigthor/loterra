@@ -79,7 +79,11 @@ pub enum HandleMsg {
     },
     /// Valid a proposal
     PresentProposal {
-        reference: u64
+        pollId: u64
+    },
+    /// Reject a proposal
+    RejectProposal {
+        pollId: u64
     }
 }
 
@@ -102,7 +106,7 @@ pub enum QueryMsg {
     AllPoll{},
     /// Get specific poll
     GetPoll {
-        reference: u64
+        pollId: u64
     }
 }
 

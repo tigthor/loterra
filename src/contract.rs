@@ -89,7 +89,8 @@ pub fn handle(
             prizePerRank
         } => handle_proposal(deps, _env, info, description, proposal, amount, prizePerRank),
         HandleMsg::Vote { approve } => handle_vote(deps, _env, info, approve),
-        HandleMsg::PresentProposal { reference } => handle_present_proposal(deps, _env, info, reference)
+        HandleMsg::PresentProposal { pollId } => handle_present_proposal(deps, _env, info, pollId),
+        HandleMsg::RejectProposal { pollId } => handle_reject_proposal(deps, _env, info, pollId),
     }
 }
 
@@ -800,11 +801,20 @@ pub fn handle_vote(
     Ok(HandleResponse::default())
 }
 
+pub fn handle_reject_proposal(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    pollId: u64
+) -> Result<HandleResponse, ContractError> {
+    Ok(HandleResponse::default())
+}
+
 pub fn handle_present_proposal(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    reference: u64
+    pollId: u64
 ) -> Result<HandleResponse, ContractError> {
 
 
@@ -824,7 +834,7 @@ pub fn query(
         QueryMsg::Combination {} =>  to_binary(&query_all_combination(deps)?)?,
         QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?,
         QueryMsg::AllPoll {} => to_binary(&query_all_poll(deps)?)?,
-        QueryMsg::GetPoll { reference } => to_binary(&query_poll(deps, reference)?)?
+        QueryMsg::GetPoll { pollId } => to_binary(&query_poll(deps, pollId)?)?
     };
     Ok(response)
 }
@@ -886,9 +896,9 @@ fn query_all_winner(deps: Deps) -> Result<AllWinnerResponse, ContractError> {
     })
 }
 
-fn query_poll(deps: Deps, reference: u64) -> Result<GetPollResponse, ContractError> {
+fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError> {
     let store = poll_storage_read(deps.storage);
-    let poll = store.load(&reference.to_be_bytes()).unwrap_or_default();
+    let poll = store.load(&pollId.to_be_bytes()).unwrap_or_default();
     Ok(GetPollResponse{
         creator: HumanAddr::from(poll.creator),
         status: poll.status,
