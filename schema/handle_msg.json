@@ -56,10 +56,10 @@
       "description": "Claim 1 ticket every x block if you are a delegator",
       "type": "object",
       "required": [
-        "claim"
+        "ticket"
       ],
       "properties": {
-        "claim": {
+        "ticket": {
           "type": "object"
         }
       }
@@ -89,13 +89,25 @@
       }
     },
     {
-      "description": "Get reward",
+      "description": "Claim holder reward",
       "type": "object",
       "required": [
         "reward"
       ],
       "properties": {
         "reward": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "description": "Claim jackpot",
+      "type": "object",
+      "required": [
+        "jackpot"
+      ],
+      "properties": {
+        "jackpot": {
           "type": "object"
         }
       }
