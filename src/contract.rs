@@ -318,10 +318,7 @@ pub fn handle_play(
 
         }
         else if count == winningCombination.len() - 1 {
-            /*for winnerAddress in combination.addresses {
-                winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ winners: vec![WinnerInfoState{ claimed: false, address: winnerAddress}]});
 
-            } */
             let mut dataWinner: Vec<WinnerInfoState> = vec![];
             for winnerAddress in combination.addresses {
                 dataWinner.push(WinnerInfoState{
@@ -335,7 +332,6 @@ pub fn handle_play(
         }
         else if count == winningCombination.len() - 2 {
 
-            // winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ claimed: false, addresses: combination.addresses });
             let mut dataWinner: Vec<WinnerInfoState> = vec![];
             for winnerAddress in combination.addresses {
                 dataWinner.push(WinnerInfoState{
@@ -348,6 +344,7 @@ pub fn handle_play(
             }
         }
         else if count == winningCombination.len() - 3 {
+
             let mut dataWinner: Vec<WinnerInfoState> = vec![];
             for winnerAddress in combination.addresses {
                 dataWinner.push(WinnerInfoState{
@@ -360,6 +357,7 @@ pub fn handle_play(
             }
         }
         else if count == winningCombination.len() - 4 {
+
             let mut dataWinner: Vec<WinnerInfoState> = vec![];
             for winnerAddress in combination.addresses {
                 dataWinner.push(WinnerInfoState{
@@ -371,7 +369,6 @@ pub fn handle_play(
                 winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ winners: dataWinner});
             }
         }
-
         // Re init the counter for the next players
         count = 0;
     }
@@ -576,7 +573,7 @@ fn remove_from_storage(deps: &DepsMut, info: &MessageInfo, winner: &WinnerInfo) 
            newAddress[x].claimed = true;
        }
     }
-    println!("e {:?}", newAddress);
+
     return newAddress;
 
 }
@@ -660,7 +657,6 @@ pub fn handle_jackpot(
         }
     }
     
-    println!("{}, {}", jackpotAmount, state.jackpotReward.u128());
     // Build the amount transaction
     let mut amountToSend: Vec<Coin> = vec![];
 
@@ -691,11 +687,6 @@ pub fn handle_jackpot(
     if amountToSend.is_empty(){
         return Ok(HandleResponse::default());
     }
-
-    // Set new jackpot
-    //state.jackpotReward = state.jackpotReward.sub(jackpotAmount.clone()).unwrap();
-    // Save the new state
-    //config(deps.storage).save(&state);
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
@@ -1575,7 +1566,6 @@ mod tests {
     }
     #[test]
     fn jackpot() {
-        /*
         // Init default
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(20)}]);
         default_init(&mut deps);
@@ -1608,128 +1598,70 @@ mod tests {
             Err(ContractError::NoWinners {}) => {},
             _ => panic!("Unexpected error")
         }
-
         // Test with some winners and empty balance ticket
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
-        default_init(&mut deps);
-        // Init winner storage for test
-        let key1: u8 = 4;
+        deps.querier.update_balance(MOCK_CONTRACT_ADDR, vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        let key1: u8 = 1;
         let key2: u8 = 5;
-        let winner1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
-        let winner2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap()];
-        winner_storage(&mut deps.storage).save(&key1.to_be_bytes(), &Winner{ addresses: winner1 });
-        winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ addresses: winner2 });
-
+        winner_storage(&mut deps.storage).save(&key1.to_be_bytes(),&Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] } );
+        winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()}, WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] });
         // Test transaction succeed if not ticket ujack to send
         // in this case the winner only have won tickets but since the balance is empty he will get nothing
-        let info = mock_info(HumanAddr::from("address3"), &[]);
+        let info = mock_info(HumanAddr::from("address2"), &[]);
         let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone()).unwrap();
         assert_eq!(0, res.messages.len());
 
         // Test transaction succeed if not ticket ujack to send
         // in this case the winner have multiple prizes including ujack he will receive only uscrt since ujack is empty
-        let info = mock_info(HumanAddr::from("address2"), &[]);
+        let info = mock_info(HumanAddr::from("address1"), &[]);
         let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone()).unwrap();
         assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
             from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
-            to_address: HumanAddr::from("address2"),
-            amount: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(40000)}]
+            to_address: HumanAddr::from("address1"),
+            amount: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(6720000)}]
         }));
 
-        // Test transaction error if no ticket uscrt to send
-        let mut deps = mock_dependencies(&[]);
-        default_init(&mut deps);
-        // Init winner storage for test
-        let key1: u8 = 4;
+        // Test with only ticket balance in the contract and empty uscrt
+        deps.querier.update_balance(MOCK_CONTRACT_ADDR, vec![Coin{ denom: "ujack".to_string(), amount: Uint128(20)}]);
+        let key1: u8 = 1;
         let key2: u8 = 5;
-        let winner1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
-        let winner2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap()];
-        winner_storage(&mut deps.storage).save(&key1.to_be_bytes(), &Winner{ addresses: winner1 });
-        winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ addresses: winner2 });
+        winner_storage(&mut deps.storage).save(&key1.to_be_bytes(),&Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] } );
+        winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()}, WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] });
 
-        // in this case the winner have multiple prizes including ujack he will get an error since there is no uscrt
-        let info = mock_info(HumanAddr::from("address2"), &[]);
+        // Test error since the winner won uscrt and is mor important prize than ujack
+        let info = mock_info(HumanAddr::from("address1"), &[]);
         let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone());
         match res {
             Err(ContractError::EmptyBalance {}) => {},
             _ => panic!("Unexpected error")
         }
 
-        // Test with some winners
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(10_000_000)}]);
-        default_init(&mut deps);
-        // Init winner storage for test
-        let key1: u8 = 4;
-        let key2: u8 = 5;
-        let winner1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
-        let winner2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap()];
-        winner_storage(&mut deps.storage).save(&key1.to_be_bytes(), &Winner{ addresses: winner1.clone() });
-        winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ addresses: winner2.clone() });
-
-        // Test success address3 claim jackpot and get 3 ticket since he won 3 times
-        let info = mock_info(HumanAddr::from("address3"), &[]);
-        let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone()).unwrap();
-
-        assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
-            from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
-            to_address: HumanAddr::from("address3"),
-            amount: vec![Coin{ denom: "ujack".to_string(), amount: Uint128(3)}]
-        }));
-
-        // Test if winner after prizes claim is removed from the winner storage
-        let res = query_all_winner(deps.as_ref()).unwrap();
-        let res = winner_storage_read(deps.as_ref().storage).load(&5_u8.to_be_bytes()).unwrap();
-        // Expect the storage contain address 2
-        assert_eq!("address2",  deps.api.human_address(&res.addresses[0]).unwrap());
-        let res = winner_storage_read(deps.as_ref().storage).load(&4_u8.to_be_bytes()).unwrap();
-        assert!(res.addresses.contains(&deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()));
-
-        // Test success address2 claim jackpot
+        // Test success since the winner only won ujack and the balance is positive
         let info = mock_info(HumanAddr::from("address2"), &[]);
-         let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone()).unwrap();
-         assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
-             from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
-             to_address: HumanAddr::from("address2"),
-             amount: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(40000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(1)}]
-         }));
-        // Test if winner after prizes claim is removed from the winner storage
-        let res = query_all_winner(deps.as_ref()).unwrap();
-        let res = winner_storage_read(deps.as_ref().storage).load(&5_u8.to_be_bytes()).unwrap();
-        // Assert all winner have been removed
-        assert_eq!(0,  res.addresses.len());
-        let res = winner_storage_read(deps.as_ref().storage).load(&4_u8.to_be_bytes()).unwrap();
-        //  Assert address1 is still here
-        assert_eq!(1,  res.addresses.len());
-        assert_eq!("address1",  deps.api.human_address(&res.addresses[0]).unwrap());
-        // Assert there is not anymore address2 have been removed successfully since he claim his prizes
-        assert!(!res.addresses.contains(&deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()));
-
-        // Test the jackpot have been adjusted
-        let res = query_config(deps.as_ref()).unwrap();
-        assert_eq!(Uint128(7960000), res.jackpotReward);
-
-        // Test success address1 claim jackpot
-        let info = mock_info(HumanAddr::from("address1"), &[]);
         let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone()).unwrap();
         assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
             from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
-            to_address: HumanAddr::from("address1"),
-            amount: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(40000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(1)}]
+            to_address: HumanAddr::from("address2"),
+            amount: vec![Coin{ denom: "ujack".to_string(), amount: Uint128(1) }]
         }));
-        // Test the jackpot have been adjusted
-        let res = query_config(deps.as_ref()).unwrap();
-        assert_eq!(Uint128(7920000), res.jackpotReward);
-        println!("{}",res.jackpotReward);
 
-         */
+        // Test transaction error no funds in the contract
+        deps.querier.update_balance(MOCK_CONTRACT_ADDR, vec![]);
+        let key1: u8 = 1;
+        let key2: u8 = 5;
+        winner_storage(&mut deps.storage).save(&key1.to_be_bytes(),&Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] } );
+        winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()}, WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] });
+        let info = mock_info(HumanAddr::from("address1"), &[]);
+        let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone());
+        match res {
+            Err(ContractError::EmptyBalance {}) => {},
+            _ => panic!("Unexpected error")
+        }
 
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(10_000_000)}]);
-        default_init(&mut deps);
+        // Test success
+        deps.querier.update_balance(MOCK_CONTRACT_ADDR, vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}, Coin{ denom: "ujack".to_string(), amount: Uint128(10_000_000)}]);
         // Init winner storage for test
         let key1: u8 = 1;
         let key2: u8 = 5;
-        //let winner1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
-        //let winner2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap()];
         winner_storage(&mut deps.storage).save(&key1.to_be_bytes(),&Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] } );
         winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()}, WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] });
 
@@ -1746,6 +1678,31 @@ mod tests {
             Err(ContractError::AlreadyClaimed {}) => {},
             _ => panic!("Unexpected error")
         }
+
+        // Init winner storage for test
+        let key1: u8 = 1;
+        let key2: u8 = 5;
+        let key3: u8 = 2;
+        winner_storage(&mut deps.storage).save(&key1.to_be_bytes(),&Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] } );
+        winner_storage(&mut deps.storage).save(&key3.to_be_bytes(),&Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}, WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()}] } );
+        winner_storage(&mut deps.storage).save(&key2.to_be_bytes(), &Winner{ winners: vec![WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()}, WinnerInfoState{ claimed: false, address: deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap()}] });
+
+        let info = mock_info(HumanAddr::from("address1"), &[]);
+        let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone()).unwrap();
+        assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
+            from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
+            to_address: HumanAddr::from("address1"),
+            amount: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(7120000) }, Coin{ denom: "ujack".to_string(), amount: Uint128(1) }]
+        }));
+
+        let info = mock_info(HumanAddr::from("address2"), &[]);
+        let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone()).unwrap();
+        assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
+            from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
+            to_address: HumanAddr::from("address2"),
+            amount: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(400000) }, Coin{ denom: "ujack".to_string(), amount: Uint128(1) }]
+        }));
+
     }
 
 }
