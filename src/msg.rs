@@ -48,7 +48,7 @@ pub enum HandleMsg {
     Ticket {},
     /// Buy the token holders with USCRT and get 1:1 ratio
     Ico {},
-    /// Buy tickets with USCRT, 1 ticket is 1_000_000 USCRT (1SCRT)
+    /// Buy tickets with USCRT, 1 ticket is 1_000_000 USCRT (1SCRT) but DAO can vote this
     Buy {},
     /// Claim holder reward
     Reward {},
@@ -67,7 +67,7 @@ pub enum HandleMsg {
         approve: bool
     },
     /// Valid a proposal
-    Valid {
+    PresentProposal {
         reference: u64
     }
 }
