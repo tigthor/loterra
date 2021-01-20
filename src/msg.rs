@@ -53,7 +53,23 @@ pub enum HandleMsg {
     /// Claim holder reward
     Reward {},
     /// Claim jackpot
-    Jackpot {}
+    Jackpot {},
+    /// DAO
+    /// Make a proposal
+    Proposal {
+        title: String,
+        description: String,
+        proposal: String,
+        amount: Option<Uint128>
+    },
+    /// Vote the proposal
+    Vote {
+        approve: bool
+    },
+    /// Valid a proposal
+    Valid {
+        reference: u64
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

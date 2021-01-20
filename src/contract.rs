@@ -656,7 +656,7 @@ pub fn handle_jackpot(
             }
         }
     }
-    
+
     // Build the amount transaction
     let mut amountToSend: Vec<Coin> = vec![];
 
