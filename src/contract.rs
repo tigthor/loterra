@@ -1,8 +1,8 @@
 use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order, CanonicalAddr, ByteArray};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo, AllWinnerResponse, WinnerInfo};
-use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage, Combination, winner_storage_read, winner_storage, Winner, WinnerInfoState};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo, AllWinnerResponse, WinnerInfo, GetPollResponse, Proposal};
+use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage, Combination, winner_storage_read, winner_storage, Winner, WinnerInfoState, poll_storage_read, PollInfoState, PollStatus, poll_storage};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
 use std::fs::canonicalize;
@@ -16,6 +16,8 @@ use hex;
 use regex::internal::Input;
 use serde::de::Unexpected::Str;
 
+const MIN_DESC_LEN: u64 = 6;
+const MAX_DESC_LEN: u64 = 64;
 
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -51,7 +53,8 @@ pub fn init(
         jackpotPercentageReward: msg.jackpotPercentageReward,
         tokenHolderPercentageFeeReward: msg.tokenHolderPercentageFeeReward,
         feeForDrandWorkerInPercentage: msg.feeForDrandWorkerInPercentage,
-        prizeRankWinnerPercentage: msg.prizeRankWinnerPercentage
+        prizeRankWinnerPercentage: msg.prizeRankWinnerPercentage,
+        pollCount: 0
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -80,11 +83,11 @@ pub fn handle(
         HandleMsg::Reward {} => handle_reward(deps, _env, info),
         HandleMsg::Jackpot {} => handle_jackpot(deps, _env, info),
         HandleMsg::Proposal {
-            title,
-            description,
+            description ,
             proposal,
-            amount
-        } => handle_proposal(deps, _env, info, title, description, proposal, amount),
+            amount,
+            prizePerRank
+        } => handle_proposal(deps, _env, info, description, proposal, amount, prizePerRank),
         HandleMsg::Vote { approve } => handle_vote(deps, _env, info, approve),
         HandleMsg::PresentProposal { reference } => handle_present_proposal(deps, _env, info, reference)
     }
@@ -715,11 +718,76 @@ pub fn handle_proposal(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    title: String,
     description: String,
-    proposal: String,
-    amount: Option<Uint128>
+    proposal: Proposal,
+    amount: Option<Uint128>,
+    prizePerRank: Option<Vec<u64>>
 ) -> Result<HandleResponse, ContractError> {
+    let mut state = config(deps.storage).load().unwrap();
+    // Increment and get the new poll id for bucket key
+    let pollId = state.pollCount + 1;
+    // Set the new counter
+    state.pollCount = pollId;
+
+    //Handle sender is not sending funds
+    if !info.sent_funds.is_empty(){
+        return Err(ContractError::DoNotSendFunds("Proposal".to_string()));
+    }
+
+    // Handle the description is respecting length
+    if (description.len() as u64) < MIN_DESC_LEN {
+        return Err(ContractError::DescriptionTooShort(MIN_DESC_LEN.to_string()));
+    } else if (description.len() as u64) > MAX_DESC_LEN {
+        return Err(ContractError::DescriptionTooLong(MAX_DESC_LEN.to_string()));
+    }
+
+    // Handle block eight start and end are valid
+
+    // Check the proposal is a valid proposal
+    match proposal {
+        Proposal::HolderFeePercentage => {
+
+        },
+        Proposal::DrandWorkerFeePercentage => {
+
+        },
+        Proposal::JackpotRewardPercentage => {
+
+        },
+        Proposal::LotteryEveryBlock => {
+
+        },
+        Proposal::MinAmountDelegator => {
+
+        },
+        Proposal::MinAmountValidator =>{
+
+        },
+        Proposal::PrizePerRank => {
+
+        }
+        _ => return Err(ContractError::ProposalNotFound {})
+    }
+
+    let senderToCanonical = deps.api.canonical_address(&info.sender).unwrap();
+
+    let newPoll =  PollInfoState{
+        creator: senderToCanonical,
+        status: PollStatus::InProgress,
+        end_height: 0,
+        start_height: _env.block.height,
+        description,
+        yes_voters: vec![],
+        no_voters: vec![],
+        amount: None,
+        prizeRank: None
+    };
+
+    // Save poll
+    poll_storage(deps.storage).save(&state.pollCount.to_be_bytes(), &newPoll)?;
+
+    // Save state
+    config(deps.storage).save(&state)?;
     Ok(HandleResponse::default())
 }
 
@@ -738,6 +806,9 @@ pub fn handle_present_proposal(
     info: MessageInfo,
     reference: u64
 ) -> Result<HandleResponse, ContractError> {
+
+
+
     Ok(HandleResponse::default())
 }
 
@@ -751,7 +822,9 @@ pub fn query(
         QueryMsg::LatestDrand {} => to_binary(&query_latest(deps)?)?,
         QueryMsg::GetRandomness {round} => to_binary(&query_get(deps, round)?)?,
         QueryMsg::Combination {} =>  to_binary(&query_all_combination(deps)?)?,
-        QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?
+        QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?,
+        QueryMsg::AllPoll {} => to_binary(&query_all_poll(deps)?)?,
+        QueryMsg::GetPoll { reference } => to_binary(&query_poll(deps, reference)?)?
     };
     Ok(response)
 }
@@ -812,6 +885,23 @@ fn query_all_winner(deps: Deps) -> Result<AllWinnerResponse, ContractError> {
         winner: winners
     })
 }
+
+fn query_poll(deps: Deps, reference: u64) -> Result<GetPollResponse, ContractError> {
+    let store = poll_storage_read(deps.storage);
+    let poll = store.load(&reference.to_be_bytes()).unwrap_or_default();
+    Ok(GetPollResponse{
+        creator: HumanAddr::from(poll.creator),
+        status: poll.status,
+        end_height: poll.end_height,
+        start_height: poll.start_height,
+        description: poll.description,
+        amount: poll.amount,
+        prizePerRank: poll.prizeRank
+    })
+
+}
+
+
 
 
 #[cfg(test)]

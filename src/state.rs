@@ -10,6 +10,7 @@ pub static CONFIG_KEY: &[u8] = b"config";
 const BEACONS_KEY: &[u8] = b"beacons";
 const COMBINATION_KEY: &[u8] = b"combination";
 const WINNER_KEY: &[u8] = b"winner";
+const POLL_KEY: &[u8] = b"poll";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -37,6 +38,7 @@ pub struct State {
     pub tokenHolderPercentageFeeReward: u64,
     pub feeForDrandWorkerInPercentage: u64,
     pub prizeRankWinnerPercentage: Vec<u64>,
+    pub pollCount: u64,
 
 }
 
@@ -83,6 +85,34 @@ pub fn winner_storage(storage: &mut dyn Storage) -> Bucket<Winner>{
 
 pub fn winner_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Winner>{
     bucket_read(storage, WINNER_KEY)
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub enum  PollStatus {
+    InProgress,
+    Passed,
+    Rejected,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+pub struct PollInfoState {
+    pub creator: CanonicalAddr,
+    pub status: PollStatus,
+    pub end_height: u64,
+    pub start_height: u64,
+    pub description: String,
+    pub yes_voters: Vec<CanonicalAddr>,
+    pub no_voters: Vec<CanonicalAddr>,
+    pub amount: Option<Uint128>,
+    pub prizeRank: Option<Vec<u64>>
+}
+
+pub fn poll_storage(storage: &mut dyn Storage) -> Bucket<PollInfoState>{
+    bucket(storage, POLL_KEY)
+}
+
+pub fn poll_storage_read(storage: &dyn Storage) -> ReadonlyBucket<PollInfoState>{
+    bucket_read(storage, POLL_KEY)
 }
 /*
 pub fn combination_storage(storage: &mut dyn Storage) -> PrefixedStorage{

@@ -1,8 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::state::{State, WinnerInfoState};
+use crate::state::{State, WinnerInfoState, PollInfoState, PollStatus};
 
-use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary};
+use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary, HumanAddr};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -32,6 +32,17 @@ pub struct InitMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum Proposal {
+    MinAmountDelegator,
+    MinAmountValidator,
+    LotteryEveryBlock,
+    HolderFeePercentage,
+    DrandWorkerFeePercentage,
+    PrizePerRank,
+    JackpotRewardPercentage
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
     /// Registering to the lottery
@@ -57,10 +68,10 @@ pub enum HandleMsg {
     /// DAO
     /// Make a proposal
     Proposal {
-        title: String,
         description: String,
-        proposal: String,
-        amount: Option<Uint128>
+        proposal: Proposal,
+        amount: Option<Uint128>,
+        prizePerRank: Option<Vec<u64>>
     },
     /// Vote the proposal
     Vote {
@@ -86,7 +97,13 @@ pub enum QueryMsg {
     /// Combination lottery numbers and address
     Combination {},
     /// Winner lottery rank and address
-    Winner {}
+    Winner {},
+    /// Get all poll
+    AllPoll{},
+    /// Get specific poll
+    GetPoll {
+        reference: u64
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -120,6 +137,17 @@ pub struct WinnerInfo {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AllWinnerResponse {
     pub winner: Vec<WinnerInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GetPollResponse {
+    pub creator: HumanAddr,
+    pub status: PollStatus,
+    pub end_height: u64,
+    pub start_height: u64,
+    pub description: String,
+    pub amount: Option<Uint128>,
+    pub prizePerRank: Option<Vec<u64>>
 }
 
 // We define a custom struct for each query response
