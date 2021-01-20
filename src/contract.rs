@@ -78,7 +78,15 @@ pub fn handle(
         HandleMsg::Ico {} => handle_ico(deps, _env, info),
         HandleMsg::Buy {} => handle_buy(deps, _env, info),
         HandleMsg::Reward {} => handle_reward(deps, _env, info),
-        HandleMsg::Jackpot {} => handle_jackpot(deps, _env, info)
+        HandleMsg::Jackpot {} => handle_jackpot(deps, _env, info),
+        HandleMsg::Proposal {
+            title,
+            description,
+            proposal,
+            amount
+        } => handle_proposal(deps, _env, info, title, description, proposal, amount),
+        HandleMsg::Vote { approve } => handle_vote(deps, _env, info, approve),
+        HandleMsg::PresentProposal { reference } => handle_present_proposal(deps, _env, info, reference)
     }
 }
 
@@ -703,6 +711,35 @@ pub fn handle_jackpot(
 
 }
 
+pub fn handle_proposal(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    title: String,
+    description: String,
+    proposal: String,
+    amount: Option<Uint128>
+) -> Result<HandleResponse, ContractError> {
+    Ok(HandleResponse::default())
+}
+
+pub fn handle_vote(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    approve: bool
+) -> Result<HandleResponse, ContractError> {
+    Ok(HandleResponse::default())
+}
+
+pub fn handle_present_proposal(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    reference: u64
+) -> Result<HandleResponse, ContractError> {
+    Ok(HandleResponse::default())
+}
 
 pub fn query(
     deps: Deps,
