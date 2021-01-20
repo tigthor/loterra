@@ -18,8 +18,12 @@
     "drandPeriod",
     "drandPublicKey",
     "everyBlockHeight",
+    "feeForDrandWorkerInPercentage",
     "holdersRewards",
-    "players",
+    "jackpotPercentageReward",
+    "jackpotReward",
+    "prizeRankWinnerPercentage",
+    "tokenHolderPercentageFeeReward",
     "tokenHolderSupply",
     "validatorMinAmountToAllowClaim"
   ],
@@ -89,14 +93,34 @@
       "format": "uint64",
       "minimum": 0.0
     },
+    "feeForDrandWorkerInPercentage": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
     "holdersRewards": {
       "$ref": "#/definitions/Uint128"
     },
-    "players": {
+    "jackpotPercentageReward": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "jackpotReward": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "prizeRankWinnerPercentage": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/CanonicalAddr"
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0.0
       }
+    },
+    "tokenHolderPercentageFeeReward": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "tokenHolderSupply": {
       "$ref": "#/definitions/Uint128"
