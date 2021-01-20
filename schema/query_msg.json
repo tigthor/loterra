@@ -59,6 +59,18 @@
           "type": "object"
         }
       }
+    },
+    {
+      "description": "Winner lottery rank and address",
+      "type": "object",
+      "required": [
+        "winner"
+      ],
+      "properties": {
+        "winner": {
+          "type": "object"
+        }
+      }
     }
   ]
 }
