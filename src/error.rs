@@ -68,6 +68,15 @@ pub enum ContractError {
 
     #[error("No one won prizes")]
     NoWinners{},
+
+    #[error("Description too short min {0} characters")]
+    DescriptionTooShort(String),
+
+    #[error("Description too long max {0} characters")]
+    DescriptionTooLong(String),
+
+    #[error("This proposal does not exist")]
+    ProposalNotFound{},
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }
