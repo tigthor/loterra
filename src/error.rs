@@ -77,6 +77,9 @@ pub enum ContractError {
 
     #[error("This proposal does not exist")]
     ProposalNotFound{},
+
+    #[error("For this proposal {0} is mandatory")]
+    ParamRequiredForThisProposal(String)
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }
