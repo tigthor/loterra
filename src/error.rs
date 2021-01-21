@@ -79,7 +79,10 @@ pub enum ContractError {
     ProposalNotFound{},
 
     #[error("For this proposal {0} is mandatory")]
-    ParamRequiredForThisProposal(String)
+    ParamRequiredForThisProposal(String),
+
+    #[error("Already voted you only can vote one time per proposal")]
+    AlreadyVoted{},
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

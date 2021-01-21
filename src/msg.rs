@@ -69,6 +69,7 @@ pub enum HandleMsg {
     },
     /// Vote the proposal
     Vote {
+        pollId: u64,
         approve: bool
     },
     /// Valid a proposal
