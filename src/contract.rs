@@ -751,7 +751,6 @@ pub fn handle_proposal(
     let mut proposalPrizeRank: Vec<u64> = vec![];
 
     let proposalType = if let Proposal::HolderFeePercentage = proposal {
-
         match amount {
             Some(percentage) =>{
                 if percentage.u128() as u8 > state.holdersMaxPercentageReward {
@@ -766,103 +765,95 @@ pub fn handle_proposal(
         }
 
         Proposal::HolderFeePercentage
-    }else {
-        return  Err(ContractError::ParamRequiredForThisProposal("HolderFeePercentage amount n".to_string()));
-    };
-    // Check the proposal is a valid proposal
-    /*let proposalType = match proposal {
-        Proposal::HolderFeePercentage => {
-
-            match amount {
-                Some(percentage) =>{
-                    if (percentage as u8) > state.holdersMaxPercentageReward {
-                        return Err(ContractError::ParamRequiredForThisProposal("HolderFeePercentage amount between 0 to 100".to_string()));
-                    }
-                    proposalAmount = percentage;
-                },
-                None => Err(ContractError::ParamRequiredForThisProposal("HolderFeePercentage amount".to_string()))
+    } else if let Proposal::DrandWorkerFeePercentage = proposal {
+        match amount {
+            Some(percentage) =>{
+                if percentage.u128() as u8 > 100 {
+                    return Err(ContractError::ParamRequiredForThisProposal("DrandWorkerFeePercentage amount between 0 to 100".to_string()));
+                }
+                proposalAmount = percentage;
+            },
+            None => {
+                return Err(ContractError::ParamRequiredForThisProposal("DrandWorkerFeePercentage amount".to_string()));
             }
-
-            Proposal::HolderFeePercentage
-        },
-        Proposal::DrandWorkerFeePercentage => {
-
-            match amount {
-                Some(percentage) =>{
-                    if (percentage as u8) > 100 {
-                        return Err(ContractError::ParamRequiredForThisProposal("DrandWorkerFeePercentage amount between 0 to 100".to_string()));
-                    }
-                    proposalAmount = percentage;
-                },
-                None => Err(ContractError::ParamRequiredForThisProposal("DrandWorkerFeePercentage amount".to_string()))
-            }
-
-            Proposal::DrandWorkerFeePercentage
-        },
-        Proposal::JackpotRewardPercentage => {
-
-            match amount {
-                Some(percentage) =>{
-                    if (percentage as u8) > 100 {
-                        return Err(ContractError::ParamRequiredForThisProposal("JackpotRewardPercentage amount between 0 to 100".to_string()));
-                    }
-                    proposalAmount = percentage;
-                },
-                None => Err(ContractError::ParamRequiredForThisProposal("JackpotRewardPercentage amount".to_string()))
-            }
-
-            Proposal::JackpotRewardPercentage
-        },
-        Proposal::LotteryEveryBlockTime => {
-            match amount {
-                Some(blockTime) => {
-                    proposalAmount = blockTime;
-                },
-                None => Err(ContractError::ParamRequiredForThisProposal("LotteryEveryBlockTime amount".to_string()))
-            }
-
-            Proposal::LotteryEveryBlockTime
-        },
-        Proposal::MinAmountDelegator => {
-            match amount {
-                Some(minAmount) => {
-                    proposalAmount = minAmount;
-                },
-                None => Err(ContractError::ParamRequiredForThisProposal("MinAmountDelegator amount".to_string()))
-            }
-
-            Proposal::MinAmountDelegator
-        },
-        Proposal::MinAmountValidator =>{
-            match amount {
-                Some(minAmount) => {
-                    proposalAmount = minAmount;
-                },
-                None => Err(ContractError::ParamRequiredForThisProposal("MinAmountValidator amount".to_string()))
-            }
-            Proposal::MinAmountValidator
-        },
-        Proposal::PrizePerRank => {
-            match prizePerRank {
-                Some(ranks) => {
-                    if ranks.len() != 4 {
-                       return Err(ContractError::ParamRequiredForThisProposal("PrizePerRank 4 separated numbers between 0 to 100".to_string()));
-                    }
-
-                    for rank in ranks {
-                        if (rank as u8) > 100 {
-                            return Err(ContractError::ParamRequiredForThisProposal("PrizePerRank numbers between 0 to 100".to_string()));
-                        }
-                    }
-
-                    proposalPrizeRank = ranks;
-                },
-                None => Err(ContractError::ParamRequiredForThisProposal("PrizePerRank".to_string()))
-            }
-            Proposal::PrizePerRank
         }
-        _ => return Err(ContractError::ProposalNotFound {})
-    }; */
+
+        Proposal::DrandWorkerFeePercentage
+    } else if let Proposal::JackpotRewardPercentage = proposal {
+        match amount {
+            Some(percentage) =>{
+                if percentage.u128() as u8 > 100 {
+                    return Err(ContractError::ParamRequiredForThisProposal("JackpotRewardPercentage amount between 0 to 100".to_string()));
+                }
+                proposalAmount = percentage;
+            },
+            None => {
+                return Err(ContractError::ParamRequiredForThisProposal("JackpotRewardPercentage amount".to_string()));
+            }
+        }
+
+        Proposal::JackpotRewardPercentage
+    } else if let Proposal::LotteryEveryBlockTime = proposal {
+        match amount {
+            Some(blockTime) => {
+                proposalAmount = blockTime;
+            },
+            None => {
+               return  Err(ContractError::ParamRequiredForThisProposal("LotteryEveryBlockTime amount".to_string()));
+            }
+        }
+
+        Proposal::LotteryEveryBlockTime
+    } else if let Proposal::MinAmountDelegator = proposal {
+        match amount {
+            Some(minAmount) => {
+                proposalAmount = minAmount;
+            },
+            None => {
+                return Err(ContractError::ParamRequiredForThisProposal("MinAmountDelegator amount".to_string()));
+            }
+        }
+
+        Proposal::MinAmountDelegator
+    } else if let Proposal::MinAmountValidator = proposal {
+        match amount {
+            Some(minAmount) => {
+                proposalAmount = minAmount;
+            },
+            None => {
+                return Err(ContractError::ParamRequiredForThisProposal("MinAmountValidator amount".to_string()));
+            }
+        }
+        Proposal::MinAmountValidator
+    } else if let Proposal::PrizePerRank = proposal {
+        match prizePerRank {
+            Some(ranks) => {
+                if ranks.len() != 4 {
+                    return Err(ContractError::ParamRequiredForThisProposal("PrizePerRank 4 separated numbers between 0 to 100".to_string()));
+                }
+                let mut totalPercentage = 0;
+                for rank in ranks.clone() {
+                    if (rank as u8) > 100 {
+                        return Err(ContractError::ParamRequiredForThisProposal("PrizePerRank numbers between 0 to 100".to_string()));
+                    }
+                    totalPercentage += rank;
+                }
+                // Ensure the repartition sum is 100%
+                if totalPercentage != 100 {
+                    return Err(ContractError::ParamRequiredForThisProposal("PrizePerRank numbers sum need to be 100".to_string()));
+                }
+
+                proposalPrizeRank = ranks;
+            },
+            None => {
+                return Err(ContractError::ParamRequiredForThisProposal("PrizePerRank".to_string()));
+            }
+        }
+        Proposal::PrizePerRank
+    }
+    else {
+        return  Err(ContractError::ProposalNotFound{});
+    };
 
     let senderToCanonical = deps.api.canonical_address(&info.sender).unwrap();
 
@@ -1946,8 +1937,10 @@ mod tests {
 
     #[test]
     fn proposal (){
+
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         default_init(&mut deps);
+        // Test success proposal HolderFeePercentage
         let info = mock_info(HumanAddr::from("address2"), &[]);
         let msg = HandleMsg::Proposal {
             description: "I think we need to up to a more expensive".to_string(),
@@ -1956,7 +1949,139 @@ mod tests {
             prizePerRank: None
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-        println!("{:?}", res);
+        let storage = poll_storage_read(deps.as_ref().storage).load(&1_u64.to_be_bytes()).unwrap();
+        assert_eq!(Proposal::HolderFeePercentage ,storage.proposal);
+        assert_eq!(Uint128(15) ,storage.amount);
+
+        // Test success proposal MinAmountValidator
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to a more expensive".to_string(),
+            proposal: Proposal::MinAmountValidator,
+            amount: Option::from(Uint128(15_000)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        let storage = poll_storage_read(deps.as_ref().storage).load(&2_u64.to_be_bytes()).unwrap();
+        assert_eq!(Proposal::MinAmountValidator ,storage.proposal);
+        assert_eq!(Uint128(15000) ,storage.amount);
+
+        // Test success proposal PrizePerRank
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new prize rank".to_string(),
+            proposal: Proposal::PrizePerRank,
+            amount: None,
+            prizePerRank: Option::from(vec![60, 20, 10, 10])
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        let storage = poll_storage_read(deps.as_ref().storage).load(&3_u64.to_be_bytes()).unwrap();
+        assert_eq!(Proposal::PrizePerRank ,storage.proposal);
+        assert_eq!(vec![60, 20, 10, 10] ,storage.prizeRank);
+
+        // Test success proposal MinAmountDelegator
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new amount delegator".to_string(),
+            proposal: Proposal::MinAmountDelegator,
+            amount: Option::from(Uint128(10_000)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        let storage = poll_storage_read(deps.as_ref().storage).load(&4_u64.to_be_bytes()).unwrap();
+        assert_eq!(Proposal::MinAmountDelegator ,storage.proposal);
+        assert_eq!(Uint128(10000) ,storage.amount);
+
+        // Test success proposal JackpotRewardPercentage
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new jackpot percentage".to_string(),
+            proposal: Proposal::JackpotRewardPercentage,
+            amount: Option::from(Uint128(10)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        let storage = poll_storage_read(deps.as_ref().storage).load(&5_u64.to_be_bytes()).unwrap();
+        assert_eq!(Proposal::JackpotRewardPercentage ,storage.proposal);
+        assert_eq!(Uint128(10) ,storage.amount);
+
+        // Test success proposal DrandWorkerFeePercentage
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new worker percentage".to_string(),
+            proposal: Proposal::DrandWorkerFeePercentage,
+            amount: Option::from(Uint128(10)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        let storage = poll_storage_read(deps.as_ref().storage).load(&6_u64.to_be_bytes()).unwrap();
+        assert_eq!(Proposal::DrandWorkerFeePercentage ,storage.proposal);
+        assert_eq!(Uint128(10) ,storage.amount);
+
+        // Test success proposal LotteryEveryBlockTime
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new block time".to_string(),
+            proposal: Proposal::LotteryEveryBlockTime,
+            amount: Option::from(Uint128(100000)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        let storage = poll_storage_read(deps.as_ref().storage).load(&7_u64.to_be_bytes()).unwrap();
+        assert_eq!(Proposal::LotteryEveryBlockTime ,storage.proposal);
+        assert_eq!(Uint128(100000) ,storage.amount);
+
+        // Test saved correctly the state
+        let res = config_read(deps.as_ref().storage).load().unwrap();
+        assert_eq!(7, res.pollCount);
+
+        // Test error description too short
+        let msg = HandleMsg::Proposal {
+            description: "I".to_string(),
+            proposal: Proposal::DrandWorkerFeePercentage,
+            amount: Option::from(Uint128(10)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::DescriptionTooShort(msg)) => {
+                assert_eq!("6", msg);
+            },
+            _ => panic!("Unexpected error")
+        }
+
+        // Test error description too long
+        let msg = HandleMsg::Proposal {
+            description: "I erweoi oweijr w oweijr woerwe oirjewoi rewoirj ewoirjewr weiorjewoirjwerieworijewewriewo werioj ew".to_string(),
+            proposal: Proposal::DrandWorkerFeePercentage,
+            amount: Option::from(Uint128(10)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::DescriptionTooLong(msg)) => {
+                assert_eq!("64", msg);
+            },
+            _ => panic!("Unexpected error")
+        }
+
+        // Test error description too long
+        let msg = HandleMsg::Proposal {
+            description: "Default".to_string(),
+            proposal: Proposal::NotExist,
+            amount: Option::from(Uint128(10)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::ProposalNotFound {}) => {},
+            _ => panic!("Unexpected error")
+        }
+
+        // Test error sending funds with proposal
+        let info = mock_info(HumanAddr::from("address2"), &[Coin{ denom: "kii".to_string(), amount: Uint128(500) }]);
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::DoNotSendFunds(msg)) => {
+                assert_eq!("Proposal", msg);
+            },
+            _ => panic!("Unexpected error")
+        }
+
     }
 
 }

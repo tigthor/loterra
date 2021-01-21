@@ -106,7 +106,9 @@ pub enum Proposal {
     HolderFeePercentage,
     DrandWorkerFeePercentage,
     PrizePerRank,
-    JackpotRewardPercentage
+    JackpotRewardPercentage,
+    // test purpose
+    NotExist
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
