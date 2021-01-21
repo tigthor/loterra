@@ -41,6 +41,8 @@ pub struct State {
     pub feeForDrandWorkerInPercentage: u64,
     pub prizeRankWinnerPercentage: Vec<u64>,
     pub pollCount: u64,
+    pub holdersMaxPercentageReward: u8,
+    pub pollEndHeight: u64,
 
 }
 
@@ -89,14 +91,25 @@ pub fn winner_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Winner>{
     bucket_read(storage, WINNER_KEY)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub enum  PollStatus {
     InProgress,
     Passed,
     Rejected,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum Proposal {
+    MinAmountDelegator,
+    MinAmountValidator,
+    LotteryEveryBlockTime,
+    HolderFeePercentage,
+    DrandWorkerFeePercentage,
+    PrizePerRank,
+    JackpotRewardPercentage
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PollInfoState {
     pub creator: CanonicalAddr,
     pub status: PollStatus,
@@ -105,8 +118,9 @@ pub struct PollInfoState {
     pub description: String,
     pub yes_voters: Vec<CanonicalAddr>,
     pub no_voters: Vec<CanonicalAddr>,
-    pub amount: Option<Uint128>,
-    pub prizeRank: Option<Vec<u64>>
+    pub amount: Uint128,
+    pub prizeRank: Vec<u64>,
+    pub proposal: Proposal,
 }
 
 pub fn poll_storage(storage: &mut dyn Storage) -> Bucket<PollInfoState>{

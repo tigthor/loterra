@@ -1,8 +1,8 @@
 use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order, CanonicalAddr, ByteArray};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo, AllWinnerResponse, WinnerInfo, GetPollResponse, Proposal};
-use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage, Combination, winner_storage_read, winner_storage, Winner, WinnerInfoState, poll_storage_read, PollInfoState, PollStatus, poll_storage};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo, AllWinnerResponse, WinnerInfo, GetPollResponse};
+use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage, Combination, winner_storage_read, winner_storage, Winner, WinnerInfoState, poll_storage_read, PollInfoState, PollStatus, poll_storage, Proposal};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
 use std::fs::canonicalize;
@@ -56,7 +56,9 @@ pub fn init(
         tokenHolderPercentageFeeReward: msg.tokenHolderPercentageFeeReward,
         feeForDrandWorkerInPercentage: msg.feeForDrandWorkerInPercentage,
         prizeRankWinnerPercentage: msg.prizeRankWinnerPercentage,
-        pollCount: 0
+        pollCount: 0,
+        holdersMaxPercentageReward: 20,
+        pollEndHeight: msg.pollEndHeight
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -745,46 +747,136 @@ pub fn handle_proposal(
         return Err(ContractError::DescriptionTooLong(MAX_DESC_LEN.to_string()));
     }
 
-    // Handle block eight start and end are valid
+    let mut proposalAmount: Uint128 = Uint128::zero();
+    let mut proposalPrizeRank: Vec<u64> = vec![];
 
+    let proposalType = if let Proposal::HolderFeePercentage = proposal {
+
+        match amount {
+            Some(percentage) =>{
+                if percentage.u128() as u8 > state.holdersMaxPercentageReward {
+                    return Err(ContractError::ParamRequiredForThisProposal("HolderFeePercentage amount between 0 to 100".to_string()));
+                }
+                proposalAmount = percentage;
+            },
+            None => {
+               return  Err(ContractError::ParamRequiredForThisProposal("HolderFeePercentage amount".to_string()));
+
+            }
+        }
+
+        Proposal::HolderFeePercentage
+    }else {
+        return  Err(ContractError::ParamRequiredForThisProposal("HolderFeePercentage amount n".to_string()));
+    };
     // Check the proposal is a valid proposal
-    match proposal {
+    /*let proposalType = match proposal {
         Proposal::HolderFeePercentage => {
 
+            match amount {
+                Some(percentage) =>{
+                    if (percentage as u8) > state.holdersMaxPercentageReward {
+                        return Err(ContractError::ParamRequiredForThisProposal("HolderFeePercentage amount between 0 to 100".to_string()));
+                    }
+                    proposalAmount = percentage;
+                },
+                None => Err(ContractError::ParamRequiredForThisProposal("HolderFeePercentage amount".to_string()))
+            }
+
+            Proposal::HolderFeePercentage
         },
         Proposal::DrandWorkerFeePercentage => {
 
+            match amount {
+                Some(percentage) =>{
+                    if (percentage as u8) > 100 {
+                        return Err(ContractError::ParamRequiredForThisProposal("DrandWorkerFeePercentage amount between 0 to 100".to_string()));
+                    }
+                    proposalAmount = percentage;
+                },
+                None => Err(ContractError::ParamRequiredForThisProposal("DrandWorkerFeePercentage amount".to_string()))
+            }
+
+            Proposal::DrandWorkerFeePercentage
         },
         Proposal::JackpotRewardPercentage => {
 
-        },
-        Proposal::LotteryEveryBlock => {
+            match amount {
+                Some(percentage) =>{
+                    if (percentage as u8) > 100 {
+                        return Err(ContractError::ParamRequiredForThisProposal("JackpotRewardPercentage amount between 0 to 100".to_string()));
+                    }
+                    proposalAmount = percentage;
+                },
+                None => Err(ContractError::ParamRequiredForThisProposal("JackpotRewardPercentage amount".to_string()))
+            }
 
+            Proposal::JackpotRewardPercentage
+        },
+        Proposal::LotteryEveryBlockTime => {
+            match amount {
+                Some(blockTime) => {
+                    proposalAmount = blockTime;
+                },
+                None => Err(ContractError::ParamRequiredForThisProposal("LotteryEveryBlockTime amount".to_string()))
+            }
+
+            Proposal::LotteryEveryBlockTime
         },
         Proposal::MinAmountDelegator => {
+            match amount {
+                Some(minAmount) => {
+                    proposalAmount = minAmount;
+                },
+                None => Err(ContractError::ParamRequiredForThisProposal("MinAmountDelegator amount".to_string()))
+            }
 
+            Proposal::MinAmountDelegator
         },
         Proposal::MinAmountValidator =>{
-
+            match amount {
+                Some(minAmount) => {
+                    proposalAmount = minAmount;
+                },
+                None => Err(ContractError::ParamRequiredForThisProposal("MinAmountValidator amount".to_string()))
+            }
+            Proposal::MinAmountValidator
         },
         Proposal::PrizePerRank => {
+            match prizePerRank {
+                Some(ranks) => {
+                    if ranks.len() != 4 {
+                       return Err(ContractError::ParamRequiredForThisProposal("PrizePerRank 4 separated numbers between 0 to 100".to_string()));
+                    }
 
+                    for rank in ranks {
+                        if (rank as u8) > 100 {
+                            return Err(ContractError::ParamRequiredForThisProposal("PrizePerRank numbers between 0 to 100".to_string()));
+                        }
+                    }
+
+                    proposalPrizeRank = ranks;
+                },
+                None => Err(ContractError::ParamRequiredForThisProposal("PrizePerRank".to_string()))
+            }
+            Proposal::PrizePerRank
         }
         _ => return Err(ContractError::ProposalNotFound {})
-    }
+    }; */
 
     let senderToCanonical = deps.api.canonical_address(&info.sender).unwrap();
 
     let newPoll =  PollInfoState{
         creator: senderToCanonical,
         status: PollStatus::InProgress,
-        end_height: 0,
+        end_height: _env.block.height + state.pollEndHeight,
         start_height: _env.block.height,
         description,
         yes_voters: vec![],
         no_voters: vec![],
-        amount: None,
-        prizeRank: None
+        amount: proposalAmount,
+        prizeRank: proposalPrizeRank,
+        proposal: proposalType
     };
 
     // Save poll
@@ -836,7 +928,6 @@ pub fn query(
         QueryMsg::GetRandomness {round} => to_binary(&query_get(deps, round)?)?,
         QueryMsg::Combination {} =>  to_binary(&query_all_combination(deps)?)?,
         QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?,
-        QueryMsg::AllPoll {} => to_binary(&query_all_poll(deps)?)?,
         QueryMsg::GetPoll { pollId } => to_binary(&query_poll(deps, pollId)?)?
     };
     Ok(response)
@@ -901,9 +992,9 @@ fn query_all_winner(deps: Deps) -> Result<AllWinnerResponse, ContractError> {
 
 fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError> {
     let store = poll_storage_read(deps.storage);
-    let poll = store.load(&pollId.to_be_bytes()).unwrap_or_default();
+    let poll = store.load(&pollId.to_be_bytes()).unwrap();
     Ok(GetPollResponse{
-        creator: HumanAddr::from(poll.creator),
+        creator: deps.api.human_address(&poll.creator).unwrap(),
         status: poll.status,
         end_height: poll.end_height,
         start_height: poll.start_height,
@@ -965,7 +1056,9 @@ mod tests {
         const JACKPOT_PERCENTAGE_REWARD: u64 = 80;
         const TOKEN_HOLDER_PERCENTAGE_FEE_REWARD: u64 = 10;
         const FEE_FOR_DRAND_WORKER_IN_PERCENTAGE: u64 = 1;
-        let PRIZE_RANK_WINNER_PERCENTAGE: Vec<u64> = vec![84, 10, 5, 1] ;
+        let PRIZE_RANK_WINNER_PERCENTAGE: Vec<u64> = vec![84, 10, 5, 1];
+        const POLL_END_HEIGHT: u64 = 40_000;
+
 
         fn pubkey () -> Binary {
             vec![
@@ -1001,7 +1094,8 @@ mod tests {
             jackpotPercentageReward: JACKPOT_PERCENTAGE_REWARD,
             tokenHolderPercentageFeeReward: TOKEN_HOLDER_PERCENTAGE_FEE_REWARD,
             feeForDrandWorkerInPercentage: FEE_FOR_DRAND_WORKER_IN_PERCENTAGE,
-            prizeRankWinnerPercentage: PRIZE_RANK_WINNER_PERCENTAGE
+            prizeRankWinnerPercentage: PRIZE_RANK_WINNER_PERCENTAGE,
+            pollEndHeight: POLL_END_HEIGHT
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
@@ -1848,6 +1942,21 @@ mod tests {
             amount: vec![Coin{ denom: "uscrt".to_string(), amount: Uint128(400000) }, Coin{ denom: "ujack".to_string(), amount: Uint128(1) }]
         }));
 
+    }
+
+    #[test]
+    fn proposal (){
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        default_init(&mut deps);
+        let info = mock_info(HumanAddr::from("address2"), &[]);
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to a more expensive".to_string(),
+            proposal: Proposal::HolderFeePercentage,
+            amount: Option::from(Uint128(15)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        println!("{:?}", res);
     }
 
 }
