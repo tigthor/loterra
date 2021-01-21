@@ -92,7 +92,7 @@ pub fn handle(
             amount,
             prizePerRank
         } => handle_proposal(deps, _env, info, description, proposal, amount, prizePerRank),
-        HandleMsg::Vote { approve } => handle_vote(deps, _env, info, approve),
+        HandleMsg::Vote { pollId, approve } => handle_vote(deps, _env, info, pollId, approve),
         HandleMsg::PresentProposal { pollId } => handle_present_proposal(deps, _env, info, pollId),
         HandleMsg::RejectProposal { pollId } => handle_reject_proposal(deps, _env, info, pollId),
     }
@@ -882,8 +882,37 @@ pub fn handle_vote(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
+    pollId: u64,
     approve: bool
 ) -> Result<HandleResponse, ContractError> {
+    let mut store = poll_storage(deps.storage).load(&pollId.to_be_bytes())?;
+    let sender = deps.api.canonical_address(&info.sender).unwrap();
+
+    // Ensure the voter can't vote more times
+    if store.yes_voters.contains(&sender) || store.no_voters.contains(&sender){
+        return Err(ContractError::AlreadyVoted {});
+    }
+
+    match approve{
+        true => {
+            poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+                let mut pollData = poll.unwrap();
+                pollData.yes_voters.push(sender.clone());
+                Ok(pollData)
+            })?;
+        },
+        false => {
+            poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+                let mut pollData = poll.unwrap();
+                pollData.no_voters.push(sender.clone());
+                Ok(pollData)
+            })?;
+        },
+        _ => {
+            return Err(ContractError::Unauthorized {});
+        }
+    }
+
     Ok(HandleResponse::default())
 }
 
@@ -983,7 +1012,12 @@ fn query_all_winner(deps: Deps) -> Result<AllWinnerResponse, ContractError> {
 
 fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError> {
     let store = poll_storage_read(deps.storage);
-    let poll = store.load(&pollId.to_be_bytes()).unwrap();
+
+    let poll = match store.may_load(&pollId.to_be_bytes())?{
+        Some(poll) => Some(poll),
+        None => return Err(ContractError::ProposalNotFound {})
+    }.unwrap();
+
     Ok(GetPollResponse{
         creator: deps.api.human_address(&poll.creator).unwrap(),
         status: poll.status,
@@ -1003,7 +1037,7 @@ fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError>
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, BankQuerier, MOCK_CONTRACT_ADDR, MockStorage, StakingQuerier, MockApi, MockQuerier};
-    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError, Storage, Api, CanonicalAddr, OwnedDeps, CosmosMsg, QuerierResult, Binary};
+    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError::{NotFound}, Storage, Api, CanonicalAddr, OwnedDeps, CosmosMsg, QuerierResult, Binary};
     use std::collections::HashMap;
     use std::borrow::Borrow;
     use cosmwasm_storage::{bucket_read, bucket, singleton, singleton_read};
@@ -2081,7 +2115,56 @@ mod tests {
             },
             _ => panic!("Unexpected error")
         }
+    }
 
+    #[test]
+    fn vote (){
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        default_init(&mut deps);
+        let info = mock_info(HumanAddr::from("address2"), &[]);
+
+        let msg = HandleMsg::Vote {
+            pollId: 1,
+            approve: false
+        };
+        // Error not found storage key
+        let errMsg = "lottery::state::PollInfoState".to_string();
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(Std(NotFound { kind: errMsg, .. })) => {},
+            _ => panic!("Unexpected error")
+        }
+
+        // Init proposal
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new block time".to_string(),
+            proposal: Proposal::LotteryEveryBlockTime,
+            amount: Option::from(Uint128(100000)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+
+        // Test success proposal HolderFeePercentage
+        let msg = HandleMsg::Vote {
+            pollId: 1,
+            approve: false
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        println!("{:?}", res);
+
+
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        // Test success proposal HolderFeePercentage
+        let msg = HandleMsg::Vote {
+            pollId: 1,
+            approve: true
+        };
+        let info = mock_info(HumanAddr::from("address2"), &[]);
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        println!("{:?}", res);
+        let storage = poll_storage_read(deps.as_ref().storage).load(&1_u64.to_be_bytes()).unwrap();
+        println!("{:?}", storage);
     }
 
 }
