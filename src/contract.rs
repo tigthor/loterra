@@ -32,6 +32,8 @@ pub fn init(
     let state = State {
         owner: deps.api.canonical_address(&info.sender)?,
         blockPlay: msg.blockPlay,
+        blockTimePlay: msg.blockTimePlay,
+        everyBlockTimePlay: msg.everyBlockTimePlay,
         blockClaim: msg.blockClaim,
         blockIcoTimeframe: msg.blockIcoTimeframe,
         everyBlockHeight: msg.everyBlockHeight,
@@ -263,13 +265,14 @@ pub fn handle_play(
         // Update the state
         state.claimReward = vec![];
         state.blockPlay = _env.block.height + state.everyBlockHeight;
+        state.blockTimePlay = _env.block.time + state.everyBlockTimePlay;
     }else{
         return Err(ContractError::Unauthorized {});
     }
     // Get the current round and check if it is a valid round.
-    let fromGenesis = _env.block.time - state.drandGenesisTime;
+    let fromGenesis = state.blockTimePlay - state.drandGenesisTime;
     let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 1.0;
-
+    println!("{}, {}", nextRound as u64, fromGenesis);
     if round != nextRound as u64 {
         return Err(ContractError::InvalidRound {});
     }
@@ -942,6 +945,8 @@ mod tests {
         const CLAIM_TICKET: Vec<CanonicalAddr> = vec![];
         const CLAIM_REWARD: Vec<CanonicalAddr> = vec![];
         const BLOCK_PLAY: u64 = 15000;
+        const BLOCK_TIME_PLAY: u64 = 1610566920;
+        const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const BLOCK_CLAIM: u64 = 0;
         const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
         const HOLDERS_REWARDS: Uint128 = Uint128(5_221);
@@ -980,6 +985,8 @@ mod tests {
             claimTicket: CLAIM_TICKET,
             claimReward: CLAIM_REWARD,
             blockPlay: BLOCK_PLAY,
+            blockTimePlay: BLOCK_TIME_PLAY,
+            everyBlockTimePlay: EVERY_BLOCK_TIME_PLAY,
             blockClaim: BLOCK_PLAY,
             blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
             holdersRewards: HOLDERS_REWARDS,
@@ -1510,9 +1517,9 @@ mod tests {
         //let round: u64 = 501672;
 
         // Valid round
-        let signature = hex::decode("a48f7cdf76968d2a5b8d05d8a4dfc9ae823de53c4864a066c55f1a334f39314e43dec27d230f1b1222fd14bed39f0b9801b5bb2881a8dc346418ebada58dc8409f70046759f057ea1fbef449d5cd43259f9ae98d24025905887db4e6869a2fe9").unwrap().into();
-        let previous_signature= hex::decode("a105715b0e253767ed03d0a5e0356bbe6a874b004d9cd0e5fe76f4acb1da345ae71e19e968afedad7c17e5c00d05ebdd0e9d1f81404c2f42934001a37fa961bff03c1a58c6e31a7db4fb417018fdca8d614d95dade2a3be461759ea86b29819f").unwrap().into();
-        let round = 504530;
+        let signature = hex::decode("8bf8c38deb25a533fe3edca6049b98d5751ecd4bf8faf888150c1d28360adbd51d942c0c7fe0bd375ac1514bf5dce13316d54e3f511a94675b846b1dc9e4938e71fbc2d4cf3706bb839617c48a5f2a612bdaa23fe05ddb70e7662e2f297c651f").unwrap().into();
+        let previous_signature= hex::decode("8dd1959597b1b12911b9ad44ed7763e0c1920a35cb3c591c072a2083b49641ee36a52624863c0dd8cfd4ddcaa40982781514f3e6351268bb4ddab70f29db12c76facfc6af3ecf9ff97d485427ccbd447be5d77f2f727d5b6f7dcb78207b1e40f").unwrap().into();
+        let round = 506196;
         let msg = HandleMsg::Play {
             round: round,
             previous_signature: previous_signature,
@@ -1523,11 +1530,11 @@ mod tests {
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         default_init(&mut deps);
         // Init the bucket with players to storage
-        let combination= "476ad8";
-        let combination2 = "476ad3";
-        let combination3 = "476ac3";
-        let combination4 = "4761c3";
-        let combination5 = "478593";
+        let combination= "3a8417";
+        let combination2 = "3a8414";
+        let combination3 = "3a8434";
+        let combination4 = "3a8943";
+        let combination5 = "3a03232";
         let addresses1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
         let addresses2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap()];
         let addresses3 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
@@ -1543,8 +1550,9 @@ mod tests {
 
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let mut env = mock_env();
-        env.block.height = 15005;
+        env.block.height = 1695432050;
         env.block.time = 1610566920;
+
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
         println!("{:?}", res);
         assert_eq!(1, res.messages.len());
@@ -1565,7 +1573,7 @@ mod tests {
         // Test if round was saved
         let res = query_latest(deps.as_ref()).unwrap();
         println!("{:?}", res);
-        assert_eq!(504530, res.round);
+        assert_eq!(506196, res.round);
 
         // Test if winners have been added at rank 1
         let res = winner_storage_read(deps.as_ref().storage).load(&1_u8.to_be_bytes()).unwrap();
