@@ -15,6 +15,8 @@ const WINNER_KEY: &[u8] = b"winner";
 pub struct State {
     pub owner: CanonicalAddr,
     pub blockPlay: u64,
+    pub blockTimePlay: u64,
+    pub everyBlockTimePlay: u64,
     pub blockClaim: u64,
     pub blockIcoTimeframe: u64,
     pub everyBlockHeight: u64,

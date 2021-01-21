@@ -14,6 +14,8 @@ pub struct InitMsg {
     pub claimTicket: Vec<CanonicalAddr>,
     pub claimReward: Vec<CanonicalAddr>,
     pub blockPlay: u64,
+    pub blockTimePlay: u64,
+    pub everyBlockTimePlay: u64,
     pub blockClaim: u64,
     pub blockIcoTimeframe: u64,
     pub holdersRewards: Uint128,
