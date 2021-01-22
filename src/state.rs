@@ -95,6 +95,7 @@ pub enum  PollStatus {
     InProgress,
     Passed,
     Rejected,
+    RejectedByCreator
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
