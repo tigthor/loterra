@@ -13,7 +13,6 @@ pub struct InitMsg {
     pub everyBlockHeight: u64,
     pub claimTicket: Vec<CanonicalAddr>,
     pub claimReward: Vec<CanonicalAddr>,
-    pub blockPlay: u64,
     pub blockTimePlay: u64,
     pub everyBlockTimePlay: u64,
     pub blockClaim: u64,

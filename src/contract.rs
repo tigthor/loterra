@@ -29,7 +29,6 @@ pub fn init(
 
     let state = State {
         owner: deps.api.canonical_address(&info.sender)?,
-        blockPlay: msg.blockPlay,
         blockTimePlay: msg.blockTimePlay,
         everyBlockTimePlay: msg.everyBlockTimePlay,
         blockClaim: msg.blockClaim,
@@ -120,7 +119,7 @@ pub fn handle_register(
      */
 
     // Check if the lottery is about to play and cancel new ticket to enter until play
-    if _env.block.height >= state.blockPlay {
+    if _env.block.time >= state.blockTimePlay {
         return Err(ContractError::LotteryAboutToStart {});
     }
 
@@ -240,19 +239,14 @@ pub fn handle_play(
         winner_storage(deps.storage).remove(x.as_ref())
     }
 
-    if store.combination.is_empty() {
-        return Err(ContractError::NoPlayers {});
-    }
-
     // Ensure the sender not sending funds accidentally
     if !info.sent_funds.is_empty() {
         return Err(ContractError::DoNotSendFunds("Play".to_string()));
     }
     // Make the contract callable for everyone every x blocks
-    if _env.block.height > state.blockPlay {
+    if _env.block.time > state.blockTimePlay {
         // Update the state
         state.claimReward = vec![];
-        state.blockPlay = _env.block.height + state.everyBlockHeight;
         state.blockTimePlay = _env.block.time + state.everyBlockTimePlay;
     }else{
         return Err(ContractError::Unauthorized {});
@@ -260,7 +254,7 @@ pub fn handle_play(
     // Get the current round and check if it is a valid round.
     let fromGenesis = state.blockTimePlay - state.drandGenesisTime;
     let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 1.0;
-    println!("{}, {}", nextRound as u64, fromGenesis);
+
     if round != nextRound as u64 {
         return Err(ContractError::InvalidRound {});
     }
@@ -292,93 +286,96 @@ pub fn handle_play(
     // The jackpot after worker fee applied
     let mut jackpotAfter = (jackpot - feeForDrandWorker).unwrap();
 
-    let mut count = 0;
 
-    for combination in store.combination {
-        for x in 0..winningCombination.len(){
-            if combination.key.chars().nth(x).unwrap() == winningCombination.chars().nth(x).unwrap(){
-                count += 1;
+    if !store.combination.is_empty() {
+
+        let mut count = 0;
+        for combination in store.combination {
+            for x in 0..winningCombination.len(){
+                if combination.key.chars().nth(x).unwrap() == winningCombination.chars().nth(x).unwrap(){
+                    count += 1;
+                }
             }
+
+            if count == winningCombination.len() {
+                // Set the reward for token holders
+                state.holdersRewards = tokenHolderFeeReward;
+                // Set the new jackpot after fee
+                jackpotAfter = (jackpot - totalFee).unwrap();
+
+                let mut dataWinner: Vec<WinnerInfoState> = vec![];
+                for winnerAddress in combination.addresses {
+                    dataWinner.push(WinnerInfoState{
+                        claimed: false,
+                        address: winnerAddress
+                    });
+                }
+                if !dataWinner.is_empty() {
+                    winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                }
+
+
+            }
+            else if count == winningCombination.len() - 1 {
+
+                let mut dataWinner: Vec<WinnerInfoState> = vec![];
+                for winnerAddress in combination.addresses {
+                    dataWinner.push(WinnerInfoState{
+                        claimed: false,
+                        address: winnerAddress
+                    });
+                }
+                if !dataWinner.is_empty() {
+                    winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                }
+            }
+            else if count == winningCombination.len() - 2 {
+
+                let mut dataWinner: Vec<WinnerInfoState> = vec![];
+                for winnerAddress in combination.addresses {
+                    dataWinner.push(WinnerInfoState{
+                        claimed: false,
+                        address: winnerAddress
+                    });
+                }
+                if !dataWinner.is_empty() {
+                    winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                }
+            }
+            else if count == winningCombination.len() - 3 {
+
+                let mut dataWinner: Vec<WinnerInfoState> = vec![];
+                for winnerAddress in combination.addresses {
+                    dataWinner.push(WinnerInfoState{
+                        claimed: false,
+                        address: winnerAddress
+                    });
+                }
+                if !dataWinner.is_empty() {
+                    winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                }
+            }
+            else if count == winningCombination.len() - 4 {
+
+                let mut dataWinner: Vec<WinnerInfoState> = vec![];
+                for winnerAddress in combination.addresses {
+                    dataWinner.push(WinnerInfoState{
+                        claimed: false,
+                        address: winnerAddress
+                    });
+                }
+                if !dataWinner.is_empty() {
+                    winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                }
+            }
+            // Re init the counter for the next players
+            count = 0;
         }
-
-        if count == winningCombination.len() {
-            // Set the reward for token holders
-            state.holdersRewards = tokenHolderFeeReward;
-            // Set the new jackpot after fee
-            jackpotAfter = (jackpot - totalFee).unwrap();
-
-            let mut dataWinner: Vec<WinnerInfoState> = vec![];
-            for winnerAddress in combination.addresses {
-                dataWinner.push(WinnerInfoState{
-                    claimed: false,
-                    address: winnerAddress
-                });
-            }
-            if !dataWinner.is_empty() {
-                winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ winners: dataWinner});
-            }
-
-
-        }
-        else if count == winningCombination.len() - 1 {
-
-            let mut dataWinner: Vec<WinnerInfoState> = vec![];
-            for winnerAddress in combination.addresses {
-                dataWinner.push(WinnerInfoState{
-                    claimed: false,
-                    address: winnerAddress
-                });
-            }
-            if !dataWinner.is_empty() {
-                winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ winners: dataWinner});
-            }
-        }
-        else if count == winningCombination.len() - 2 {
-
-            let mut dataWinner: Vec<WinnerInfoState> = vec![];
-            for winnerAddress in combination.addresses {
-                dataWinner.push(WinnerInfoState{
-                    claimed: false,
-                    address: winnerAddress
-                });
-            }
-            if !dataWinner.is_empty() {
-                winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ winners: dataWinner});
-            }
-        }
-        else if count == winningCombination.len() - 3 {
-
-            let mut dataWinner: Vec<WinnerInfoState> = vec![];
-            for winnerAddress in combination.addresses {
-                dataWinner.push(WinnerInfoState{
-                    claimed: false,
-                    address: winnerAddress
-                });
-            }
-            if !dataWinner.is_empty() {
-                winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ winners: dataWinner});
-            }
-        }
-        else if count == winningCombination.len() - 4 {
-
-            let mut dataWinner: Vec<WinnerInfoState> = vec![];
-            for winnerAddress in combination.addresses {
-                dataWinner.push(WinnerInfoState{
-                    claimed: false,
-                    address: winnerAddress
-                });
-            }
-            if !dataWinner.is_empty() {
-                winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ winners: dataWinner});
-            }
-        }
-        // Re init the counter for the next players
-        count = 0;
     }
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
-        to_address: info.sender.clone(), //deps.api.human_address(&winnerAddress).unwrap(),
+        to_address: info.sender.clone(),
         amount: vec![Coin{ denom: state.denomDelegation.clone(), amount: feeForDrandWorker}]
     };
     // Update the state
@@ -807,10 +804,10 @@ mod tests {
         const EVERY_BLOCK_EIGHT: u64 = 100;
         const CLAIM_TICKET: Vec<CanonicalAddr> = vec![];
         const CLAIM_REWARD: Vec<CanonicalAddr> = vec![];
-        const BLOCK_PLAY: u64 = 15000;
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const BLOCK_CLAIM: u64 = 0;
+        const EVERY_BLOCK_CLAIM: u64 = 50000;
         const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
         const HOLDERS_REWARDS: Uint128 = Uint128(5_221);
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(10_000_000);
@@ -847,10 +844,9 @@ mod tests {
             everyBlockHeight: EVERY_BLOCK_EIGHT,
             claimTicket: CLAIM_TICKET,
             claimReward: CLAIM_REWARD,
-            blockPlay: BLOCK_PLAY,
             blockTimePlay: BLOCK_TIME_PLAY,
             everyBlockTimePlay: EVERY_BLOCK_TIME_PLAY,
-            blockClaim: BLOCK_PLAY,
+            blockClaim: EVERY_BLOCK_CLAIM,
             blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
             holdersRewards: HOLDERS_REWARDS,
             tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
@@ -985,8 +981,8 @@ mod tests {
         // Test trying to play the lottery when the lottery is about to start
         let info = mock_info(HumanAddr::from("delegator1"), &[Coin{ denom: "ujack".to_string(), amount: Uint128(2)}]);
         let mut env = mock_env();
-        // If block eight is inferior block to play the lottery is about to start and we can't admit new register until the lottery play cause the result can be leaked at every moment.
-        env.block.height = 16000;
+        // If block time is superior to block time to play the lottery is about to start and we can't admit new register until the lottery play cause the result can be leaked at every moment.
+        env.block.time = 1610566930;
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
         match res {
             Err(ContractError::LotteryAboutToStart {}) => {},
@@ -1380,9 +1376,9 @@ mod tests {
         //let round: u64 = 501672;
 
         // Valid round
-        let signature = hex::decode("8bf8c38deb25a533fe3edca6049b98d5751ecd4bf8faf888150c1d28360adbd51d942c0c7fe0bd375ac1514bf5dce13316d54e3f511a94675b846b1dc9e4938e71fbc2d4cf3706bb839617c48a5f2a612bdaa23fe05ddb70e7662e2f297c651f").unwrap().into();
-        let previous_signature= hex::decode("8dd1959597b1b12911b9ad44ed7763e0c1920a35cb3c591c072a2083b49641ee36a52624863c0dd8cfd4ddcaa40982781514f3e6351268bb4ddab70f29db12c76facfc6af3ecf9ff97d485427ccbd447be5d77f2f727d5b6f7dcb78207b1e40f").unwrap().into();
-        let round = 506196;
+        let signature = hex::decode("99afb21f4194b282b5025cad5855b01e7f562612233aecd49ed76a32987ca7e1d3abe043ba280efd2a97467fba2639060d9bd4608e0ab5fa10754b025e011d658a73dac6ae265325a0d8c4d1dd45f0b488150e89567f807ce50cd8ba58684dde").unwrap().into();
+        let previous_signature= hex::decode("a04b9a86fb2bcaaac6a595c6405bf5bb1af657c078bf7a88f8ec74b1d363ae17e97e7f3fe466e2fc699a656312f646aa009a8b0f5e5d6b2d603a40bec29132827e59fc8f85c971482a8100bd3301c0c5c42e7f03ddaa87ba15134faa1a629027").unwrap().into();
+        let round = 519530;
         let msg = HandleMsg::Play {
             round: round,
             previous_signature: previous_signature,
@@ -1393,11 +1389,11 @@ mod tests {
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         default_init(&mut deps);
         // Init the bucket with players to storage
-        let combination= "3a8417";
-        let combination2 = "3a8414";
-        let combination3 = "3a8434";
-        let combination4 = "3a8943";
-        let combination5 = "3a03232";
+        let combination= "950a51";
+        let combination2 = "950a52";
+        let combination3 = "950a90";
+        let combination4 = "950f92";
+        let combination5 = "954f92";
         let addresses1 = vec![deps.api.canonical_address(&HumanAddr("address1".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
         let addresses2 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap(), deps.api.canonical_address(&HumanAddr("address3".to_string())).unwrap()];
         let addresses3 = vec![deps.api.canonical_address(&HumanAddr("address2".to_string())).unwrap()];
@@ -1413,9 +1409,8 @@ mod tests {
 
         let info = mock_info(HumanAddr::from("validator1"), &[]);
         let mut env = mock_env();
-        env.block.height = 1695432050;
-        env.block.time = 1610566920;
-
+        // Set block time superior to the block play so the lottery can start
+        env.block.time = 1610966920;
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
         println!("{:?}", res);
         assert_eq!(1, res.messages.len());
@@ -1432,11 +1427,11 @@ mod tests {
         // Test fees is now superior to 0
         assert_ne!(0, res.holdersRewards.u128());
         // Test block to play superior block height
-        assert!(res.blockPlay > env.block.height);
+        assert!(res.blockTimePlay > env.block.time);
         // Test if round was saved
         let res = query_latest(deps.as_ref()).unwrap();
         println!("{:?}", res);
-        assert_eq!(506196, res.round);
+        assert_eq!(519530, res.round);
 
         // Test if winners have been added at rank 1
         let res = winner_storage_read(deps.as_ref().storage).load(&1_u8.to_be_bytes()).unwrap();
@@ -1482,11 +1477,28 @@ mod tests {
         let info = mock_info(HumanAddr::from("validator1"), &[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
         let env = mock_env();
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
-        //let res = handle_play(deps.as_mut(), env.clone(), info.clone());
+
         match res {
             Err(ContractError::DoNotSendFunds (msg)) => {
                 assert_eq!(msg ,"Play")
             },
+            _ => panic!("Unexpected error")
+        }
+
+        // Test no combination so no players
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        default_init(&mut deps);
+        let info = mock_info(HumanAddr::from("validator1"), &[]);
+        let mut env = mock_env();
+        env.block.time = 1610966920;
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+        println!("{:?}", res);
+        // Test if the winner still empty
+        let res = winner_storage_read(deps.as_ref().storage).load(&[]);
+        let winners = res.and_then(|i| Ok(i));
+
+        match winners {
+            Err(StdError::NotFound {kind, ..}) => assert_eq!(kind, "lottery::state::Winner"),
             _ => panic!("Unexpected error")
         }
 
