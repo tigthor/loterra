@@ -847,6 +847,16 @@ pub fn handle_proposal(
             }
         }
         Proposal::PrizePerRank
+    } else if let Proposal::ClaimEveryBlock = proposal {
+        match amount {
+            Some(blockTime) => {
+                proposalAmount = blockTime;
+            },
+            None => {
+                return  Err(ContractError::ParamRequiredForThisProposal("ClaimEveryBlock amount".to_string()));
+            }
+        }
+        Proposal::ClaimEveryBlock
     }
     else {
         return  Err(ContractError::ProposalNotFound{});
@@ -2071,9 +2081,21 @@ mod tests {
         assert_eq!(Proposal::LotteryEveryBlockTime ,storage.proposal);
         assert_eq!(Uint128(100000) ,storage.amount);
 
+        // Test success proposal ClaimEveryBlock
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new block time".to_string(),
+            proposal: Proposal::ClaimEveryBlock,
+            amount: Option::from(Uint128(100000)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        let storage = poll_storage_read(deps.as_ref().storage).load(&8_u64.to_be_bytes()).unwrap();
+        assert_eq!(Proposal::ClaimEveryBlock ,storage.proposal);
+        assert_eq!(Uint128(100000) ,storage.amount);
+
         // Test saved correctly the state
         let res = config_read(deps.as_ref().storage).load().unwrap();
-        assert_eq!(7, res.pollCount);
+        assert_eq!(8, res.pollCount);
 
         // Test error description too short
         let msg = HandleMsg::Proposal {
