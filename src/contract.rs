@@ -895,6 +895,10 @@ pub fn handle_vote(
     let mut store = poll_storage(deps.storage).load(&pollId.to_be_bytes())?;
     let sender = deps.api.canonical_address(&info.sender).unwrap();
 
+    // Ensure the poll is still valid
+    if _env.block.height > store.end_height {
+        return Err(ContractError::ProposalExpired {});
+    }
     // Ensure the voter can't vote more times
     if store.yes_voters.contains(&sender) || store.no_voters.contains(&sender){
         return Err(ContractError::AlreadyVoted {});
@@ -929,6 +933,26 @@ pub fn handle_reject_proposal(
     info: MessageInfo,
     pollId: u64
 ) -> Result<HandleResponse, ContractError> {
+    let store = poll_storage_read(deps.storage).load(&pollId.to_be_bytes())?;
+    let sender = deps.api.canonical_address(&info.sender).unwrap();
+
+    if store.end_height < _env.block.height {
+        return Err(ContractError::ProposalExpired {});
+    }
+
+    if store.creator != sender || store.status != PollStatus::InProgress {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+        let mut pollData = poll.unwrap();
+        // Update the status to rejected by the creator
+        pollData.status = PollStatus::RejectedByCreator;
+        // Update the end eight to now
+        pollData.end_height = _env.block.height;
+        Ok(pollData)
+    })?;
+
     Ok(HandleResponse::default())
 }
 
@@ -938,9 +962,9 @@ pub fn handle_present_proposal(
     info: MessageInfo,
     pollId: u64
 ) -> Result<HandleResponse, ContractError> {
+    let store = poll_storage_read(deps.storage).load(&pollId.to_be_bytes()).unwrap();
 
-
-
+    
     Ok(HandleResponse::default())
 }
 
@@ -1994,7 +2018,7 @@ mod tests {
     #[test]
     fn proposal (){
 
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        let mut deps = mock_dependencies(&[]);
         default_init(&mut deps);
         // Test success proposal HolderFeePercentage
         let info = mock_info(HumanAddr::from("address2"), &[]);
@@ -2153,7 +2177,7 @@ mod tests {
 
     #[test]
     fn vote (){
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(10_000_000)}]);
+        let mut deps = mock_dependencies(&[]);
         default_init(&mut deps);
         let info = mock_info(HumanAddr::from("address2"), &[]);
 
@@ -2184,21 +2208,104 @@ mod tests {
             approve: false
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-        println!("{:?}", res);
+        // Test success added to the no voter array
+        let storage = poll_storage_read(deps.as_ref().storage).load(&1_u64.to_be_bytes()).unwrap();
+        assert!(storage.no_voters.contains(&deps.api.canonical_address(&HumanAddr::from("address2")).unwrap()));
+        // Test only added 1 time
+        assert_eq!(1, storage.no_voters.len());
 
-
-        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-        // Test success proposal HolderFeePercentage
+        // Test only can vote one time per proposal
         let msg = HandleMsg::Vote {
             pollId: 1,
             approve: true
         };
-        let info = mock_info(HumanAddr::from("address2"), &[]);
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-        println!("{:?}", res);
+        match res {
+            Err(ContractError::AlreadyVoted {}) => {},
+            _ => panic!("Unexpected error")
+        }
+        // Test sender is not added to vote cause multiple times votes
         let storage = poll_storage_read(deps.as_ref().storage).load(&1_u64.to_be_bytes()).unwrap();
-        println!("{:?}", storage);
+        assert!(!storage.yes_voters.contains(&deps.api.canonical_address(&HumanAddr::from("address2")).unwrap()));
+
+        // Test proposal is expired
+        let env = mock_env();
+        poll_storage(deps.as_mut().storage).update::<_, StdError>(&1_u64.to_be_bytes(), |poll| {
+            let mut pollData = poll.unwrap();
+            // Update the status to rejected by the creator
+            pollData.status = PollStatus::RejectedByCreator;
+            // Update the end eight to now
+            pollData.end_height = env.block.height - 1;
+            Ok(pollData)
+        });
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::ProposalExpired {}) => {},
+            _ => panic!("Unexpected error")
+        }
+    }
+
+    #[test]
+    fn creator_reject_proposal(){
+        let mut deps = mock_dependencies(&[]);
+        default_init(&mut deps);
+        let info = mock_info(HumanAddr::from("creator"), &[]);
+        // Init proposal
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new block time".to_string(),
+            proposal: Proposal::LotteryEveryBlockTime,
+            amount: Option::from(Uint128(100000)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+
+        // Init reject proposal
+        let msg = HandleMsg::RejectProposal { pollId: 1 };
+        let env = mock_env();
+
+        // Success reject the proposal
+        let info = mock_info(HumanAddr::from("creator"), &[]);
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+        assert_eq!(0, res.messages.len());
+
+        let store = poll_storage_read(deps.as_ref().storage).load(&1_u64.to_be_bytes()).unwrap();
+        assert_eq!(env.block.height, store.end_height);
+        assert_eq!(PollStatus::RejectedByCreator, store.status);
+
+        // Test error since the sender is not the creator
+        let info = mock_info(HumanAddr::from("otherUser"), &[]);
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::Unauthorized {}) => {},
+            _ => panic!("Unexpected error")
+        }
+
+        // Test error the proposal is not inProgress
+        let info = mock_info(HumanAddr::from("creator"), &[]);
+        poll_storage(deps.as_mut().storage).update::<_, StdError>(&1_u64.to_be_bytes(), |poll| {
+            let mut pollData = poll.unwrap();
+            // Update the status to rejected by the creator
+            pollData.status = PollStatus::RejectedByCreator;
+            Ok(pollData)
+        });
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::Unauthorized {}) => {},
+            _ => panic!("Unexpected error")
+        }
+        // Test error the proposal already expired
+        let info = mock_info(HumanAddr::from("creator"), &[]);
+        poll_storage(deps.as_mut().storage).update::<_, StdError>(&1_u64.to_be_bytes(), |poll| {
+            let mut pollData = poll.unwrap();
+            // Update the end eight to now
+            pollData.end_height = env.block.height - 1;
+            Ok(pollData)
+        });
+        let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::ProposalExpired{}) => {},
+            _ => panic!("Unexpected error")
+        }
     }
 
 }
