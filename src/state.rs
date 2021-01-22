@@ -106,6 +106,7 @@ pub enum Proposal {
     DrandWorkerFeePercentage,
     PrizePerRank,
     JackpotRewardPercentage,
+    ClaimEveryBlock,
     // test purpose
     NotExist
 }
