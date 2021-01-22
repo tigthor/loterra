@@ -14,7 +14,6 @@ const WINNER_KEY: &[u8] = b"winner";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub owner: CanonicalAddr,
-    pub blockPlay: u64,
     pub blockTimePlay: u64,
     pub everyBlockTimePlay: u64,
     pub blockClaim: u64,
