@@ -1221,8 +1221,6 @@ fn query_round(deps: Deps) -> Result<RoundResponse, ContractError> {
 }
 
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1320,7 +1318,7 @@ mod tests {
         hasher.update(signature);
         hasher.finalize().into()
     }
-    
+
     #[test]
     fn proper_init (){
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
