@@ -924,6 +924,10 @@ pub fn handle_vote(
     let mut store = poll_storage(deps.storage).load(&pollId.to_be_bytes())?;
     let sender = deps.api.canonical_address(&info.sender).unwrap();
 
+    // Ensure the sender not sending funds accidentally
+    if !info.sent_funds.is_empty() {
+        return Err(ContractError::DoNotSendFunds("Vote".to_string()));
+    }
     // Ensure the poll is still valid
     if _env.block.height > store.end_height {
         return Err(ContractError::ProposalExpired {});
@@ -973,10 +977,15 @@ pub fn handle_reject_proposal(
     let store = poll_storage_read(deps.storage).load(&pollId.to_be_bytes())?;
     let sender = deps.api.canonical_address(&info.sender).unwrap();
 
+    // Ensure the sender not sending funds accidentally
+    if !info.sent_funds.is_empty() {
+        return Err(ContractError::DoNotSendFunds("RejectProposal".to_string()));
+    }
+    // Ensure end proposal height is not expired
     if store.end_height < _env.block.height {
         return Err(ContractError::ProposalExpired {});
     }
-
+    // Ensure only the creator can reject a proposal OR the status of the proposal is still in progress
     if store.creator != sender || store.status != PollStatus::InProgress {
         return Err(ContractError::Unauthorized {});
     }
@@ -1024,13 +1033,17 @@ pub fn handle_present_proposal(
     let mut state = config(deps.storage).load().unwrap();
     let store = poll_storage_read(deps.storage).load(&pollId.to_be_bytes()).unwrap();
 
+    // Ensure the sender not sending funds accidentally
+    if !info.sent_funds.is_empty() {
+        return Err(ContractError::DoNotSendFunds("PresentProposal".to_string()));
+    }
     // Ensure the proposal is still in Progress
     if store.status != PollStatus::InProgress {
         return Err(ContractError::Unauthorized {});
     }
     // Ensure the proposal is ended
     if store.end_height > _env.block.height {
-        return Err(ContractError::Unauthorized {});
+        return Err(ContractError::ProposalNotExpired {});
     }
     println!("{:?}", store);
     // Calculating the weight
@@ -1225,7 +1238,7 @@ fn query_round(deps: Deps) -> Result<RoundResponse, ContractError> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info, BankQuerier, MOCK_CONTRACT_ADDR, MockStorage, StakingQuerier, MockApi, MockQuerier};
-    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError::{NotFound}, Storage, Api, CanonicalAddr, OwnedDeps, CosmosMsg, QuerierResult, Binary};
+    use cosmwasm_std::{coins, from_binary, Validator, Decimal, FullDelegation, HumanAddr, Uint128, MessageInfo, StdError::{NotFound}, Storage, Api, CanonicalAddr, OwnedDeps, CosmosMsg, QuerierResult, Binary, Attribute};
     use std::collections::HashMap;
     use std::borrow::Borrow;
     use cosmwasm_storage::{bucket_read, bucket, singleton, singleton_read};
@@ -2428,6 +2441,16 @@ mod tests {
         let msg = HandleMsg::RejectProposal { pollId: 1 };
         let env = mock_env();
 
+        // test error do not send funds with reject proposal
+        let info = mock_info(HumanAddr::from("creator"), &[Coin{ denom: "xcoin".to_string(), amount: Uint128(19_000) }]);
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+        match res {
+            Err(ContractError::DoNotSendFunds(msg)) => {
+                assert_eq!("RejectProposal", msg)
+            },
+            _ => panic!("Unexpected error")
+        }
+
         // Success reject the proposal
         let info = mock_info(HumanAddr::from("creator"), &[]);
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
@@ -2472,50 +2495,180 @@ mod tests {
             _ => panic!("Unexpected error")
         }
     }
+    
+    mod present_proposal {
+        use super::*;
+        use crate::error::ContractError;
+        use cosmwasm_std::attr;
 
-    #[test]
-    fn present_proposal (){
-        let mut deps = mock_dependencies(&[]);
-        default_init(&mut deps);
-        let info = mock_info(HumanAddr::from("creator"), &[]);
-        let mut env = mock_env();
-        env.block.height = 10_000;
-        // Init proposal
-        let msg = HandleMsg::Proposal {
-            description: "I think we need to up to new block time".to_string(),
-            proposal: Proposal::LotteryEveryBlockTime,
-            amount: Option::from(Uint128(200_000)),
-            prizePerRank: None
-        };
-        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+        fn init_proposal ( deps: DepsMut, env: &Env){
+            let info = mock_info(HumanAddr::from("creator"), &[]);
+            let msg = HandleMsg::Proposal {
+                description: "I think we need to up to new block time".to_string(),
+                proposal: Proposal::LotteryEveryBlockTime,
+                amount: Option::from(Uint128(200_000)),
+                prizePerRank: None
+            };
+            handle(deps, env.clone(), info.clone(), msg.clone());
+        }
 
-        // Init two votes with approval true
-        let msg = HandleMsg::Vote {
-            pollId: 1,
-            approve: false
-        };
-        deps.querier.update_balance("creator", vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000_000)}]);
-        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
-        let info = mock_info(HumanAddr::from("address"), &[]);
-        deps.querier.update_balance("address", vec![Coin{ denom: "upot".to_string(), amount: Uint128(7_000_000)}]);
-        let msg = HandleMsg::Vote {
-            pollId: 1,
-            approve: false
-        };
-        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+        fn init_voter (address: String, deps: DepsMut, vote: bool, env: &Env) {
+            let info = mock_info(HumanAddr::from(address.clone()), &[]);
+            let msg = HandleMsg::Vote {
+                pollId: 1,
+                approve: vote
+            };
+            handle(deps, env.clone(), info.clone(), msg.clone());
+        }
 
-        // Init present proposal
-        let msg = HandleMsg::PresentProposal { pollId: 1 };
-        let mut env = mock_env();
-        // expire the proposal to allow presentation
-        env.block.height = 100_000;
-        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
-        assert_eq!(0, res.messages.len());
-        println!("{:?}", res);
-        // check if state have updated
-        let res = config_read(deps.as_ref().storage).load().unwrap();
-        println!("{:?}", res.everyBlockTimePlay);
+        #[test]
+        fn present_proposal_with_empty_voters(){
+            let mut deps = mock_dependencies(&[]);
+            default_init(&mut deps);
+            let info = mock_info(HumanAddr::from("sender"), &[]);
+            let mut env = mock_env();
+            env.block.height = 10_000;
+            // Init proposal
+            init_proposal(deps.as_mut(), &env);
 
+            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let mut env = mock_env();
+            // expire the proposal to allow presentation
+            env.block.height = 100_000;
+            let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+            assert_eq!(
+                res.attributes,
+                vec![
+                    attr("action", "present the proposal"),
+                    attr("proposal_id", "1"),
+                    attr("proposal_result", "rejected")
+                ]
+            );
+        }
+
+        #[test]
+        fn present_proposal_with_voters_NO_WEIGHT (){
+            let mut deps = mock_dependencies(&[]);
+            default_init(&mut deps);
+            let stateBefore = config_read(deps.as_ref().storage).load().unwrap();
+            let info = mock_info(HumanAddr::from("sender"), &[]);
+            let mut env = mock_env();
+            env.block.height = 10_000;
+            // Init proposal
+            init_proposal(deps.as_mut(), &env);
+
+            // Init two votes with approval false
+            deps.querier.update_balance("address1", vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000_000)}]);
+            deps.querier.update_balance("address2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(7_000_000)}]);
+            init_voter ("address1".to_string(), deps.as_mut(), false, &env);
+            init_voter ("address2".to_string(), deps.as_mut(), false, &env);
+
+            // Init present proposal
+            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let mut env = mock_env();
+            // expire the proposal to allow presentation
+            env.block.height = 100_000;
+            let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+            assert_eq!(
+                res.attributes,
+                vec![
+                    attr("action", "present the proposal"),
+                    attr("proposal_id", "1"),
+                    attr("proposal_result", "rejected")
+                ]
+            );
+            assert_eq!(0, res.messages.len());
+            // check if state remain the same since the vote was rejected
+            let stateAfter = config_read(deps.as_ref().storage).load().unwrap();
+            assert_eq!(stateBefore.everyBlockTimePlay, stateAfter.everyBlockTimePlay);
+        }
+        #[test]
+        fn present_proposal_with_voters_YES_WEIGHT (){
+            let mut deps = mock_dependencies(&[]);
+            default_init(&mut deps);
+            let info = mock_info(HumanAddr::from("sender"), &[]);
+            let mut env = mock_env();
+            env.block.height = 10_000;
+            // Init proposal
+            init_proposal(deps.as_mut(), &env);
+
+            // Init two votes with approval false
+            deps.querier.update_balance("address1", vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000_000)}]);
+            deps.querier.update_balance("address2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(7_000_000)}]);
+            init_voter ("address1".to_string(), deps.as_mut(), true, &env);
+            init_voter ("address2".to_string(), deps.as_mut(), true, &env);
+
+            // Init present proposal
+            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let mut env = mock_env();
+            // expire the proposal to allow presentation
+            env.block.height = 100_000;
+            let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+            assert_eq!(
+                res.attributes,
+                vec![
+                    attr("action", "present the proposal"),
+                    attr("proposal_id", "1"),
+                    attr("proposal_result", "approved")
+                ]
+            );
+            assert_eq!(0, res.messages.len());
+            // check if state the vote was rejected
+            let state = config_read(deps.as_ref().storage).load().unwrap();
+            assert_eq!(200000, state.everyBlockTimePlay);
+
+            // Test can't REpresent the proposal
+            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let mut env = mock_env();
+            // expire the proposal to allow presentation
+            env.block.height = 100_000;
+            let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+            match res {
+                Err(ContractError::Unauthorized {}) => {},
+                _ => panic!("Unexpected error")
+            }
+        }
+
+        #[test]
+        fn error_present_proposal(){
+            let mut deps = mock_dependencies(&[]);
+            default_init(&mut deps);
+            let mut env = mock_env();
+            env.block.height = 10_000;
+            // Init proposal
+            init_proposal(deps.as_mut(), &env);
+
+            // Init two votes with approval false
+            deps.querier.update_balance("address1", vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000_000)}]);
+            deps.querier.update_balance("address2", vec![Coin{ denom: "upot".to_string(), amount: Uint128(7_000_000)}]);
+            init_voter ("address1".to_string(), deps.as_mut(), true, &env);
+            init_voter ("address2".to_string(), deps.as_mut(), true, &env);
+
+            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let info = mock_info(HumanAddr::from("sender"), &[Coin{ denom: "funds".to_string(), amount: Uint128(324) }]);
+            let mut env = mock_env();
+            // expire the proposal to allow presentation
+            env.block.height = 100_000;
+            let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+            match res {
+                Err(ContractError::DoNotSendFunds(msg)) => {
+                    assert_eq!("PresentProposal", msg)
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            // proposal not expired
+            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let info = mock_info(HumanAddr::from("sender"), &[]);
+            let mut env = mock_env();
+            env.block.height = 10_000;
+            let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+            match res {
+                Err(ContractError::ProposalNotExpired {}) => {},
+                _ => panic!("Unexpected error")
+            }
+
+        }
     }
 
 }
