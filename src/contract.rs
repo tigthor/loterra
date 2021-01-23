@@ -8,7 +8,7 @@ use crate::error::ContractError::Std;
 use std::fs::canonicalize;
 use schemars::_serde_json::map::Entry::Vacant;
 use std::io::Stderr;
-use std::ops::{Mul, Sub};
+use std::ops::{Mul, Sub, Add};
 use drand_verify::{verify, g1_from_fixed, g1_from_variable};
 use sha2::{Digest, Sha256};
 use regex::Regex;
@@ -178,7 +178,7 @@ pub fn handle_ticket(
 
     // Ensure validator are owning 10000 upot min and the user stake the majority of his funds to this validator
     let validatorBalance = deps.querier.query_balance(&delegator[0].validator, &state.denomShare).unwrap();
-    if validatorBalance.amount.u128() < state.validatorMinAmountToAllowClaim as u128 {
+    if validatorBalance.amount.u128() < state.validatorMinAmountToAllowClaim.u128() {
         return Err(ContractError::ValidatorNotAuthorized(state.validatorMinAmountToAllowClaim.to_string()));
     }
     // Ensure is delegating the right denom
@@ -290,13 +290,13 @@ pub fn handle_play(
     // Set jackpot amount
     let balance = deps.querier.query_balance(&_env.contract.address, &state.denomDelegation).unwrap();
     // Max amount winners can claim
-    let jackpot = balance.amount.mul(Decimal::percent(state.jackpotPercentageReward));
+    let jackpot = balance.amount.mul(Decimal::percent(state.jackpotPercentageReward as u64));
     // Drand worker fee
-    let feeForDrandWorker = jackpot.mul(Decimal::percent(state.feeForDrandWorkerInPercentage));
+    let feeForDrandWorker = jackpot.mul(Decimal::percent(state.feeForDrandWorkerInPercentage as u64));
     // Amount token holders can claim of the reward is a fee
-    let tokenHolderFeeReward = jackpot.mul(Decimal::percent(state.tokenHolderPercentageFeeReward));
+    let tokenHolderFeeReward = jackpot.mul(Decimal::percent(state.tokenHolderPercentageFeeReward as u64));
     // Total fees if winner of the jackpot
-    let totalFee = jackpot.mul(Decimal::percent(state.feeForDrandWorkerInPercentage + state.tokenHolderPercentageFeeReward));
+    let totalFee = jackpot.mul(Decimal::percent((state.feeForDrandWorkerInPercentage as u64) + (state.tokenHolderPercentageFeeReward as u64)));
     // The jackpot after worker fee applied
     let mut jackpotAfter = (jackpot - feeForDrandWorker).unwrap();
 
@@ -628,7 +628,7 @@ pub fn handle_jackpot(
                 match winner.rank {
                     1 => {
                         // Prizes first rank
-                        let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[0])).u128() / winner.winners.clone().len() as u128;
+                        let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[0] as u64)).u128() / winner.winners.clone().len() as u128;
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
@@ -636,7 +636,7 @@ pub fn handle_jackpot(
                     },
                     2 => {
                         // Prizes second rank
-                        let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[1])).u128() / winner.winners.clone().len() as u128;
+                        let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[1] as u64)).u128() / winner.winners.clone().len() as u128;
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
@@ -644,7 +644,7 @@ pub fn handle_jackpot(
                     },
                     3 =>{
                         // Prizes third rank
-                        let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[2])).u128() / winner.winners.clone().len() as u128;
+                        let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[2] as u64)).u128() / winner.winners.clone().len() as u128;
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
@@ -652,7 +652,7 @@ pub fn handle_jackpot(
                     },
                     4 =>{
                         // Prizes four rank
-                        let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[3])).u128() / winner.winners.clone().len() as u128;
+                        let prize = state.jackpotReward.mul(Decimal::percent(state.prizeRankWinnerPercentage[3] as u64)).u128() / winner.winners.clone().len() as u128;
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
@@ -724,7 +724,7 @@ pub fn handle_proposal(
     description: String,
     proposal: Proposal,
     amount: Option<Uint128>,
-    prizePerRank: Option<Vec<u64>>
+    prizePerRank: Option<Vec<u8>>
 ) -> Result<HandleResponse, ContractError> {
     let mut state = config(deps.storage).load().unwrap();
     // Increment and get the new poll id for bucket key
@@ -745,7 +745,7 @@ pub fn handle_proposal(
     }
 
     let mut proposalAmount: Uint128 = Uint128::zero();
-    let mut proposalPrizeRank: Vec<u64> = vec![];
+    let mut proposalPrizeRank: Vec<u8> = vec![];
 
     let proposalType = if let Proposal::HolderFeePercentage = proposal {
         match amount {
@@ -956,15 +956,96 @@ pub fn handle_reject_proposal(
     Ok(HandleResponse::default())
 }
 
+fn total_weight (deps: &DepsMut, state: &State, addresses: &Vec<CanonicalAddr>) -> Uint128{
+    let mut weight = Uint128::zero();
+    for address in addresses{
+        let humanAddress = deps.api.human_address(&address).unwrap();
+
+        let balance = deps.querier.query_balance(humanAddress, &state.denomShare).unwrap();
+
+        if !balance.amount.is_zero(){
+            weight += balance.amount;
+        }
+    }
+    weight
+}
+
 pub fn handle_present_proposal(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
     pollId: u64
 ) -> Result<HandleResponse, ContractError> {
+    // Load storage
+    let mut state = config(deps.storage).load().unwrap();
     let store = poll_storage_read(deps.storage).load(&pollId.to_be_bytes()).unwrap();
 
+    // Ensure the proposal is still in Progress
+    if store.status != PollStatus::InProgress {
+        return Err(ContractError::Unauthorized {});
+    }
+    // Ensure the proposal is ended
+    if store.end_height > _env.block.height {
+        return Err(ContractError::Unauthorized {});
+    }
+    println!("{:?}", store);
+    // Calculating the weight
+    let yesWeight = total_weight(&deps, &state, &store.yes_voters);
+    let noWeight = total_weight(&deps, &state, &store.no_voters);
+    println!("{}", yesWeight.u128());
     
+    // Reject the proposal
+    if noWeight.u128() >= yesWeight.u128()  {
+        poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+            let mut pollData = poll.unwrap();
+            // Update the status to rejected
+            pollData.status = PollStatus::Rejected;
+            Ok(pollData)
+        })?;
+        return Ok(HandleResponse::default());
+    };
+
+    // Valid the proposal
+    match store.proposal {
+        Proposal::ClaimEveryBlock => {
+            state.blockClaim = store.amount.u128() as u64;
+        },
+        Proposal::LotteryEveryBlockTime => {
+            state.everyBlockTimePlay = store.amount.u128() as u64;
+        },
+        Proposal::DrandWorkerFeePercentage => {
+            state.feeForDrandWorkerInPercentage = store.amount.u128() as u8;
+        },
+        Proposal::JackpotRewardPercentage => {
+            state.jackpotPercentageReward =  store.amount.u128() as u8;
+        },
+        Proposal::MinAmountDelegator => {
+            state.delegatorMinAmountInDelegation = store.amount.clone();
+        },
+        Proposal::PrizePerRank => {
+            state.prizeRankWinnerPercentage = store.prizeRank;
+        },
+        Proposal::MinAmountValidator => {
+            state.validatorMinAmountToAllowClaim = store.amount.clone();
+        },
+        Proposal::HolderFeePercentage =>{
+            state.holdersMaxPercentageReward =  store.amount.u128() as u8
+        },
+        _ => {
+            return Err(ContractError::ProposalNotFound {});
+        }
+    }
+
+    // Save to storage
+    poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+        let mut pollData = poll.unwrap();
+        // Update the status to passed
+        pollData.status = PollStatus::Passed;
+        Ok(pollData)
+    })?;
+
+    config(deps.storage).save(&state);
+
     Ok(HandleResponse::default())
 }
 
@@ -1105,14 +1186,14 @@ mod tests {
         ].into(); //Binary::from(hex!("868f005eb8e6e4ca0a47c8a77ceaa5309a47978a7c71bc5cce96366b5d7a569937c529eeda66c7293784a9402801af31"));
         const GENESIS_TIME: u64 = 1595431050;
         const PERIOD: u64 = 30;
-        const VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM: u64 = 10_000;
+        const VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM: Uint128 = Uint128(10_000);
         const DELEGATOR_MIN_AMOUNT_IN_DELEGATION: Uint128 = Uint128(10_000);
         const COMBINATION_LEN: u8 = 6;
         const JACKPOT_REWARD: Uint128 = Uint128(8_000_000);
-        const JACKPOT_PERCENTAGE_REWARD: u64 = 80;
-        const TOKEN_HOLDER_PERCENTAGE_FEE_REWARD: u64 = 10;
-        const FEE_FOR_DRAND_WORKER_IN_PERCENTAGE: u64 = 1;
-        let PRIZE_RANK_WINNER_PERCENTAGE: Vec<u64> = vec![84, 10, 5, 1];
+        const JACKPOT_PERCENTAGE_REWARD: u8 = 80;
+        const TOKEN_HOLDER_PERCENTAGE_FEE_REWARD: u8 = 10;
+        const FEE_FOR_DRAND_WORKER_IN_PERCENTAGE: u8 = 1;
+        let PRIZE_RANK_WINNER_PERCENTAGE: Vec<u8> = vec![84, 10, 5, 1];
         const POLL_END_HEIGHT: u64 = 40_000;
 
 
@@ -2306,6 +2387,51 @@ mod tests {
             Err(ContractError::ProposalExpired{}) => {},
             _ => panic!("Unexpected error")
         }
+    }
+
+    #[test]
+    fn present_proposal (){
+        let mut deps = mock_dependencies(&[]);
+        default_init(&mut deps);
+        let info = mock_info(HumanAddr::from("creator"), &[]);
+        let mut env = mock_env();
+        env.block.height = 10_000;
+        // Init proposal
+        let msg = HandleMsg::Proposal {
+            description: "I think we need to up to new block time".to_string(),
+            proposal: Proposal::LotteryEveryBlockTime,
+            amount: Option::from(Uint128(200_000)),
+            prizePerRank: None
+        };
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+
+        // Init two votes with approval true
+        let msg = HandleMsg::Vote {
+            pollId: 1,
+            approve: true
+        };
+        deps.querier.update_balance("creator", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+        let info = mock_info(HumanAddr::from("address"), &[]);
+        deps.querier.update_balance("address", vec![Coin{ denom: "upot".to_string(), amount: Uint128(100_000)}]);
+        let msg = HandleMsg::Vote {
+            pollId: 1,
+            approve: true
+        };
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+
+        // Init present proposal
+        let msg = HandleMsg::PresentProposal { pollId: 1 };
+        let mut env = mock_env();
+        // expire the proposal to allow presentation
+        env.block.height = 100_000;
+        let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone()).unwrap();
+        assert_eq!(0, res.messages.len());
+        println!("{:?}", res);
+        // check if state have updated
+        let res = config_read(deps.as_ref().storage).load().unwrap();
+        println!("{:?}", res.everyBlockTimePlay);
+
     }
 
 }

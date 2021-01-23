@@ -22,14 +22,14 @@ pub struct InitMsg {
     pub drandPublicKey: Binary,
     pub drandPeriod: u64,
     pub drandGenesisTime: u64,
-    pub validatorMinAmountToAllowClaim: u64,
+    pub validatorMinAmountToAllowClaim: Uint128,
     pub delegatorMinAmountInDelegation: Uint128,
     pub combinationLen: u8,
     pub jackpotReward: Uint128,
-    pub jackpotPercentageReward: u64,
-    pub tokenHolderPercentageFeeReward: u64,
-    pub feeForDrandWorkerInPercentage: u64,
-    pub prizeRankWinnerPercentage: Vec<u64>,
+    pub jackpotPercentageReward: u8,
+    pub tokenHolderPercentageFeeReward: u8,
+    pub feeForDrandWorkerInPercentage: u8,
+    pub prizeRankWinnerPercentage: Vec<u8>,
     pub pollEndHeight: u64,
 }
 
@@ -64,7 +64,7 @@ pub enum HandleMsg {
         description: String,
         proposal: Proposal,
         amount: Option<Uint128>,
-        prizePerRank: Option<Vec<u64>>
+        prizePerRank: Option<Vec<u8>>
     },
     /// Vote the proposal
     Vote {
@@ -143,7 +143,7 @@ pub struct GetPollResponse {
     pub start_height: u64,
     pub description: String,
     pub amount: Uint128,
-    pub prizePerRank: Vec<u64>,
+    pub prizePerRank: Vec<u8>,
 }
 
 // We define a custom struct for each query response
