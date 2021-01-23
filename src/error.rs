@@ -81,6 +81,9 @@ pub enum ContractError {
     #[error("This proposal is expired")]
     ProposalExpired{},
 
+    #[error("This proposal is not expired")]
+    ProposalNotExpired{},
+
     #[error("For this proposal {0} is mandatory")]
     ParamRequiredForThisProposal(String),
 
