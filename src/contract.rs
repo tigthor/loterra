@@ -993,6 +993,10 @@ pub fn handle_present_proposal(
     let yesWeight = total_weight(&deps, &state, &store.yes_voters);
     let noWeight = total_weight(&deps, &state, &store.no_voters);
     println!("{}", yesWeight.u128());
+
+    /*
+        TODO: Ensure 60 % of the total supply are voted yes if not reject the proposal
+     */
     
     // Reject the proposal
     if noWeight.u128() >= yesWeight.u128()  {
