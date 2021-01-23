@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GetPollResponse",
+  "type": "object",
+  "required": [
+    "amount",
+    "creator",
+    "description",
+    "end_height",
+    "prizePerRank",
+    "start_height",
+    "status"
+  ],
+  "properties": {
+    "amount": {
+      "$ref": "#/definitions/Uint128"
+    },
+    "creator": {
+      "$ref": "#/definitions/HumanAddr"
+    },
+    "description": {
+      "type": "string"
+    },
+    "end_height": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "prizePerRank": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "format": "uint8",
+        "minimum": 0.0
+      }
+    },
+    "start_height": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "status": {
+      "$ref": "#/definitions/PollStatus"
+    }
+  },
+  "definitions": {
+    "HumanAddr": {
+      "type": "string"
+    },
+    "PollStatus": {
+      "type": "string",
+      "enum": [
+        "InProgress",
+        "Passed",
+        "Rejected",
+        "RejectedByCreator"
+      ]
+    },
+    "Uint128": {
+      "type": "string"
+    }
+  }
+}

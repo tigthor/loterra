@@ -71,6 +71,40 @@
           "type": "object"
         }
       }
+    },
+    {
+      "description": "Get specific poll",
+      "type": "object",
+      "required": [
+        "get_poll"
+      ],
+      "properties": {
+        "get_poll": {
+          "type": "object",
+          "required": [
+            "pollId"
+          ],
+          "properties": {
+            "pollId": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Get the specific round to query from Drand to play the lottery",
+      "type": "object",
+      "required": [
+        "get_round"
+      ],
+      "properties": {
+        "get_round": {
+          "type": "object"
+        }
+      }
     }
   ]
 }

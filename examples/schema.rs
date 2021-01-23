@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for, export_schema_with_title};
 
-use lottery::msg::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, LatestResponse, GetResponse, AllCombinationResponse, AllWinnerResponse};
+use lottery::msg::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, LatestResponse, GetResponse, AllCombinationResponse, AllWinnerResponse, GetPollResponse, RoundResponse};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();
@@ -19,4 +19,6 @@ fn main() {
     export_schema_with_title(&mut schema_for!(GetResponse), &out_dir, "GetResponseRandomness");
     export_schema_with_title(&mut schema_for!(AllCombinationResponse), &out_dir, "AllCombinationResponse");
     export_schema_with_title(&mut schema_for!(AllWinnerResponse), &out_dir, "AllWinnerResponse");
+    export_schema_with_title(&mut schema_for!(GetPollResponse), &out_dir, "GetPollResponse");
+    export_schema_with_title(&mut schema_for!(RoundResponse), &out_dir, "RoundResponse");
 }

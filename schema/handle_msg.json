@@ -77,7 +77,7 @@
       }
     },
     {
-      "description": "Buy tickets with USCRT, 1 ticket is 1_000_000 USCRT (1SCRT)",
+      "description": "Buy tickets with USCRT, 1 ticket is 1_000_000 USCRT (1SCRT) but DAO can vote this",
       "type": "object",
       "required": [
         "buy"
@@ -111,11 +111,143 @@
           "type": "object"
         }
       }
+    },
+    {
+      "description": "DAO Make a proposal",
+      "type": "object",
+      "required": [
+        "proposal"
+      ],
+      "properties": {
+        "proposal": {
+          "type": "object",
+          "required": [
+            "description",
+            "proposal"
+          ],
+          "properties": {
+            "amount": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Uint128"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
+              "type": "string"
+            },
+            "prizePerRank": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            "proposal": {
+              "$ref": "#/definitions/Proposal"
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Vote the proposal",
+      "type": "object",
+      "required": [
+        "vote"
+      ],
+      "properties": {
+        "vote": {
+          "type": "object",
+          "required": [
+            "approve",
+            "pollId"
+          ],
+          "properties": {
+            "approve": {
+              "type": "boolean"
+            },
+            "pollId": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Valid a proposal",
+      "type": "object",
+      "required": [
+        "present_proposal"
+      ],
+      "properties": {
+        "present_proposal": {
+          "type": "object",
+          "required": [
+            "pollId"
+          ],
+          "properties": {
+            "pollId": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Reject a proposal",
+      "type": "object",
+      "required": [
+        "reject_proposal"
+      ],
+      "properties": {
+        "reject_proposal": {
+          "type": "object",
+          "required": [
+            "pollId"
+          ],
+          "properties": {
+            "pollId": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
     }
   ],
   "definitions": {
     "Binary": {
       "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
+      "type": "string"
+    },
+    "Proposal": {
+      "type": "string",
+      "enum": [
+        "MinAmountDelegator",
+        "MinAmountValidator",
+        "LotteryEveryBlockTime",
+        "HolderFeePercentage",
+        "DrandWorkerFeePercentage",
+        "PrizePerRank",
+        "JackpotRewardPercentage",
+        "ClaimEveryBlock",
+        "NotExist"
+      ]
+    },
+    "Uint128": {
       "type": "string"
     }
   }
