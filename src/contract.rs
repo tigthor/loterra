@@ -991,15 +991,18 @@ pub fn handle_present_proposal(
     println!("{:?}", store);
     // Calculating the weight
     let yesWeight = total_weight(&deps, &state, &store.yes_voters);
-    let noWeight = total_weight(&deps, &state, &store.no_voters);
+    // let noWeight = total_weight(&deps, &state, &store.no_voters);
     println!("{}", yesWeight.u128());
 
-    /*
-        TODO: Ensure 60 % of the total supply are voted yes if not reject the proposal
-     */
-    
+    // Get the amount
+    let mut finalVoteWeightInPercentage: u128 = 0;
+    if !yesWeight.is_zero(){
+        let yesWeightByHundred = yesWeight.u128() * 100;
+        finalVoteWeightInPercentage = yesWeightByHundred / state.tokenHolderSupply.u128();
+    }
+
     // Reject the proposal
-    if noWeight.u128() >= yesWeight.u128()  {
+    if /*noWeight.u128() >= yesWeight.u128() ||*/ finalVoteWeightInPercentage < 60 {
         poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
             let mut pollData = poll.unwrap();
             // Update the status to rejected
@@ -2412,15 +2415,15 @@ mod tests {
         // Init two votes with approval true
         let msg = HandleMsg::Vote {
             pollId: 1,
-            approve: true
+            approve: false
         };
-        deps.querier.update_balance("creator", vec![Coin{ denom: "upot".to_string(), amount: Uint128(10_000)}]);
+        deps.querier.update_balance("creator", vec![Coin{ denom: "upot".to_string(), amount: Uint128(1_000_000)}]);
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
         let info = mock_info(HumanAddr::from("address"), &[]);
-        deps.querier.update_balance("address", vec![Coin{ denom: "upot".to_string(), amount: Uint128(100_000)}]);
+        deps.querier.update_balance("address", vec![Coin{ denom: "upot".to_string(), amount: Uint128(7_000_000)}]);
         let msg = HandleMsg::Vote {
             pollId: 1,
-            approve: true
+            approve: false
         };
         let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
 
