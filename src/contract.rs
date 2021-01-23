@@ -148,7 +148,13 @@ pub fn handle_register(
         combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
     }
 
-    Ok(HandleResponse::default())
+    Ok(HandleResponse{
+        messages: vec![],
+        attributes: vec![
+            attr("action", "register")
+        ],
+        data: None
+    })
 }
 
 pub fn handle_ticket(
@@ -592,6 +598,7 @@ fn remove_from_storage(deps: &DepsMut, info: &MessageInfo, winner: &WinnerInfo) 
 
 }
 
+// Players claim the jackpot
 pub fn handle_jackpot(
     deps: DepsMut,
     _env: Env,
@@ -699,7 +706,15 @@ pub fn handle_jackpot(
 
     // Check if no amount to send return ok
     if amountToSend.is_empty(){
-        return Ok(HandleResponse::default());
+        return Ok(HandleResponse {
+            messages: vec![],
+            attributes: vec![
+                attr("action", "jackpot reward"),
+                attr("to", &info.sender),
+                attr("jackpot_prize", "no"),
+            ],
+            data: None
+        });
     }
 
     let msg = BankMsg::Send {
@@ -711,7 +726,11 @@ pub fn handle_jackpot(
     // Send the jackpot
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "jackpot reward"), attr("to", &info.sender)],
+        attributes: vec![
+            attr("action", "jackpot reward"),
+            attr("to", &info.sender),
+            attr("jackpot_prize", "yes"),
+        ],
         data: None,
     })
 
@@ -882,7 +901,17 @@ pub fn handle_proposal(
 
     // Save state
     config(deps.storage).save(&state)?;
-    Ok(HandleResponse::default())
+
+    Ok(HandleResponse{
+        messages: vec![],
+        attributes: vec![
+            attr("action", "create a proposal"),
+            attr("proposal_id", pollId.to_string()),
+            attr("proposal_creator", &info.sender.to_string()),
+            attr("proposal_creation_result", "success"),
+        ],
+        data: None
+    })
 }
 
 pub fn handle_vote(
@@ -924,7 +953,15 @@ pub fn handle_vote(
         }
     }
 
-    Ok(HandleResponse::default())
+    Ok(HandleResponse{
+        messages: vec![],
+        attributes: vec![
+            attr("action", "vote"),
+            attr("proposalId", pollId.to_string()),
+            attr("voting_result", "success")
+        ],
+        data: None
+    })
 }
 
 pub fn handle_reject_proposal(
@@ -953,7 +990,14 @@ pub fn handle_reject_proposal(
         Ok(pollData)
     })?;
 
-    Ok(HandleResponse::default())
+    Ok(HandleResponse{
+        messages: vec![],
+        attributes: vec![
+            attr("action", "creator reject the proposal"),
+            attr("proposalId", pollId.to_string())
+        ],
+        data: None
+    })
 }
 
 fn total_weight (deps: &DepsMut, state: &State, addresses: &Vec<CanonicalAddr>) -> Uint128{
@@ -1009,7 +1053,15 @@ pub fn handle_present_proposal(
             pollData.status = PollStatus::Rejected;
             Ok(pollData)
         })?;
-        return Ok(HandleResponse::default());
+        return Ok(HandleResponse{
+            messages: vec![],
+            attributes: vec![
+                attr("action", "present the proposal"),
+                attr("proposal_id", pollId.to_string()),
+                attr("proposal_result", "rejected"),
+            ],
+            data: None
+        });
     };
 
     // Valid the proposal
@@ -1053,7 +1105,16 @@ pub fn handle_present_proposal(
 
     config(deps.storage).save(&state);
 
-    Ok(HandleResponse::default())
+    Ok(HandleResponse {
+        messages: vec![],
+        attributes: vec![
+            attr("action", "present the proposal"),
+            attr("proposal_id", pollId.to_string()),
+            attr("proposal_result", "approved"),
+        ],
+        data: None
+    })
+
 }
 
 pub fn query(
