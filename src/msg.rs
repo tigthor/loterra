@@ -99,7 +99,9 @@ pub enum QueryMsg {
     /// Get specific poll
     GetPoll {
         pollId: u64
-    }
+    },
+    /// Get the specific round to query from Drand to play the lottery
+    GetRound {}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -148,4 +150,11 @@ pub struct GetPollResponse {
 
 // We define a custom struct for each query response
 pub type ConfigResponse = State;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Round {
+    pub nextRound: u64
+}
+
+pub type RoundResponse = Round;
 

@@ -48,7 +48,6 @@ pub struct State {
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
     singleton(storage, CONFIG_KEY)
 }
-
 pub fn config_read(storage: &dyn Storage) -> ReadonlySingleton<State> {
     singleton_read(storage, CONFIG_KEY)
 }
@@ -67,7 +66,6 @@ pub struct Combination {
 pub fn combination_storage(storage: &mut dyn Storage) -> Bucket<Combination>{
     bucket(storage, COMBINATION_KEY)
 }
-
 pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Combination>{
     bucket_read(storage, COMBINATION_KEY)
 }
@@ -133,6 +131,8 @@ pub fn poll_storage(storage: &mut dyn Storage) -> Bucket<PollInfoState>{
 pub fn poll_storage_read(storage: &dyn Storage) -> ReadonlyBucket<PollInfoState>{
     bucket_read(storage, POLL_KEY)
 }
+
+
 /*
 pub fn combination_storage(storage: &mut dyn Storage) -> PrefixedStorage{
     prefixed(storage, COMBINATION_KEY)
