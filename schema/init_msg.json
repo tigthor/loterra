@@ -5,7 +5,7 @@
   "required": [
     "blockClaim",
     "blockIcoTimeframe",
-    "blockPlay",
+    "blockTimePlay",
     "claimReward",
     "claimTicket",
     "combinationLen",
@@ -18,10 +18,12 @@
     "drandPeriod",
     "drandPublicKey",
     "everyBlockHeight",
+    "everyBlockTimePlay",
     "feeForDrandWorkerInPercentage",
     "holdersRewards",
     "jackpotPercentageReward",
     "jackpotReward",
+    "pollEndHeight",
     "prizeRankWinnerPercentage",
     "tokenHolderPercentageFeeReward",
     "tokenHolderSupply",
@@ -38,7 +40,7 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "blockPlay": {
+    "blockTimePlay": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
@@ -93,9 +95,14 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "feeForDrandWorkerInPercentage": {
+    "everyBlockTimePlay": {
       "type": "integer",
       "format": "uint64",
+      "minimum": 0.0
+    },
+    "feeForDrandWorkerInPercentage": {
+      "type": "integer",
+      "format": "uint8",
       "minimum": 0.0
     },
     "holdersRewards": {
@@ -103,32 +110,35 @@
     },
     "jackpotPercentageReward": {
       "type": "integer",
-      "format": "uint64",
+      "format": "uint8",
       "minimum": 0.0
     },
     "jackpotReward": {
       "$ref": "#/definitions/Uint128"
     },
+    "pollEndHeight": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
     "prizeRankWinnerPercentage": {
       "type": "array",
       "items": {
         "type": "integer",
-        "format": "uint64",
+        "format": "uint8",
         "minimum": 0.0
       }
     },
     "tokenHolderPercentageFeeReward": {
       "type": "integer",
-      "format": "uint64",
+      "format": "uint8",
       "minimum": 0.0
     },
     "tokenHolderSupply": {
       "$ref": "#/definitions/Uint128"
     },
     "validatorMinAmountToAllowClaim": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
+      "$ref": "#/definitions/Uint128"
     }
   },
   "definitions": {
