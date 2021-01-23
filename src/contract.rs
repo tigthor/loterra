@@ -1,7 +1,7 @@
 use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order, CanonicalAddr, ByteArray};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo, AllWinnerResponse, WinnerInfo, GetPollResponse};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo, AllWinnerResponse, WinnerInfo, GetPollResponse, RoundResponse, Round};
 use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage, Combination, winner_storage_read, winner_storage, Winner, WinnerInfoState, poll_storage_read, PollInfoState, PollStatus, poll_storage, Proposal};
 use cosmwasm_std::testing::StakingQuerier;
 use crate::error::ContractError::Std;
@@ -1128,7 +1128,8 @@ pub fn query(
         QueryMsg::GetRandomness {round} => to_binary(&query_get(deps, round)?)?,
         QueryMsg::Combination {} =>  to_binary(&query_all_combination(deps)?)?,
         QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?,
-        QueryMsg::GetPoll { pollId } => to_binary(&query_poll(deps, pollId)?)?
+        QueryMsg::GetPoll { pollId } => to_binary(&query_poll(deps, pollId)?)?,
+        QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
     };
     Ok(response)
 }
@@ -1208,6 +1209,15 @@ fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError>
         prizePerRank: poll.prizeRank
     })
 
+}
+
+fn query_round(deps: Deps) -> Result<RoundResponse, ContractError> {
+    let state = config_read(deps.storage).load()?;
+    let fromGenesis = state.blockTimePlay - state.drandGenesisTime;
+    let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 1.0;
+    let nextRoundFormat = nextRound as u64;
+
+    Ok(RoundResponse{ nextRound: nextRoundFormat })
 }
 
 
@@ -1310,6 +1320,20 @@ mod tests {
         hasher.update(signature);
         hasher.finalize().into()
     }
+    
+    #[test]
+    fn proper_init (){
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
+        default_init(&mut deps);
+        println!("{:?}", mock_env())
+    }
+    #[test]
+    fn get_round_play (){
+        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
+        default_init(&mut deps);
+        let res = query_round(deps.as_ref()).unwrap();
+        println!("{:?}", res.nextRound);
+    }
     #[test]
     fn testing_saved_address_winner (){
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
@@ -1354,12 +1378,6 @@ mod tests {
         // println!("{}", time);
         println!("{}", round.floor());
         println!("{}", fromGenesis);
-    }
-    #[test]
-    fn proper_init (){
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
-        default_init(&mut deps);
-        println!("{:?}", mock_env())
     }
     #[test]
     fn register() {
