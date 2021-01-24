@@ -41,6 +41,7 @@ pub struct State {
     pub prizeRankWinnerPercentage: Vec<u8>,
     pub pollCount: u64,
     pub holdersMaxPercentageReward: u8,
+    pub workerDrandMaxPercentageReward: u8,
     pub pollEndHeight: u64,
 
 }
