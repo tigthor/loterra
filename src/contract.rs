@@ -56,6 +56,7 @@ pub fn init(
         prizeRankWinnerPercentage: msg.prizeRankWinnerPercentage,
         pollCount: 0,
         holdersMaxPercentageReward: 20,
+        workerDrandMaxPercentageReward: 10,
         pollEndHeight: msg.pollEndHeight
     };
     config(deps.storage).save(&state)?;
@@ -783,7 +784,7 @@ pub fn handle_proposal(
     } else if let Proposal::DrandWorkerFeePercentage = proposal {
         match amount {
             Some(percentage) =>{
-                if percentage.u128() as u8 > 100 {
+                if percentage.u128() as u8 > state.workerDrandMaxPercentageReward {
                     return Err(ContractError::ParamRequiredForThisProposal("DrandWorkerFeePercentage amount between 0 to 100".to_string()));
                 }
                 proposalAmount = percentage;
@@ -1246,7 +1247,6 @@ mod tests {
     use crate::msg::{HandleMsg, InitMsg, QueryMsg};
     // DRAND
     use drand_verify::{verify, g1_from_fixed, g1_from_variable};
-
     use hex_literal::hex;
     use sha2::{Digest, Sha256};
 
