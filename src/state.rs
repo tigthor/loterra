@@ -1,9 +1,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary, Order};
+use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary};
 use cosmwasm_storage::{singleton, singleton_read, ReadonlySingleton, Singleton, PrefixedStorage, prefixed, ReadonlyPrefixedStorage, prefixed_read, Bucket, ReadonlyBucket, bucket_read, bucket};
-use crate::error::ContractError;
+
 
 
 pub static CONFIG_KEY: &[u8] = b"config";

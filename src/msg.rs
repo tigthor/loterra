@@ -1,8 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::state::{State, WinnerInfoState, PollInfoState, PollStatus, Proposal};
+use crate::state::{State, WinnerInfoState, PollStatus, Proposal};
 
-use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary, HumanAddr};
+use cosmwasm_std::{CanonicalAddr, Uint128, Binary, HumanAddr};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {

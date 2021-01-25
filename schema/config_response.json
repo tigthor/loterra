@@ -30,7 +30,8 @@
     "prizeRankWinnerPercentage",
     "tokenHolderPercentageFeeReward",
     "tokenHolderSupply",
-    "validatorMinAmountToAllowClaim"
+    "validatorMinAmountToAllowClaim",
+    "workerDrandMaxPercentageReward"
   ],
   "properties": {
     "blockClaim": {
@@ -155,6 +156,11 @@
     },
     "validatorMinAmountToAllowClaim": {
       "$ref": "#/definitions/Uint128"
+    },
+    "workerDrandMaxPercentageReward": {
+      "type": "integer",
+      "format": "uint8",
+      "minimum": 0.0
     }
   },
   "definitions": {
