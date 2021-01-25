@@ -22,34 +22,34 @@ pub enum ContractError {
     ExtraDenom(String),
 
     #[error("You need to delegate to the lottery validator first")]
-    NoDelegations{},
+    NoDelegations {},
 
     #[error("Need players to play the lottery")]
-    NoPlayers{},
+    NoPlayers {},
 
     #[error("Sent extra delegation")]
-    ExtraDelegation{},
+    ExtraDelegation {},
 
     #[error("You have already claimed your reward for today")]
-    AlreadyClaimed{},
+    AlreadyClaimed {},
 
     #[error("Do not send funds with {0}")]
     DoNotSendFunds(String),
 
     #[error("Ico is ended")]
-    TheIcoIsEnded{},
+    TheIcoIsEnded {},
 
     #[error("You need at least 1% of total shares")]
-    SharesTooLow{},
+    SharesTooLow {},
 
     #[error("The lottery is about to start wait until the end")]
-    LotteryAboutToStart{},
+    LotteryAboutToStart {},
 
     #[error("Drand signature is invalid")]
-    InvalidSignature{},
+    InvalidSignature {},
 
     #[error("Drand round is invalid")]
-    InvalidRound{},
+    InvalidRound {},
 
     #[error("You need to delegate the majority of your funds to a validator who own {0}")]
     ValidatorNotAuthorized(String),
@@ -58,16 +58,16 @@ pub enum ContractError {
     DelegationTooLow(String),
 
     #[error("No beacon")]
-    NoBeacon{},
+    NoBeacon {},
 
     #[error("Not authorized use combination of [a-f] and [0-9] with length {0}")]
     CombinationNotAuthorized(String),
 
     #[error("Sorry you have no prizes")]
-    NoPrizes{},
+    NoPrizes {},
 
     #[error("No one won prizes")]
-    NoWinners{},
+    NoWinners {},
 
     #[error("Description too short min {0} characters")]
     DescriptionTooShort(String),
@@ -76,19 +76,19 @@ pub enum ContractError {
     DescriptionTooLong(String),
 
     #[error("This proposal does not exist")]
-    ProposalNotFound{},
+    ProposalNotFound {},
 
     #[error("This proposal is expired")]
-    ProposalExpired{},
+    ProposalExpired {},
 
     #[error("This proposal is not expired")]
-    ProposalNotExpired{},
+    ProposalNotExpired {},
 
     #[error("For this proposal {0} is mandatory")]
     ParamRequiredForThisProposal(String),
 
     #[error("Already voted you only can vote one time per proposal")]
-    AlreadyVoted{},
+    AlreadyVoted {},
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }

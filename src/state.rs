@@ -1,10 +1,11 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Storage, Uint128, Binary};
-use cosmwasm_storage::{singleton, singleton_read, ReadonlySingleton, Singleton, PrefixedStorage, prefixed, ReadonlyPrefixedStorage, prefixed_read, Bucket, ReadonlyBucket, bucket_read, bucket};
-
-
+use cosmwasm_std::{Binary, CanonicalAddr, Storage, Uint128};
+use cosmwasm_storage::{
+    bucket, bucket_read, prefixed, prefixed_read, singleton, singleton_read, Bucket,
+    PrefixedStorage, ReadonlyBucket, ReadonlyPrefixedStorage, ReadonlySingleton, Singleton,
+};
 
 pub static CONFIG_KEY: &[u8] = b"config";
 const BEACONS_KEY: &[u8] = b"beacons";
@@ -43,7 +44,6 @@ pub struct State {
     pub holdersMaxPercentageReward: u8,
     pub workerDrandMaxPercentageReward: u8,
     pub pollEndHeight: u64,
-
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
@@ -53,10 +53,10 @@ pub fn config_read(storage: &dyn Storage) -> ReadonlySingleton<State> {
     singleton_read(storage, CONFIG_KEY)
 }
 
-pub fn beacons_storage(storage: &mut dyn Storage) -> PrefixedStorage{
+pub fn beacons_storage(storage: &mut dyn Storage) -> PrefixedStorage {
     prefixed(storage, BEACONS_KEY)
 }
-pub fn beacons_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage{
+pub fn beacons_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage {
     prefixed_read(storage, BEACONS_KEY)
 }
 
@@ -64,10 +64,10 @@ pub fn beacons_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage{
 pub struct Combination {
     pub addresses: Vec<CanonicalAddr>,
 }
-pub fn combination_storage(storage: &mut dyn Storage) -> Bucket<Combination>{
+pub fn combination_storage(storage: &mut dyn Storage) -> Bucket<Combination> {
     bucket(storage, COMBINATION_KEY)
 }
-pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Combination>{
+pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Combination> {
     bucket_read(storage, COMBINATION_KEY)
 }
 
@@ -81,20 +81,20 @@ pub struct Winner {
     pub winners: Vec<WinnerInfoState>,
 }
 
-pub fn winner_storage(storage: &mut dyn Storage) -> Bucket<Winner>{
+pub fn winner_storage(storage: &mut dyn Storage) -> Bucket<Winner> {
     bucket(storage, WINNER_KEY)
 }
 
-pub fn winner_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Winner>{
+pub fn winner_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Winner> {
     bucket_read(storage, WINNER_KEY)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub enum  PollStatus {
+pub enum PollStatus {
     InProgress,
     Passed,
     Rejected,
-    RejectedByCreator
+    RejectedByCreator,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -108,7 +108,7 @@ pub enum Proposal {
     JackpotRewardPercentage,
     ClaimEveryBlock,
     // test purpose
-    NotExist
+    NotExist,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -125,14 +125,13 @@ pub struct PollInfoState {
     pub proposal: Proposal,
 }
 
-pub fn poll_storage(storage: &mut dyn Storage) -> Bucket<PollInfoState>{
+pub fn poll_storage(storage: &mut dyn Storage) -> Bucket<PollInfoState> {
     bucket(storage, POLL_KEY)
 }
 
-pub fn poll_storage_read(storage: &dyn Storage) -> ReadonlyBucket<PollInfoState>{
+pub fn poll_storage_read(storage: &dyn Storage) -> ReadonlyBucket<PollInfoState> {
     bucket_read(storage, POLL_KEY)
 }
-
 
 /*
 pub fn combination_storage(storage: &mut dyn Storage) -> PrefixedStorage{
@@ -142,4 +141,3 @@ pub fn combination_storage(storage: &mut dyn Storage) -> PrefixedStorage{
 pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage{
     prefixed_read(storage, COMBINATION_KEY)
 }*/
-

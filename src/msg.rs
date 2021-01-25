@@ -1,8 +1,8 @@
+use crate::state::{PollStatus, Proposal, State, WinnerInfoState};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::state::{State, WinnerInfoState, PollStatus, Proposal};
 
-use cosmwasm_std::{CanonicalAddr, Uint128, Binary, HumanAddr};
+use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -33,15 +33,11 @@ pub struct InitMsg {
     pub pollEndHeight: u64,
 }
 
-
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
     /// Registering to the lottery
-    Register {
-        combination: String,
-    },
+    Register { combination: String },
     /// Run the lottery
     Play {
         round: u64,
@@ -64,21 +60,14 @@ pub enum HandleMsg {
         description: String,
         proposal: Proposal,
         amount: Option<Uint128>,
-        prizePerRank: Option<Vec<u8>>
+        prizePerRank: Option<Vec<u8>>,
     },
     /// Vote the proposal
-    Vote {
-        pollId: u64,
-        approve: bool
-    },
+    Vote { pollId: u64, approve: bool },
     /// Valid a proposal
-    PresentProposal {
-        pollId: u64
-    },
+    PresentProposal { pollId: u64 },
     /// Reject a proposal
-    RejectProposal {
-        pollId: u64
-    }
+    RejectProposal { pollId: u64 },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -89,30 +78,26 @@ pub enum QueryMsg {
     /// Get the last randomness
     LatestDrand {},
     /// Get a specific randomness
-    GetRandomness {
-        round: u64
-    },
+    GetRandomness { round: u64 },
     /// Combination lottery numbers and address
     Combination {},
     /// Winner lottery rank and address
     Winner {},
     /// Get specific poll
-    GetPoll {
-        pollId: u64
-    },
+    GetPoll { pollId: u64 },
     /// Get the specific round to query from Drand to play the lottery
-    GetRound {}
+    GetRound {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetResponse {
-    pub randomness: Binary
+    pub randomness: Binary,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct LatestResponse {
     pub round: u64,
-    pub randomness: Binary
+    pub randomness: Binary,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -153,8 +138,7 @@ pub type ConfigResponse = State;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Round {
-    pub nextRound: u64
+    pub nextRound: u64,
 }
 
 pub type RoundResponse = Round;
-
