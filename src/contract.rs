@@ -1243,7 +1243,7 @@ mod tests {
     use drand_verify::{verify, g1_from_fixed, g1_from_variable};
     use hex_literal::hex;
     use sha2::{Digest, Sha256};
-
+    use crate::error::ContractError::Std;
 
 
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
