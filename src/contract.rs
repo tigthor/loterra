@@ -1,19 +1,16 @@
-use cosmwasm_std::{to_binary, attr, Context, Api, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, Querier, StdResult, Storage, BankMsg, Coin, StakingMsg, StakingQuery, StdError, AllDelegationsResponse, HumanAddr, Uint128, Delegation, Decimal, BankQuery, Order, CanonicalAddr, ByteArray};
+use cosmwasm_std::{to_binary, attr, Binary, Env, Deps, DepsMut, HandleResponse, InitResponse, MessageInfo, StdResult, BankMsg, Coin, StdError, Uint128, Decimal, Order, CanonicalAddr};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo, AllWinnerResponse, WinnerInfo, GetPollResponse, RoundResponse, Round};
-use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage, Combination, winner_storage_read, winner_storage, Winner, WinnerInfoState, poll_storage_read, PollInfoState, PollStatus, poll_storage, Proposal};
-use crate::error::ContractError::Std;
-use std::fs::canonicalize;
-use schemars::_serde_json::map::Entry::Vacant;
-use std::io::Stderr;
-use std::ops::{Mul, Sub, Add};
-use drand_verify::{verify, g1_from_fixed, g1_from_variable};
+use crate::msg::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, LatestResponse, GetResponse, AllCombinationResponse, CombinationInfo, AllWinnerResponse, WinnerInfo, GetPollResponse, RoundResponse};
+use crate::state::{config, config_read, State, beacons_storage, beacons_storage_read, combination_storage_read, combination_storage, Combination, winner_storage_read, winner_storage, Winner, WinnerInfoState, poll_storage_read, PollStatus, poll_storage, Proposal, PollInfoState};
+
+use std::ops::{Mul, Sub};
+use drand_verify::{verify, g1_from_variable};
 use sha2::{Digest, Sha256};
 use regex::Regex;
 use hex;
-use regex::internal::Input;
-use serde::de::Unexpected::Str;
+
+
 
 const MIN_DESC_LEN: u64 = 6;
 const MAX_DESC_LEN: u64 = 64;
@@ -142,10 +139,10 @@ pub fn handle_register(
     if keyExist.is_ok(){
         let mut combinationStorage = keyExist.unwrap();
         combinationStorage.addresses.push(deps.api.canonical_address(&info.sender)?);
-        combination_storage(deps.storage).save(&combination.as_bytes(), &combinationStorage);
+        combination_storage(deps.storage).save(&combination.as_bytes(), &combinationStorage)?;
     }
     else{
-        combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]});
+        combination_storage(deps.storage).save(&combination.as_bytes(), &Combination{ addresses:vec![deps.api.canonical_address(&info.sender)?]})?;
     }
 
     Ok(HandleResponse{
@@ -210,7 +207,7 @@ pub fn handle_ticket(
     }
 
     // Save the new state
-    config(deps.storage).save(&state);
+    config(deps.storage).save(&state)?;
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
@@ -331,7 +328,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                    winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ winners: dataWinner})?;
                 }
 
 
@@ -346,7 +343,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                    winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ winners: dataWinner})?;
                 }
             }
             else if count == winningCombination.len() - 2 {
@@ -359,7 +356,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                    winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ winners: dataWinner})?;
                 }
             }
             else if count == winningCombination.len() - 3 {
@@ -372,7 +369,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                    winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ winners: dataWinner})?;
                 }
             }
             else if count == winningCombination.len() - 4 {
@@ -385,7 +382,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ winners: dataWinner});
+                    winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ winners: dataWinner})?;
                 }
             }
             // Re init the counter for the next players
@@ -411,7 +408,7 @@ pub fn handle_play(
     }
 
     // Save the new state
-    config(deps.storage).save(&state);
+    config(deps.storage).save(&state)?;
 
     Ok(HandleResponse {
         messages: vec![msg.into()],
@@ -465,7 +462,7 @@ pub fn handle_ico(
 
     state.tokenHolderSupply += sent;
     // Save the new state
-    config(deps.storage).save(&state);
+    config(deps.storage).save(&state)?;
 
     Ok(HandleResponse {
         messages: vec![msg.into()],
@@ -480,7 +477,7 @@ pub fn handle_buy(
     info: MessageInfo
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
-    let mut state = config(deps.storage).load()?;
+    let state = config(deps.storage).load()?;
 
     // Get the funds
     let sent = match info.sent_funds.len() {
@@ -569,7 +566,7 @@ pub fn handle_reward(
     // Update the holdersReward
     state.holdersRewards =  state.holdersRewards.sub(reward).unwrap();
     // Save the new state
-    config(deps.storage).save(&state);
+    config(deps.storage).save(&state)?;
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address.clone(),
@@ -639,7 +636,7 @@ pub fn handle_jackpot(
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ winners: newAddresses});
+                        winner_storage(deps.storage).save(&1_u8.to_be_bytes(), &Winner{ winners: newAddresses})?;
                     },
                     2 => {
                         // Prizes second rank
@@ -647,7 +644,7 @@ pub fn handle_jackpot(
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ winners: newAddresses});
+                        winner_storage(deps.storage).save(&2_u8.to_be_bytes(), &Winner{ winners: newAddresses})?;
                     },
                     3 =>{
                         // Prizes third rank
@@ -655,7 +652,7 @@ pub fn handle_jackpot(
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ winners: newAddresses});
+                        winner_storage(deps.storage).save(&3_u8.to_be_bytes(), &Winner{ winners: newAddresses})?;
                     },
                     4 =>{
                         // Prizes four rank
@@ -663,14 +660,14 @@ pub fn handle_jackpot(
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ winners: newAddresses});
+                        winner_storage(deps.storage).save(&4_u8.to_be_bytes(), &Winner{ winners: newAddresses})?;
                     },
                     5 => {
                         // Prizes five rank
                         ticketWinning += Uint128(1);
                         // Remove the address from the array and save
                         let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ winners: newAddresses});
+                        winner_storage(deps.storage).save(&5_u8.to_be_bytes(), &Winner{ winners: newAddresses})?;
                     },
                     _ => ()
                 }
@@ -921,7 +918,7 @@ pub fn handle_vote(
     pollId: u64,
     approve: bool
 ) -> Result<HandleResponse, ContractError> {
-    let mut store = poll_storage(deps.storage).load(&pollId.to_be_bytes())?;
+    let store = poll_storage(deps.storage).load(&pollId.to_be_bytes())?;
     let sender = deps.api.canonical_address(&info.sender).unwrap();
 
     // Ensure the sender not sending funds accidentally
@@ -951,9 +948,6 @@ pub fn handle_vote(
                 pollData.no_voters.push(sender.clone());
                 Ok(pollData)
             })?;
-        },
-        _ => {
-            return Err(ContractError::Unauthorized {});
         }
     }
 
@@ -1116,7 +1110,7 @@ pub fn handle_present_proposal(
         Ok(pollData)
     })?;
 
-    config(deps.storage).save(&state);
+    config(deps.storage).save(&state)?;
 
     Ok(HandleResponse {
         messages: vec![],
