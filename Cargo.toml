@@ -40,7 +40,6 @@ thiserror = { version = "1.0.23" }
 drand-verify = "0.1.0"
 sha2 = "0.9"
 hex = "0.4"
-wasm-bindgen = { version = "0.2.67", optional = true }
 regex = "1.4.3"
 
 [dev-dependencies]
