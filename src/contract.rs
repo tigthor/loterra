@@ -1349,7 +1349,7 @@ mod tests {
         let res = query_all_winner(deps.as_ref()).unwrap();
         println!("{:?}", res);
     }
-    #[test]
+    /*#[test]
     fn random (){
         //println!("{}", 1432439234 % 100);
         let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
@@ -1382,7 +1382,7 @@ mod tests {
         // println!("{}", time);
         println!("{}", round.floor());
         println!("{}", fromGenesis);
-    }
+    }*/
     mod register {
         use super::*;
         use crate::error::ContractError;
