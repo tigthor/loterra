@@ -16,7 +16,6 @@ use crate::state::{
 
 use drand_verify::{g1_from_variable, verify};
 use hex;
-use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::ops::{Mul, Sub};
 
@@ -101,6 +100,17 @@ pub fn handle(
     }
 }
 
+// TODO: there is probably some built-in function for this, but this is a simple way to do it
+fn is_lower_hex(combination: &str, len: u8) -> bool {
+    if combination.len() != (len as usize) {
+        return false;
+    }
+    if ! combination.chars().all(|c| (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9')) {
+        return false;
+    }
+    true
+}
+
 pub fn handle_register(
     deps: DepsMut,
     _env: Env,
@@ -111,9 +121,7 @@ pub fn handle_register(
     let state = config(deps.storage).load()?;
 
     // Regex to check if the combination is allowed
-    let regexBuild = format!(r"\b[a-f0-9]{{{}}}\b", state.combinationLen);
-    let re = Regex::new(regexBuild.as_str()).unwrap();
-    if !re.is_match(&combination) {
+    if !is_lower_hex(&combination, state.combinationLen) {
         return Err(ContractError::CombinationNotAuthorized(
             state.combinationLen.to_string(),
         ));
