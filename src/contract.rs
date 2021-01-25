@@ -101,7 +101,7 @@ pub fn handle_register(
     combination: String
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
-    let mut state = config(deps.storage).load()?;
+    let state = config(deps.storage).load()?;
 
     // Regex to check if the combination is allowed
     let regexBuild = format!(r"\b[a-f0-9]{{{}}}\b", state.combinationLen);
