@@ -14,7 +14,7 @@ use crate::state::{
     PollInfoState, PollStatus, Proposal, State, Winner, WinnerInfoState,
 };
 
-use drand_verify::{g1_from_variable, verify};
+use drand_verify::{g1_from_variable, verify, derive_randomness};
 use sha2::{Digest, Sha256};
 use std::ops::{Mul, Sub};
 
@@ -260,13 +260,6 @@ pub fn handle_ticket(
         attributes: vec![attr("action", "claim"), attr("to", &sender)],
         data: None,
     })
-}
-
-// Derives a 32 byte randomness from the beacon's signature
-fn derive_randomness(signature: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(signature);
-    hasher.finalize().into()
 }
 
 pub fn handle_play(
