@@ -105,7 +105,10 @@ fn is_lower_hex(combination: &str, len: u8) -> bool {
     if combination.len() != (len as usize) {
         return false;
     }
-    if ! combination.chars().all(|c| (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9')) {
+    if !combination
+        .chars()
+        .all(|c| (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9'))
+    {
         return false;
     }
     true
