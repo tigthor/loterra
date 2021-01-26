@@ -1764,7 +1764,7 @@ mod tests {
                 amount: Uint128(100_000_000),
             }]);
             default_init(&mut deps);
-            // Test if we get error if combination is not authorized
+            // Test if we get error if combination is not authorized len superior of len authorized
             let msg = HandleMsg::Register {
                 combination: "1e3fabgvcc".to_string(),
             };
@@ -1776,6 +1776,25 @@ mod tests {
                 }],
             );
             let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+            match res {
+                Err(ContractError::CombinationNotAuthorized(msg)) => {
+                    assert_eq!("6", msg);
+                }
+                _ => panic!("Unexpected error"),
+            }
+            // Test if we get error if combination is not authorized
+            let msg = HandleMsg::Register {
+                combination: "9a3f0g".to_string(),
+            };
+            let info = mock_info(
+                HumanAddr::from("delegator12"),
+                &[Coin {
+                    denom: "ujack".to_string(),
+                    amount: Uint128(3),
+                }],
+            );
+            let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+            println!("{:?}", res);
             match res {
                 Err(ContractError::CombinationNotAuthorized(msg)) => {
                     assert_eq!("6", msg);
