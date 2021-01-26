@@ -15,7 +15,6 @@ const POLL_KEY: &[u8] = b"poll";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub owner: CanonicalAddr,
     pub blockTimePlay: u64,
     pub everyBlockTimePlay: u64,
     pub blockClaim: u64,
