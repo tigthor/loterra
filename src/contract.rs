@@ -14,7 +14,7 @@ use crate::state::{
     PollInfoState, PollStatus, Proposal, State, Winner, WinnerInfoState,
 };
 
-use drand_verify::{g1_from_variable, verify, derive_randomness};
+use drand_verify::{derive_randomness, g1_from_variable, verify};
 use sha2::{Digest, Sha256};
 use std::ops::{Mul, Sub};
 
