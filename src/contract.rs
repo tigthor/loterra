@@ -154,9 +154,9 @@ pub fn handle_register(
     }
 
     // Save combination and addresses to the bucket
-    let keyExist = combination_storage(deps.storage).load(&combination.as_bytes());
+    let keyExist = combination_storage(deps.storage).load(&combination.as_bytes()).unwrap();
     if keyExist.is_ok() {
-        let mut combinationStorage = keyExist.unwrap();
+        let mut combinationStorage = keyExist;
         combinationStorage
             .addresses
             .push(deps.api.canonical_address(&info.sender)?);
