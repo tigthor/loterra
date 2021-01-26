@@ -132,4 +132,3 @@ pub fn poll_storage(storage: &mut dyn Storage) -> Bucket<PollInfoState> {
 pub fn poll_storage_read(storage: &dyn Storage) -> ReadonlyBucket<PollInfoState> {
     bucket_read(storage, POLL_KEY)
 }
-
