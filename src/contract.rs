@@ -24,7 +24,7 @@ const MAX_DESC_LEN: u64 = 64;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
-pub fn init(deps: DepsMut, _env: Env, info: MessageInfo, msg: InitMsg) -> StdResult<InitResponse> {
+pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdResult<InitResponse> {
     let state = State {
         blockTimePlay: msg.blockTimePlay,
         everyBlockTimePlay: msg.everyBlockTimePlay,
