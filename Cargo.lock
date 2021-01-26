@@ -270,7 +270,6 @@ dependencies = [
  "hex-literal",
  "schemars",
  "serde",
- "sha2",
  "thiserror",
 ]
 

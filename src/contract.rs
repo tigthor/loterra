@@ -15,7 +15,6 @@ use crate::state::{
 };
 
 use drand_verify::{derive_randomness, g1_from_variable, verify};
-use sha2::{Digest, Sha256};
 use std::ops::{Mul, Sub};
 
 const MIN_DESC_LEN: u64 = 6;
@@ -1429,9 +1428,8 @@ mod tests {
     use std::collections::HashMap;
     // DRAND
     use crate::error::ContractError::Std;
-    use drand_verify::{g1_from_fixed, g1_from_variable, verify};
+    use drand_verify::{g1_from_fixed, g1_from_variable, verify, derive_randomness};
     use hex_literal::hex;
-    use sha2::{Digest, Sha256};
 
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
         const DENOM_TICKET: &str = "ujack";
@@ -1505,13 +1503,6 @@ mod tests {
         let info = mock_info(HumanAddr::from("owner"), &[]);
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
     }
-    /// Derives a 32 byte randomness from the beacon's signature
-    fn derive_randomness(signature: &[u8]) -> [u8; 32] {
-        let mut hasher = Sha256::new();
-        hasher.update(signature);
-        hasher.finalize().into()
-    }
-
     #[test]
     fn proper_init() {
         let mut deps = mock_dependencies(&[Coin {
