@@ -1428,7 +1428,7 @@ mod tests {
     use std::collections::HashMap;
     // DRAND
     use crate::error::ContractError::Std;
-    use drand_verify::{g1_from_fixed, g1_from_variable, verify, derive_randomness};
+    use drand_verify::{derive_randomness, g1_from_fixed, g1_from_variable, verify};
     use hex_literal::hex;
 
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
