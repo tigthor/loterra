@@ -106,7 +106,7 @@ fn is_lower_hex(combination: &str, len: u8) -> bool {
     }
     if !combination
         .chars()
-        .all(|c| (c >= 'a' && c <= 'f') || (c >= '0' && c <= '9'))
+        .all(|c| ('a'..='f').contains(&c) || ('0'..='9').contains(&c))
     {
         return false;
     }
@@ -136,14 +136,10 @@ pub fn handle_register(
             if info.sent_funds[0].denom == state.denomTicket {
                 Ok(info.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(
-                    state.denomTicket.clone().to_string(),
-                ))
+                Err(ContractError::MissingDenom(state.denomTicket))
             }
         }
-        _ => Err(ContractError::ExtraDenom(
-            state.denomTicket.clone().to_string(),
-        )),
+        _ => Err(ContractError::ExtraDenom(state.denomTicket)),
     }?;
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
@@ -250,10 +246,10 @@ pub fn handle_ticket(
     config(deps.storage).save(&state)?;
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address.clone(),
+        from_address: _env.contract.address,
         to_address: deps.api.human_address(&sender).unwrap(),
         amount: vec![Coin {
-            denom: state.denomTicket.clone(),
+            denom: state.denomTicket,
             amount: Uint128(1),
         }],
     };
@@ -293,7 +289,7 @@ pub fn handle_play(
     // Get all keys in the bucket winner
     let keys = winner_storage(deps.storage)
         .range(None, None, Order::Ascending)
-        .flat_map(|item| item.and_then(|(key, _)| Ok(key)))
+        .flat_map(|item| item.map(|(key, _)| key))
         .collect::<Vec<Vec<u8>>>();
     // Empty winner for the next play
     for x in keys {
@@ -466,7 +462,7 @@ pub fn handle_play(
     }
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address.clone(),
+        from_address: _env.contract.address,
         to_address: info.sender.clone(),
         amount: vec![Coin {
             denom: state.denomDelegation.clone(),
@@ -479,7 +475,7 @@ pub fn handle_play(
     // Get all keys in the bucket combination
     let keys = combination_storage(deps.storage)
         .range(None, None, Order::Ascending)
-        .flat_map(|item| item.and_then(|(key, _)| Ok(key)))
+        .flat_map(|item| item.map(|(key, _)| key))
         .collect::<Vec<Vec<u8>>>();
     // Empty combination for the next play
     for x in keys {
@@ -537,7 +533,7 @@ pub fn handle_ico(
     }
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address.clone(),
+        from_address: _env.contract.address,
         to_address: info.sender.clone(),
         amount: vec![Coin {
             denom: state.denomShare.clone(),
@@ -596,10 +592,10 @@ pub fn handle_buy(
     let amountToSend = sent.u128() / state.denomDelegationDecimal.u128();
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address.clone(),
+        from_address: _env.contract.address,
         to_address: info.sender.clone(),
         amount: vec![Coin {
-            denom: state.denomTicket.clone(),
+            denom: state.denomTicket,
             amount: Uint128(amountToSend),
         }],
     };
@@ -672,10 +668,10 @@ pub fn handle_reward(
     config(deps.storage).save(&state)?;
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address.clone(),
+        from_address: _env.contract.address,
         to_address: deps.api.human_address(&sender).unwrap(),
         amount: vec![Coin {
-            denom: state.denomDelegation.clone(),
+            denom: state.denomDelegation,
             amount: reward,
         }],
     };
@@ -693,14 +689,17 @@ fn remove_from_storage(
     winner: &WinnerInfo,
 ) -> Vec<WinnerInfoState> {
     // Update to claimed
-    let mut newAddress = winner.winners.clone();
-    for x in 0..newAddress.len() {
-        if newAddress[x].address == deps.api.canonical_address(&info.sender).unwrap() {
-            newAddress[x].claimed = true;
-        }
-    }
-
-    return newAddress;
+    winner
+        .winners
+        .iter()
+        .map(|win| {
+            let mut winx = win.clone();
+            if winx.address == deps.api.canonical_address(&info.sender).unwrap() {
+                winx.claimed = true;
+            }
+            winx
+        })
+        .collect::<Vec<WinnerInfoState>>()
 }
 
 // Players claim the jackpot
@@ -854,7 +853,7 @@ pub fn handle_jackpot(
         // Ensure the contract have the balance
         if !ticketBalance.amount.is_zero() || ticketBalance.amount > ticketWinning {
             amountToSend.push(Coin {
-                denom: state.denomTicket.clone(),
+                denom: state.denomTicket,
                 amount: ticketWinning,
             });
         }
@@ -874,7 +873,7 @@ pub fn handle_jackpot(
     }
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address.clone(),
+        from_address: _env.contract.address,
         to_address: deps
             .api
             .human_address(&deps.api.canonical_address(&info.sender).unwrap())
@@ -1190,7 +1189,7 @@ pub fn handle_reject_proposal(
     })
 }
 
-fn total_weight(deps: &DepsMut, state: &State, addresses: &Vec<CanonicalAddr>) -> Uint128 {
+fn total_weight(deps: &DepsMut, state: &State, addresses: &[CanonicalAddr]) -> Uint128 {
     let mut weight = Uint128::zero();
     for address in addresses {
         let humanAddress = deps.api.human_address(&address).unwrap();
@@ -1280,13 +1279,13 @@ pub fn handle_present_proposal(
             state.jackpotPercentageReward = store.amount.u128() as u8;
         }
         Proposal::MinAmountDelegator => {
-            state.delegatorMinAmountInDelegation = store.amount.clone();
+            state.delegatorMinAmountInDelegation = store.amount;
         }
         Proposal::PrizePerRank => {
             state.prizeRankWinnerPercentage = store.prizeRank;
         }
         Proposal::MinAmountValidator => {
-            state.validatorMinAmountToAllowClaim = store.amount.clone();
+            state.validatorMinAmountToAllowClaim = store.amount;
         }
         Proposal::HolderFeePercentage => {
             state.holdersMaxPercentageReward = store.amount.u128() as u8
