@@ -154,13 +154,14 @@ pub fn handle_register(
     }
 
     // Save combination and addresses to the bucket
-    match combination_storage(deps.storage).may_load(&combination.as_bytes())?{
+    match combination_storage(deps.storage).may_load(&combination.as_bytes())? {
         Some(c) => {
             let mut combinationStorage = c;
-            combinationStorage.addresses
+            combinationStorage
+                .addresses
                 .push(deps.api.canonical_address(&info.sender)?);
             combination_storage(deps.storage).save(&combination.as_bytes(), &combinationStorage)?;
-        },
+        }
         None => {
             combination_storage(deps.storage).save(
                 &combination.as_bytes(),
@@ -168,9 +169,8 @@ pub fn handle_register(
                     addresses: vec![deps.api.canonical_address(&info.sender)?],
                 },
             )?;
-        },
+        }
     };
-
 
     Ok(HandleResponse {
         messages: vec![],
