@@ -303,7 +303,7 @@ pub fn handle_play(
     }
     // Get the current round and check if it is a valid round.
     let fromGenesis = state.blockTimePlay - state.drandGenesisTime;
-    let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 1.0;
+    let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 10.0;
 
     if round != nextRound as u64 {
         return Err(ContractError::InvalidRound {});
@@ -1223,11 +1223,9 @@ pub fn handle_present_proposal(
     if store.end_height > _env.block.height {
         return Err(ContractError::ProposalNotExpired {});
     }
-    println!("{:?}", store);
     // Calculating the weight
     let yesWeight = total_weight(&deps, &state, &store.yes_voters);
     // let noWeight = total_weight(&deps, &state, &store.no_voters);
-    println!("{}", yesWeight.u128());
 
     // Get the amount
     let mut finalVoteWeightInPercentage: u128 = 0;
@@ -2376,11 +2374,11 @@ mod tests {
 
         fn init_combination(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
             // Init the bucket with players to storage
-            let combination = "950a51";
-            let combination2 = "950a52";
-            let combination3 = "950a90";
-            let combination4 = "950f92";
-            let combination5 = "954f92";
+            let combination = "6a497a";
+            let combination2 = "6a497b";
+            let combination3 = "6a499b";
+            let combination4 = "6a429b";
+            let combination5 = "6a129b";
             let addresses1 = vec![
                 deps.api
                     .canonical_address(&HumanAddr("address1".to_string()))
@@ -2437,9 +2435,9 @@ mod tests {
         }
         #[test]
         fn success() {
-            let signature  = hex::decode("99afb21f4194b282b5025cad5855b01e7f562612233aecd49ed76a32987ca7e1d3abe043ba280efd2a97467fba2639060d9bd4608e0ab5fa10754b025e011d658a73dac6ae265325a0d8c4d1dd45f0b488150e89567f807ce50cd8ba58684dde").unwrap().into();
-            let previous_signature  = hex::decode("a04b9a86fb2bcaaac6a595c6405bf5bb1af657c078bf7a88f8ec74b1d363ae17e97e7f3fe466e2fc699a656312f646aa009a8b0f5e5d6b2d603a40bec29132827e59fc8f85c971482a8100bd3301c0c5c42e7f03ddaa87ba15134faa1a629027").unwrap().into();
-            let round: u64 = 519530;
+            let signature  = hex::decode("97005dd446abb821615600363ece7547be11d7866ae7eb515588ac920f12da9f9ecef5a13e1c1e2f5afac09cb34dd99a15f198f49cbf41c9d34daa2b925c624730d4ed759d3fb741fa8e6afe06f46a8a6d6ae37b9c5be1cc7dc1728bfc283eec").unwrap().into();
+            let previous_signature  = hex::decode("b636086bbf6f203b421968dfc37f3097ec43d07a61bbbf7190b094307d585c8aab977672b55f79940729f5bbfc39b9b90c81f14123a3ceaea1697f0ce1ab53059855f706981e803c89d984b2d65a754105f26efeb953d898216e8988cabb3c99").unwrap().into();
+            let round: u64 = 519539;
             let msg = HandleMsg::Play {
                 round: round,
                 previous_signature: previous_signature,
@@ -2490,7 +2488,7 @@ mod tests {
             // Test if round was saved
             let res = query_latest(deps.as_ref()).unwrap();
             println!("{:?}", res);
-            assert_eq!(519530, res.round);
+            assert_eq!(519539, res.round);
 
             // Test if winners have been added at rank 1
             let res = winner_storage_read(deps.as_ref().storage)
@@ -2530,9 +2528,9 @@ mod tests {
 
         #[test]
         fn do_not_send_funds() {
-            let signature  = hex::decode("99afb21f4194b282b5025cad5855b01e7f562612233aecd49ed76a32987ca7e1d3abe043ba280efd2a97467fba2639060d9bd4608e0ab5fa10754b025e011d658a73dac6ae265325a0d8c4d1dd45f0b488150e89567f807ce50cd8ba58684dde").unwrap().into();
-            let previous_signature  = hex::decode("a04b9a86fb2bcaaac6a595c6405bf5bb1af657c078bf7a88f8ec74b1d363ae17e97e7f3fe466e2fc699a656312f646aa009a8b0f5e5d6b2d603a40bec29132827e59fc8f85c971482a8100bd3301c0c5c42e7f03ddaa87ba15134faa1a629027").unwrap().into();
-            let round: u64 = 519530;
+            let signature  = hex::decode("97005dd446abb821615600363ece7547be11d7866ae7eb515588ac920f12da9f9ecef5a13e1c1e2f5afac09cb34dd99a15f198f49cbf41c9d34daa2b925c624730d4ed759d3fb741fa8e6afe06f46a8a6d6ae37b9c5be1cc7dc1728bfc283eec").unwrap().into();
+            let previous_signature  = hex::decode("b636086bbf6f203b421968dfc37f3097ec43d07a61bbbf7190b094307d585c8aab977672b55f79940729f5bbfc39b9b90c81f14123a3ceaea1697f0ce1ab53059855f706981e803c89d984b2d65a754105f26efeb953d898216e8988cabb3c99").unwrap().into();
+            let round: u64 = 519539;
             let msg = HandleMsg::Play {
                 round: round,
                 previous_signature: previous_signature,
@@ -2566,9 +2564,9 @@ mod tests {
 
         #[test]
         fn no_players_combination_empty() {
-            let signature  = hex::decode("99afb21f4194b282b5025cad5855b01e7f562612233aecd49ed76a32987ca7e1d3abe043ba280efd2a97467fba2639060d9bd4608e0ab5fa10754b025e011d658a73dac6ae265325a0d8c4d1dd45f0b488150e89567f807ce50cd8ba58684dde").unwrap().into();
-            let previous_signature  = hex::decode("a04b9a86fb2bcaaac6a595c6405bf5bb1af657c078bf7a88f8ec74b1d363ae17e97e7f3fe466e2fc699a656312f646aa009a8b0f5e5d6b2d603a40bec29132827e59fc8f85c971482a8100bd3301c0c5c42e7f03ddaa87ba15134faa1a629027").unwrap().into();
-            let round: u64 = 519530;
+            let signature  = hex::decode("97005dd446abb821615600363ece7547be11d7866ae7eb515588ac920f12da9f9ecef5a13e1c1e2f5afac09cb34dd99a15f198f49cbf41c9d34daa2b925c624730d4ed759d3fb741fa8e6afe06f46a8a6d6ae37b9c5be1cc7dc1728bfc283eec").unwrap().into();
+            let previous_signature  = hex::decode("b636086bbf6f203b421968dfc37f3097ec43d07a61bbbf7190b094307d585c8aab977672b55f79940729f5bbfc39b9b90c81f14123a3ceaea1697f0ce1ab53059855f706981e803c89d984b2d65a754105f26efeb953d898216e8988cabb3c99").unwrap().into();
+            let round: u64 = 519539;
             let msg = HandleMsg::Play {
                 round: round,
                 previous_signature: previous_signature,
