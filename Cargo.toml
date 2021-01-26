@@ -38,7 +38,6 @@ serde = { version = "1.0.103", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.23" }
 # Drand dependencies
 drand-verify = "0.1.0"
-sha2 = "0.9"
 hex = "0.4"
 
 [dev-dependencies]
