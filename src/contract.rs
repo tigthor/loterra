@@ -15,7 +15,6 @@ use crate::state::{
 };
 
 use drand_verify::{g1_from_variable, verify};
-use hex;
 use sha2::{Digest, Sha256};
 use std::ops::{Mul, Sub};
 
