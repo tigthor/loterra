@@ -26,7 +26,6 @@ const MAX_DESC_LEN: u64 = 64;
 // #[serde(rename_all = "snake_case")]
 pub fn init(deps: DepsMut, _env: Env, info: MessageInfo, msg: InitMsg) -> StdResult<InitResponse> {
     let state = State {
-        owner: deps.api.canonical_address(&info.sender)?,
         blockTimePlay: msg.blockTimePlay,
         everyBlockTimePlay: msg.everyBlockTimePlay,
         blockClaim: msg.blockClaim,
@@ -99,7 +98,7 @@ pub fn handle(
     }
 }
 
-// TODO: there is probably some built-in function for this, but this is a simple way to do it
+// There is probably some built-in function for this, but this is a simple way to do it
 fn is_lower_hex(combination: &str, len: u8) -> bool {
     if combination.len() != (len as usize) {
         return false;
