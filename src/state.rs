@@ -133,11 +133,3 @@ pub fn poll_storage_read(storage: &dyn Storage) -> ReadonlyBucket<PollInfoState>
     bucket_read(storage, POLL_KEY)
 }
 
-/*
-pub fn combination_storage(storage: &mut dyn Storage) -> PrefixedStorage{
-    prefixed(storage, COMBINATION_KEY)
-}
-
-pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage{
-    prefixed_read(storage, COMBINATION_KEY)
-}*/
