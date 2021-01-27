@@ -298,6 +298,17 @@ pub fn handle_play(
     if !info.sent_funds.is_empty() {
         return Err(ContractError::DoNotSendFunds("Play".to_string()));
     }
+    /*
+       TODO: We are modifying the state here state.blockTime! This is a bug in Round calculation
+    */
+    // Get the current round and check if it is a valid round.
+    let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
+    let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
+
+    if round != nextRound {
+        return Err(ContractError::InvalidRound {});
+    }
+
     // Make the contract callable for everyone every x blocks
     if _env.block.time > state.blockTimePlay {
         // Update the state
@@ -306,13 +317,7 @@ pub fn handle_play(
     } else {
         return Err(ContractError::Unauthorized {});
     }
-    // Get the current round and check if it is a valid round.
-    let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
-    let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
 
-    if round != nextRound {
-        return Err(ContractError::InvalidRound {});
-    }
     let pk = g1_from_variable(&state.drandPublicKey).unwrap();
     let valid = verify(&pk, round, &previous_signature, &signature).unwrap_or(false);
 
@@ -1471,6 +1476,7 @@ mod tests {
         }]);
         default_init(&mut deps);
         println!("{:?}", mock_env());
+        println!("{:?}", query_round(deps.as_ref()).unwrap());
     }
     #[test]
     fn get_round_play() {
@@ -2336,11 +2342,11 @@ mod tests {
 
         fn init_combination(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
             // Init the bucket with players to storage
-            let combination = "6a497a";
-            let combination2 = "6a497b";
-            let combination3 = "6a499b";
-            let combination4 = "6a429b";
-            let combination5 = "6a129b";
+            let combination = "6139d0";
+            let combination2 = "6139d3";
+            let combination3 = "613943";
+            let combination4 = "613543";
+            let combination5 = "612543";
             let addresses1 = vec![
                 deps.api
                     .canonical_address(&HumanAddr("address1".to_string()))
@@ -2397,9 +2403,9 @@ mod tests {
         }
         #[test]
         fn success() {
-            let signature  = hex::decode("97005dd446abb821615600363ece7547be11d7866ae7eb515588ac920f12da9f9ecef5a13e1c1e2f5afac09cb34dd99a15f198f49cbf41c9d34daa2b925c624730d4ed759d3fb741fa8e6afe06f46a8a6d6ae37b9c5be1cc7dc1728bfc283eec").unwrap().into();
-            let previous_signature  = hex::decode("b636086bbf6f203b421968dfc37f3097ec43d07a61bbbf7190b094307d585c8aab977672b55f79940729f5bbfc39b9b90c81f14123a3ceaea1697f0ce1ab53059855f706981e803c89d984b2d65a754105f26efeb953d898216e8988cabb3c99").unwrap().into();
-            let round: u64 = 519539;
+            let signature  = hex::decode("a619b278ab6266309c66254a82bf2404381aae232f083df1abb37f9825ba17b7618e1e0fc0503215c39e855775183be50d8ecefae9ec03e0d87184728228841bb792f3d1f8bf84f2afb7e9217b2eaddcb372d0ffdb0ad730d24b2eaf3d0751e2").unwrap().into();
+            let previous_signature  = hex::decode("b6b7f91ee0617a605a4f645dce7d5bdaf487483be949104d038394fa9adfc9289a2900fb9f39ab62983c7098680c495f038f6af6ed3b637594d01a9b068dc4aa3abcb9fbd150ab519260836e115c29c808f0dc40b50ddf1e34cc482b8626293a").unwrap().into();
+            let round: u64 = 504539;
             let msg = HandleMsg::Play {
                 round: round,
                 previous_signature: previous_signature,
@@ -2411,7 +2417,8 @@ mod tests {
             }]);
             default_init(&mut deps);
             init_combination(&mut deps);
-
+            // Get round
+            let roundFromQuerier = query_round(deps.as_ref()).unwrap();
             // Test if combination have been added correctly
             let res = query_all_combination(deps.as_ref()).unwrap();
             assert_eq!(5, res.combination.len());
@@ -2450,7 +2457,7 @@ mod tests {
             // Test if round was saved
             let res = query_latest(deps.as_ref()).unwrap();
             println!("{:?}", res);
-            assert_eq!(519539, res.round);
+            assert_eq!(roundFromQuerier.nextRound, res.round);
 
             // Test if winners have been added at rank 1
             let res = winner_storage_read(deps.as_ref().storage)
@@ -2481,7 +2488,15 @@ mod tests {
 
             // PLay second time before block time end error
             init_combination(&mut deps);
+            let signature  = hex::decode("a619b278ab6266309c66254a82bf2404381aae232f083df1abb37f9825ba17b7618e1e0fc0503215c39e855775183be50d8ecefae9ec03e0d87184728228841bb792f3d1f8bf84f2afb7e9217b2eaddcb372d0ffdb0ad730d24b2eaf3d0751e2").unwrap().into();
+            let previous_signature  = hex::decode("b6b7f91ee0617a605a4f645dce7d5bdaf487483be949104d038394fa9adfc9289a2900fb9f39ab62983c7098680c495f038f6af6ed3b637594d01a9b068dc4aa3abcb9fbd150ab519260836e115c29c808f0dc40b50ddf1e34cc482b8626293a").unwrap().into();
+            let msg = HandleMsg::Play {
+                round: query_round(deps.as_ref()).unwrap().nextRound,
+                previous_signature: previous_signature,
+                signature: signature,
+            };
             let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
+
             match res {
                 Err(ContractError::Unauthorized {}) => {}
                 _ => panic!("Unexpected error"),
@@ -2490,9 +2505,9 @@ mod tests {
 
         #[test]
         fn do_not_send_funds() {
-            let signature  = hex::decode("97005dd446abb821615600363ece7547be11d7866ae7eb515588ac920f12da9f9ecef5a13e1c1e2f5afac09cb34dd99a15f198f49cbf41c9d34daa2b925c624730d4ed759d3fb741fa8e6afe06f46a8a6d6ae37b9c5be1cc7dc1728bfc283eec").unwrap().into();
-            let previous_signature  = hex::decode("b636086bbf6f203b421968dfc37f3097ec43d07a61bbbf7190b094307d585c8aab977672b55f79940729f5bbfc39b9b90c81f14123a3ceaea1697f0ce1ab53059855f706981e803c89d984b2d65a754105f26efeb953d898216e8988cabb3c99").unwrap().into();
-            let round: u64 = 519539;
+            let signature  = hex::decode("a619b278ab6266309c66254a82bf2404381aae232f083df1abb37f9825ba17b7618e1e0fc0503215c39e855775183be50d8ecefae9ec03e0d87184728228841bb792f3d1f8bf84f2afb7e9217b2eaddcb372d0ffdb0ad730d24b2eaf3d0751e2").unwrap().into();
+            let previous_signature  = hex::decode("b6b7f91ee0617a605a4f645dce7d5bdaf487483be949104d038394fa9adfc9289a2900fb9f39ab62983c7098680c495f038f6af6ed3b637594d01a9b068dc4aa3abcb9fbd150ab519260836e115c29c808f0dc40b50ddf1e34cc482b8626293a").unwrap().into();
+            let round: u64 = 504539;
             let msg = HandleMsg::Play {
                 round: round,
                 previous_signature: previous_signature,
@@ -2526,10 +2541,9 @@ mod tests {
 
         #[test]
         fn no_players_combination_empty() {
-            let signature  = hex::decode("97005dd446abb821615600363ece7547be11d7866ae7eb515588ac920f12da9f9ecef5a13e1c1e2f5afac09cb34dd99a15f198f49cbf41c9d34daa2b925c624730d4ed759d3fb741fa8e6afe06f46a8a6d6ae37b9c5be1cc7dc1728bfc283eec").unwrap().into();
-            let previous_signature  = hex::decode("b636086bbf6f203b421968dfc37f3097ec43d07a61bbbf7190b094307d585c8aab977672b55f79940729f5bbfc39b9b90c81f14123a3ceaea1697f0ce1ab53059855f706981e803c89d984b2d65a754105f26efeb953d898216e8988cabb3c99").unwrap().into();
-
-            let round: u64 = 519539;
+            let signature  = hex::decode("a619b278ab6266309c66254a82bf2404381aae232f083df1abb37f9825ba17b7618e1e0fc0503215c39e855775183be50d8ecefae9ec03e0d87184728228841bb792f3d1f8bf84f2afb7e9217b2eaddcb372d0ffdb0ad730d24b2eaf3d0751e2").unwrap().into();
+            let previous_signature  = hex::decode("b6b7f91ee0617a605a4f645dce7d5bdaf487483be949104d038394fa9adfc9289a2900fb9f39ab62983c7098680c495f038f6af6ed3b637594d01a9b068dc4aa3abcb9fbd150ab519260836e115c29c808f0dc40b50ddf1e34cc482b8626293a").unwrap().into();
+            let round: u64 = 504539;
             let msg = HandleMsg::Play {
                 round: round,
                 previous_signature: previous_signature,
