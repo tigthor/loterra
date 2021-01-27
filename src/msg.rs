@@ -11,25 +11,10 @@ pub struct InitMsg {
     pub denomDelegationDecimal: Uint128,
     pub denomShare: String,
     pub everyBlockHeight: u64,
-    pub claimTicket: Vec<CanonicalAddr>,
-    pub claimReward: Vec<CanonicalAddr>,
     pub blockTimePlay: u64,
     pub everyBlockTimePlay: u64,
     pub blockClaim: u64,
     pub blockIcoTimeframe: u64,
-    pub holdersRewards: Uint128,
-    pub tokenHolderSupply: Uint128,
-    pub drandPublicKey: Binary,
-    pub drandPeriod: u64,
-    pub drandGenesisTime: u64,
-    pub validatorMinAmountToAllowClaim: Uint128,
-    pub delegatorMinAmountInDelegation: Uint128,
-    pub combinationLen: u8,
-    pub jackpotReward: Uint128,
-    pub jackpotPercentageReward: u8,
-    pub tokenHolderPercentageFeeReward: u8,
-    pub feeForDrandWorkerInPercentage: u8,
-    pub prizeRankWinnerPercentage: Vec<u8>,
     pub pollEndHeight: u64,
 }
 
@@ -46,9 +31,9 @@ pub enum HandleMsg {
     },
     /// Claim 1 ticket every x block if you are a delegator
     Ticket {},
-    /// Buy the token holders with USCRT and get 1:1 ratio
-    Ico {},
-    /// Buy tickets with USCRT, 1 ticket is 1_000_000 USCRT (1SCRT) but DAO can vote this
+    /// Public sale buy the token holders with 1:1 ratio
+    PublicSale {},
+    /// Buy tickets at 1:1 ratio only integer, float number will be rounded down
     Buy {},
     /// Claim holder reward
     Reward {},

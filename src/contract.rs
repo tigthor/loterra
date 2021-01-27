@@ -19,7 +19,9 @@ use std::ops::{Mul, Sub};
 
 const MIN_DESC_LEN: u64 = 6;
 const MAX_DESC_LEN: u64 = 64;
-
+const NEXT_ROUND: u64 = 10;
+const DRAND_PERIOD: u64 = 30;
+const DRAND_GENESIS_TIME: u64 = 1595431050;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
@@ -34,21 +36,24 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         denomDelegation: msg.denomDelegation,
         denomDelegationDecimal: msg.denomDelegationDecimal,
         denomShare: msg.denomShare,
-        claimTicket: msg.claimTicket,
-        claimReward: msg.claimReward,
-        holdersRewards: msg.holdersRewards,
-        tokenHolderSupply: msg.tokenHolderSupply,
-        drandPublicKey: msg.drandPublicKey,
-        drandPeriod: msg.drandPeriod,
-        drandGenesisTime: msg.drandGenesisTime,
-        validatorMinAmountToAllowClaim: msg.validatorMinAmountToAllowClaim,
-        delegatorMinAmountInDelegation: msg.delegatorMinAmountInDelegation,
-        combinationLen: msg.combinationLen,
-        jackpotReward: msg.jackpotReward,
-        jackpotPercentageReward: msg.jackpotPercentageReward,
-        tokenHolderPercentageFeeReward: msg.tokenHolderPercentageFeeReward,
-        feeForDrandWorkerInPercentage: msg.feeForDrandWorkerInPercentage,
-        prizeRankWinnerPercentage: msg.prizeRankWinnerPercentage,
+        claimTicket: vec![],
+        claimReward: vec![],
+        holdersRewards: Uint128::zero(),
+        tokenHolderSupply: Uint128::zero(),
+        drandPublicKey: vec![
+            134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71, 151,
+            138, 124, 113, 188, 92, 206, 150, 54, 107, 93, 122, 86, 153, 55, 197, 41, 238, 218,
+            102, 199, 41, 55, 132, 169, 64, 40, 1, 175, 49,
+        ]
+        .into(),
+        validatorMinAmountToAllowClaim: Uint128(10_000),
+        delegatorMinAmountInDelegation: Uint128(2_000),
+        combinationLen: 6,
+        jackpotReward: Uint128::zero(),
+        jackpotPercentageReward: 80,
+        tokenHolderPercentageFeeReward: 10,
+        feeForDrandWorkerInPercentage: 1,
+        prizeRankWinnerPercentage: vec![84, 10, 5, 1],
         pollCount: 0,
         holdersMaxPercentageReward: 20,
         workerDrandMaxPercentageReward: 10,
@@ -73,7 +78,7 @@ pub fn handle(
             signature,
         } => handle_play(deps, _env, info, round, previous_signature, signature),
         HandleMsg::Ticket {} => handle_ticket(deps, _env, info),
-        HandleMsg::Ico {} => handle_ico(deps, _env, info),
+        HandleMsg::PublicSale {} => handle_public_sale(deps, _env, info),
         HandleMsg::Buy {} => handle_buy(deps, _env, info),
         HandleMsg::Reward {} => handle_reward(deps, _env, info),
         HandleMsg::Jackpot {} => handle_jackpot(deps, _env, info),
@@ -302,8 +307,8 @@ pub fn handle_play(
         return Err(ContractError::Unauthorized {});
     }
     // Get the current round and check if it is a valid round.
-    let fromGenesis = state.blockTimePlay - state.drandGenesisTime;
-    let nextRound = (fromGenesis / state.drandPeriod) + 10;
+    let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
+    let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
 
     if round != nextRound {
         return Err(ContractError::InvalidRound {});
@@ -485,7 +490,7 @@ pub fn handle_play(
     })
 }
 
-pub fn handle_ico(
+pub fn handle_public_sale(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
@@ -651,10 +656,12 @@ pub fn handle_reward(
     if shareHolderPercentage == 0 {
         return Err(ContractError::SharesTooLow {});
     }
+
     // Calculate the reward
     let reward = state
         .holdersRewards
         .mul(Decimal::percent(shareHolderPercentage));
+
     // Update the holdersReward
     state.holdersRewards = state.holdersRewards.sub(reward).unwrap();
     // Save the new state
@@ -1397,8 +1404,8 @@ fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError>
 
 fn query_round(deps: Deps) -> Result<RoundResponse, ContractError> {
     let state = config_read(deps.storage).load()?;
-    let fromGenesis = state.blockTimePlay - state.drandGenesisTime;
-    let nextRound = (fromGenesis / state.drandPeriod ) + 10;
+    let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
+    let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
 
     Ok(RoundResponse {
         nextRound: nextRound,
@@ -1434,41 +1441,12 @@ mod tests {
         const DENOM_DELEGATION_DECIMAL: Uint128 = Uint128(1_000_000);
         const DENOM_SHARE: &str = "upot";
         const EVERY_BLOCK_EIGHT: u64 = 100;
-        const CLAIM_TICKET: Vec<CanonicalAddr> = vec![];
-        const CLAIM_REWARD: Vec<CanonicalAddr> = vec![];
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const BLOCK_CLAIM: u64 = 0;
         const EVERY_BLOCK_CLAIM: u64 = 50000;
         const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
-        const HOLDERS_REWARDS: Uint128 = Uint128(5_221);
-        const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(10_000_000);
-        let PUBLIC_KEY: Binary = vec![
-            134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71, 151,
-            138, 124, 113, 188, 92, 206, 150, 54, 107, 93, 122, 86, 153, 55, 197, 41, 238, 218,
-            102, 199, 41, 55, 132, 169, 64, 40, 1, 175, 49,
-        ]
-        .into(); //Binary::from(hex!("868f005eb8e6e4ca0a47c8a77ceaa5309a47978a7c71bc5cce96366b5d7a569937c529eeda66c7293784a9402801af31"));
-        const GENESIS_TIME: u64 = 1595431050;
-        const PERIOD: u64 = 30;
-        const VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM: Uint128 = Uint128(10_000);
-        const DELEGATOR_MIN_AMOUNT_IN_DELEGATION: Uint128 = Uint128(10_000);
-        const COMBINATION_LEN: u8 = 6;
-        const JACKPOT_REWARD: Uint128 = Uint128(8_000_000);
-        const JACKPOT_PERCENTAGE_REWARD: u8 = 80;
-        const TOKEN_HOLDER_PERCENTAGE_FEE_REWARD: u8 = 10;
-        const FEE_FOR_DRAND_WORKER_IN_PERCENTAGE: u8 = 1;
-        let PRIZE_RANK_WINNER_PERCENTAGE: Vec<u8> = vec![84, 10, 5, 1];
         const POLL_END_HEIGHT: u64 = 40_000;
-
-        fn pubkey() -> Binary {
-            vec![
-                134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71,
-                151, 138, 124, 113, 188, 92, 206, 150, 54, 107, 93, 122, 86, 153, 55, 197, 41, 238,
-                218, 102, 199, 41, 55, 132, 169, 64, 40, 1, 175, 49,
-            ]
-            .into()
-        }
 
         let init_msg = InitMsg {
             denomTicket: DENOM_TICKET.to_string(),
@@ -1476,25 +1454,10 @@ mod tests {
             denomDelegationDecimal: DENOM_DELEGATION_DECIMAL,
             denomShare: DENOM_SHARE.to_string(),
             everyBlockHeight: EVERY_BLOCK_EIGHT,
-            claimTicket: CLAIM_TICKET,
-            claimReward: CLAIM_REWARD,
             blockTimePlay: BLOCK_TIME_PLAY,
             everyBlockTimePlay: EVERY_BLOCK_TIME_PLAY,
             blockClaim: EVERY_BLOCK_CLAIM,
             blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
-            holdersRewards: HOLDERS_REWARDS,
-            tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
-            drandPublicKey: PUBLIC_KEY,
-            drandPeriod: PERIOD,
-            drandGenesisTime: GENESIS_TIME,
-            validatorMinAmountToAllowClaim: VALIDATOR_MIN_AMOUNT_TO_ALLOW_CLAIM,
-            delegatorMinAmountInDelegation: DELEGATOR_MIN_AMOUNT_IN_DELEGATION,
-            combinationLen: COMBINATION_LEN,
-            jackpotReward: JACKPOT_REWARD,
-            jackpotPercentageReward: JACKPOT_PERCENTAGE_REWARD,
-            tokenHolderPercentageFeeReward: TOKEN_HOLDER_PERCENTAGE_FEE_REWARD,
-            feeForDrandWorkerInPercentage: FEE_FOR_DRAND_WORKER_IN_PERCENTAGE,
-            prizeRankWinnerPercentage: PRIZE_RANK_WINNER_PERCENTAGE,
             pollEndHeight: POLL_END_HEIGHT,
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
@@ -2034,7 +1997,7 @@ mod tests {
             let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::DelegationTooLow(msg)) => {
-                    assert_eq!(msg, "10000")
+                    assert_eq!(msg, "2000")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2125,7 +2088,7 @@ mod tests {
                     amount: Uint128(1_000_000),
                 }],
             );
-            let res = handle_ico(deps.as_mut(), mock_env(), info.clone());
+            let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::EmptyBalance {}) => {}
                 _ => panic!("Unexpected error"),
@@ -2145,7 +2108,7 @@ mod tests {
                     amount: Uint128(2_000_000),
                 }],
             );
-            let res = handle_ico(deps.as_mut(), mock_env(), info.clone());
+            let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::EmptyBalance {}) => {}
                 _ => panic!("Unexpected error"),
@@ -2165,7 +2128,7 @@ mod tests {
                     amount: Uint128(2_000_000),
                 }],
             );
-            let res = handle_ico(deps.as_mut(), mock_env(), info.clone());
+            let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::MissingDenom(msg)) => {
                     assert_eq!(msg, "uscrt")
@@ -2193,7 +2156,7 @@ mod tests {
                     },
                 ],
             );
-            let res = handle_ico(deps.as_mut(), mock_env(), info.clone());
+            let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::ExtraDenom(msg)) => {
                     assert_eq!(msg, "uscrt")
@@ -2215,7 +2178,7 @@ mod tests {
                     amount: Uint128(2_000_000),
                 }],
             );
-            let res = handle_ico(deps.as_mut(), mock_env(), info.clone()).unwrap();
+            let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone()).unwrap();
             assert_eq!(1, res.messages.len());
             assert_eq!(
                 res.messages[0],
@@ -2231,13 +2194,13 @@ mod tests {
             // Test if state have changed correctly
             let res = query_config(deps.as_ref()).unwrap();
             assert_ne!(0, res.tokenHolderSupply.u128());
-            assert_eq!(12_000_000, res.tokenHolderSupply.u128());
+            assert_eq!(2_000_000, res.tokenHolderSupply.u128());
 
             // Test if state have changed correctly
-            let res = handle_ico(deps.as_mut(), mock_env(), info.clone()).unwrap();
+            let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone()).unwrap();
             let res = query_config(deps.as_ref()).unwrap();
             // Test if tokenHolderSupply incremented correctly after multiple buys
-            assert_eq!(14_000_000, res.tokenHolderSupply.u128());
+            assert_eq!(4_000_000, res.tokenHolderSupply.u128());
         }
     }
 
@@ -2614,12 +2577,16 @@ mod tests {
                 HumanAddr::from("validator1"),
                 vec![Coin {
                     denom: "upot".to_string(),
-                    amount: Uint128(4_532_004),
+                    amount: Uint128(532_004),
                 }],
             );
             default_init(&mut deps);
             let info = mock_info(HumanAddr::from("validator1"), &[]);
             let env = mock_env();
+            // Add rewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.tokenHolderSupply = Uint128(1_000_000);
+            config(deps.as_mut().storage).save(&state);
             let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
             match res {
                 Err(ContractError::EmptyBalance {}) => {}
@@ -2636,7 +2603,7 @@ mod tests {
                 HumanAddr::from("validator1"),
                 vec![Coin {
                     denom: "ujack".to_string(),
-                    amount: Uint128(4_532_004),
+                    amount: Uint128(532_004),
                 }],
             );
             default_init(&mut deps);
@@ -2658,7 +2625,7 @@ mod tests {
                 HumanAddr::from("validator1"),
                 vec![Coin {
                     denom: "upot".to_string(),
-                    amount: Uint128(4_532_004),
+                    amount: Uint128(532_004),
                 }],
             );
             default_init(&mut deps);
@@ -2666,7 +2633,7 @@ mod tests {
                 HumanAddr::from("validator1"),
                 &[Coin {
                     denom: "upot".to_string(),
-                    amount: Uint128(4_532_004),
+                    amount: Uint128(532_004),
                 }],
             );
             let env = mock_env();
@@ -2692,6 +2659,11 @@ mod tests {
                 }],
             );
             default_init(&mut deps);
+            // Add rewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.tokenHolderSupply = Uint128(1_000_000);
+            config(deps.as_mut().storage).save(&state);
+
             let info = mock_info(HumanAddr::from("validator1"), &[]);
             let env = mock_env();
             let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
@@ -2710,10 +2682,15 @@ mod tests {
                 HumanAddr::from("validator1"),
                 vec![Coin {
                     denom: "upot".to_string(),
-                    amount: Uint128(4_532_004),
+                    amount: Uint128(500_000),
                 }],
             );
             default_init(&mut deps);
+            // Add rewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.tokenHolderSupply = Uint128(1_000_000);
+            state.holdersRewards = Uint128(50_000);
+            config(deps.as_mut().storage).save(&state);
             let info = mock_info(HumanAddr::from("validator1"), &[]);
             let env = mock_env();
             let res = handle_reward(deps.as_mut(), env.clone(), info.clone()).unwrap();
@@ -2725,7 +2702,7 @@ mod tests {
                     to_address: HumanAddr::from("validator1"),
                     amount: vec![Coin {
                         denom: "uscrt".to_string(),
-                        amount: Uint128(2349)
+                        amount: Uint128(25000)
                     }]
                 })
             );
@@ -2821,6 +2798,11 @@ mod tests {
                 },
             ]);
             default_init(&mut deps);
+            // Add some jackpotRewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.jackpotReward = Uint128(100_000);
+            config(deps.as_mut().storage).save(&state);
+
             let info = mock_info(HumanAddr::from("address2"), &[]);
             let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone());
             match res {
@@ -2841,6 +2823,10 @@ mod tests {
                 },
             ]);
             default_init(&mut deps);
+            // Add some jackpotRewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.jackpotReward = Uint128(100_000);
+            config(deps.as_mut().storage).save(&state);
             // Test with some winners and empty balance ticket
             deps.querier.update_balance(
                 MOCK_CONTRACT_ADDR,
@@ -2911,6 +2897,11 @@ mod tests {
                 },
             ]);
             default_init(&mut deps);
+            // Add some jackpotRewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.jackpotReward = Uint128(100_000);
+            config(deps.as_mut().storage).save(&state);
+
             let key1: u8 = 1;
             let key2: u8 = 5;
             winner_storage(&mut deps.storage).save(
@@ -2956,7 +2947,7 @@ mod tests {
                     to_address: HumanAddr::from("address1"),
                     amount: vec![Coin {
                         denom: "uscrt".to_string(),
-                        amount: Uint128(6720000)
+                        amount: Uint128(84_000)
                     }]
                 })
             );
@@ -2974,6 +2965,10 @@ mod tests {
                 },
             ]);
             default_init(&mut deps);
+            // Add some jackpotRewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.jackpotReward = Uint128(100_000);
+            config(deps.as_mut().storage).save(&state);
             let key1: u8 = 1;
             let key2: u8 = 5;
             winner_storage(&mut deps.storage).save(
@@ -3010,7 +3005,7 @@ mod tests {
                 },
             );
 
-            // Test error since the winner won uscrt and is mor important prize than ujack ticket
+            // Test error since the winner won uscrt and is more important prize than ujack ticket
             let info = mock_info(HumanAddr::from("address1"), &[]);
             let res = handle_jackpot(deps.as_mut(), mock_env(), info.clone());
             match res {
@@ -3022,6 +3017,11 @@ mod tests {
         fn contract_balance_is_empty() {
             let mut deps = mock_dependencies(&[]);
             default_init(&mut deps);
+            // Add some jackpotRewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.jackpotReward = Uint128(100_000);
+            config(deps.as_mut().storage).save(&state);
+
             let key1: u8 = 1;
             let key2: u8 = 5;
             winner_storage(&mut deps.storage).save(
@@ -3077,6 +3077,11 @@ mod tests {
                 },
             ]);
             default_init(&mut deps);
+            // Add some jackpotRewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.jackpotReward = Uint128(100_000);
+            config(deps.as_mut().storage).save(&state);
+
             let key1: u8 = 1;
             let key2: u8 = 5;
             winner_storage(&mut deps.storage).save(
@@ -3141,6 +3146,10 @@ mod tests {
                 },
             ]);
             default_init(&mut deps);
+            // Add some jackpotRewards
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.jackpotReward = Uint128(100_000);
+            config(deps.as_mut().storage).save(&state);
             // Init winner storage for test
             let key1: u8 = 1;
             let key2: u8 = 5;
@@ -3189,7 +3198,7 @@ mod tests {
                     amount: vec![
                         Coin {
                             denom: "uscrt".to_string(),
-                            amount: Uint128(6720000)
+                            amount: Uint128(84_000)
                         },
                         Coin {
                             denom: "ujack".to_string(),
@@ -3664,6 +3673,10 @@ mod tests {
         fn present_proposal_with_voters_YES_WEIGHT() {
             let mut deps = mock_dependencies(&[]);
             default_init(&mut deps);
+            let mut state = config(deps.as_mut().storage).load().unwrap();
+            state.tokenHolderSupply = Uint128(1_000_000);
+            config(deps.as_mut().storage).save(&state);
+
             let info = mock_info(HumanAddr::from("sender"), &[]);
             let mut env = mock_env();
             env.block.height = 10_000;

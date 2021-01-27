@@ -29,8 +29,6 @@ pub struct State {
     pub holdersRewards: Uint128,
     pub tokenHolderSupply: Uint128,
     pub drandPublicKey: Binary,
-    pub drandPeriod: u64,
-    pub drandGenesisTime: u64,
     pub validatorMinAmountToAllowClaim: Uint128,
     pub delegatorMinAmountInDelegation: Uint128,
     pub combinationLen: u8,
