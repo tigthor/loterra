@@ -277,7 +277,7 @@ pub fn handle_play(
     // Load the state
     let mut state = config(deps.storage).load()?;
     // reset holders reward
-    state.holdersRewards = Uint128(0);
+    state.holdersRewards = Uint128::zero();
     // Load combinations
     let store = query_all_combination(deps.as_ref()).unwrap();
 
@@ -1470,7 +1470,7 @@ mod tests {
             amount: Uint128(100_000_000),
         }]);
         default_init(&mut deps);
-        println!("{:?}", mock_env())
+        println!("{:?}", mock_env());
     }
     #[test]
     fn get_round_play() {
@@ -2528,6 +2528,7 @@ mod tests {
         fn no_players_combination_empty() {
             let signature  = hex::decode("97005dd446abb821615600363ece7547be11d7866ae7eb515588ac920f12da9f9ecef5a13e1c1e2f5afac09cb34dd99a15f198f49cbf41c9d34daa2b925c624730d4ed759d3fb741fa8e6afe06f46a8a6d6ae37b9c5be1cc7dc1728bfc283eec").unwrap().into();
             let previous_signature  = hex::decode("b636086bbf6f203b421968dfc37f3097ec43d07a61bbbf7190b094307d585c8aab977672b55f79940729f5bbfc39b9b90c81f14123a3ceaea1697f0ce1ab53059855f706981e803c89d984b2d65a754105f26efeb953d898216e8988cabb3c99").unwrap().into();
+
             let round: u64 = 519539;
             let msg = HandleMsg::Play {
                 round: round,
