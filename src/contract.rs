@@ -36,10 +36,11 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         denomDelegation: msg.denomDelegation,
         denomDelegationDecimal: msg.denomDelegationDecimal,
         denomShare: msg.denomShare,
+        tokenHolderSupply: msg.tokenHolderSupply,
+        pollEndHeight: msg.pollEndHeight,
         claimTicket: vec![],
         claimReward: vec![],
         holdersRewards: Uint128::zero(),
-        tokenHolderSupply: Uint128::zero(),
         drandPublicKey: vec![
             134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71, 151,
             138, 124, 113, 188, 92, 206, 150, 54, 107, 93, 122, 86, 153, 55, 197, 41, 238, 218,
@@ -57,7 +58,6 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         pollCount: 0,
         holdersMaxPercentageReward: 20,
         workerDrandMaxPercentageReward: 10,
-        pollEndHeight: msg.pollEndHeight,
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -1247,9 +1247,7 @@ pub fn handle_present_proposal(
     }
 
     // Reject the proposal
-    if
-    /*noWeight.u128() >= yesWeight.u128() ||*/
-    finalVoteWeightInPercentage < 60 {
+    if finalVoteWeightInPercentage < 60 {
         poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
             let mut pollData = poll.unwrap();
             // Update the status to rejected
@@ -1452,6 +1450,7 @@ mod tests {
         const EVERY_BLOCK_CLAIM: u64 = 50000;
         const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
         const POLL_END_HEIGHT: u64 = 40_000;
+        const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
 
         let init_msg = InitMsg {
             denomTicket: DENOM_TICKET.to_string(),
@@ -1464,6 +1463,7 @@ mod tests {
             blockClaim: EVERY_BLOCK_CLAIM,
             blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
             pollEndHeight: POLL_END_HEIGHT,
+            tokenHolderSupply: TOKEN_HOLDER_SUPPLY
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
