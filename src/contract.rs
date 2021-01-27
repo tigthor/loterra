@@ -303,9 +303,9 @@ pub fn handle_play(
     }
     // Get the current round and check if it is a valid round.
     let fromGenesis = state.blockTimePlay - state.drandGenesisTime;
-    let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 10.0;
+    let nextRound = (fromGenesis / state.drandPeriod) + 10;
 
-    if round != nextRound as u64 {
+    if round != nextRound {
         return Err(ContractError::InvalidRound {});
     }
     let pk = g1_from_variable(&state.drandPublicKey).unwrap();
@@ -1398,11 +1398,10 @@ fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError>
 fn query_round(deps: Deps) -> Result<RoundResponse, ContractError> {
     let state = config_read(deps.storage).load()?;
     let fromGenesis = state.blockTimePlay - state.drandGenesisTime;
-    let nextRound = (fromGenesis as f64 / state.drandPeriod as f64) + 1.0;
-    let nextRoundFormat = nextRound as u64;
+    let nextRound = (fromGenesis / state.drandPeriod ) + 10;
 
     Ok(RoundResponse {
-        nextRound: nextRoundFormat,
+        nextRound: nextRound,
     })
 }
 
