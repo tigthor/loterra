@@ -16,6 +16,7 @@ pub struct InitMsg {
     pub blockClaim: u64,
     pub blockIcoTimeframe: u64,
     pub pollEndHeight: u64,
+    pub tokenHolderSupply: Uint128
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
