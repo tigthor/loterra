@@ -82,6 +82,9 @@ pub fn handle(
         HandleMsg::Buy {} => handle_buy(deps, _env, info),
         HandleMsg::Reward {} => handle_reward(deps, _env, info),
         HandleMsg::Jackpot {} => handle_jackpot(deps, _env, info),
+        /*
+           TODO: Handle proposal pass a binary rather than a vec
+        */
         HandleMsg::Proposal {
             description,
             proposal,
@@ -1463,7 +1466,7 @@ mod tests {
             blockClaim: EVERY_BLOCK_CLAIM,
             blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
             pollEndHeight: POLL_END_HEIGHT,
-            tokenHolderSupply: TOKEN_HOLDER_SUPPLY
+            tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
@@ -2200,13 +2203,13 @@ mod tests {
             // Test if state have changed correctly
             let res = query_config(deps.as_ref()).unwrap();
             assert_ne!(0, res.tokenHolderSupply.u128());
-            assert_eq!(2_000_000, res.tokenHolderSupply.u128());
+            assert_eq!(2_300_000, res.tokenHolderSupply.u128());
 
             // Test if state have changed correctly
             let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone()).unwrap();
             let res = query_config(deps.as_ref()).unwrap();
             // Test if tokenHolderSupply incremented correctly after multiple buys
-            assert_eq!(4_000_000, res.tokenHolderSupply.u128());
+            assert_eq!(4_300_000, res.tokenHolderSupply.u128());
         }
     }
 
