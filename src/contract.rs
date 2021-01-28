@@ -552,7 +552,7 @@ pub fn handle_public_sale(
 
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "ico"), attr("to", &info.sender)],
+        attributes: vec![attr("action", "public sale"), attr("to", &info.sender)],
         data: None,
     })
 }
