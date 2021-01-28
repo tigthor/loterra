@@ -18,7 +18,7 @@ pub struct State {
     pub blockTimePlay: u64,
     pub everyBlockTimePlay: u64,
     pub blockClaim: u64,
-    pub blockIcoTimeframe: u64,
+    pub publicSaleEndBlock: u64,
     pub everyBlockHeight: u64,
     pub denomTicket: String,
     pub denomDelegation: String,
