@@ -9,7 +9,7 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
-    #[error("Send some coins to create an atomic swap")]
+    #[error("Balance is empty")]
     EmptyBalance {},
 
     #[error("Send some funds")]
