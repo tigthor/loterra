@@ -34,7 +34,8 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         everyBlockHeight: msg.everyBlockHeight,
         denomTicket: msg.denomTicket,
         denomDelegation: msg.denomDelegation,
-        denomDelegationDecimal: msg.denomDelegationDecimal,
+        denomStableDecimal: msg.denomStableDecimal,
+        denomStable: msg.denomStable,
         denomShare: msg.denomShare,
         tokenHolderSupply: msg.tokenHolderSupply,
         pollEndHeight: msg.pollEndHeight,
@@ -301,9 +302,7 @@ pub fn handle_play(
     if !info.sent_funds.is_empty() {
         return Err(ContractError::DoNotSendFunds("Play".to_string()));
     }
-    /*
-       TODO: We are modifying the state here state.blockTime! This is a bug in Round calculation
-    */
+
     // Get the current round and check if it is a valid round.
     let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
     let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
@@ -344,7 +343,7 @@ pub fn handle_play(
     // Set jackpot amount
     let balance = deps
         .querier
-        .query_balance(&_env.contract.address, &state.denomDelegation)
+        .query_balance(&_env.contract.address, &state.denomStable)
         .unwrap();
     // Max amount winners can claim
     let jackpot = balance
@@ -471,7 +470,7 @@ pub fn handle_play(
         from_address: _env.contract.address,
         to_address: info.sender.clone(),
         amount: vec![Coin {
-            denom: state.denomDelegation.clone(),
+            denom: state.denomStable.clone(),
             amount: feeForDrandWorker,
         }],
     };
@@ -505,7 +504,7 @@ pub fn handle_public_sale(
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
-    // Ico expire after blocktime
+    // Public sale expire after blocktime
     if state.publicSaleEndBlock < _env.block.height {
         return Err(ContractError::TheIcoIsEnded {});
     }
@@ -513,13 +512,13 @@ pub fn handle_public_sale(
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
-            if info.sent_funds[0].denom == state.denomDelegation {
+            if info.sent_funds[0].denom == state.denomStable {
                 Ok(info.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denomDelegation.clone()))
+                Err(ContractError::MissingDenom(state.denomStable.clone()))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denomDelegation.clone())),
+        _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
     }?;
 
     if sent.is_zero() {
@@ -570,13 +569,13 @@ pub fn handle_buy(
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
-            if info.sent_funds[0].denom == state.denomDelegation {
+            if info.sent_funds[0].denom == state.denomStable {
                 Ok(info.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denomDelegation.clone()))
+                Err(ContractError::MissingDenom(state.denomStable.clone()))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denomDelegation.clone())),
+        _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
     }?;
 
     if sent.is_zero() {
@@ -595,7 +594,7 @@ pub fn handle_buy(
         return Err(ContractError::EmptyBalance {});
     }
 
-    let amountToSend = sent.u128() / state.denomDelegationDecimal.u128();
+    let amountToSend = sent.u128() / state.denomStableDecimal.u128();
 
     let msg = BankMsg::Send {
         from_address: _env.contract.address,
@@ -653,7 +652,7 @@ pub fn handle_reward(
     // Get the contract balance
     let balanceContract = deps
         .querier
-        .query_balance(_env.contract.address.clone(), &state.denomDelegation)?;
+        .query_balance(_env.contract.address.clone(), &state.denomStable)?;
     // Cancel if no amount in the contract
     if balanceContract.amount.is_zero() {
         return Err(ContractError::EmptyBalance {});
@@ -679,7 +678,7 @@ pub fn handle_reward(
         from_address: _env.contract.address,
         to_address: deps.api.human_address(&sender).unwrap(),
         amount: vec![Coin {
-            denom: state.denomDelegation,
+            denom: state.denomStable,
             amount: reward,
         }],
     };
@@ -847,7 +846,7 @@ pub fn handle_jackpot(
             return Err(ContractError::NoFunds {});
         }
         amountToSend.push(Coin {
-            denom: state.denomDelegation.clone(),
+            denom: state.denomStable.clone(),
             amount: jackpotAmount,
         });
     }
@@ -1444,7 +1443,8 @@ mod tests {
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
         const DENOM_TICKET: &str = "ujack";
         const DENOM_DELEGATION: &str = "uscrt";
-        const DENOM_DELEGATION_DECIMAL: Uint128 = Uint128(1_000_000);
+        const DENOM_STABLE: &str = "usdc";
+        const DENOM_STABLE_DECIMAL: Uint128 = Uint128(1_000_000);
         const DENOM_SHARE: &str = "upot";
         const EVERY_BLOCK_EIGHT: u64 = 100;
         const BLOCK_TIME_PLAY: u64 = 1610566920;
@@ -1458,7 +1458,8 @@ mod tests {
         let init_msg = InitMsg {
             denomTicket: DENOM_TICKET.to_string(),
             denomDelegation: DENOM_DELEGATION.to_string(),
-            denomDelegationDecimal: DENOM_DELEGATION_DECIMAL,
+            denomStableDecimal: DENOM_STABLE_DECIMAL,
+            denomStable: DENOM_STABLE.to_string(),
             denomShare: DENOM_SHARE.to_string(),
             everyBlockHeight: EVERY_BLOCK_EIGHT,
             blockTimePlay: BLOCK_TIME_PLAY,
@@ -2093,7 +2094,7 @@ mod tests {
             let info = mock_info(
                 HumanAddr::from("delegator1"),
                 &[Coin {
-                    denom: "uscrt".to_string(),
+                    denom: "usdc".to_string(),
                     amount: Uint128(1_000_000),
                 }],
             );
@@ -2113,7 +2114,7 @@ mod tests {
             let info = mock_info(
                 HumanAddr::from("delegator1"),
                 &[Coin {
-                    denom: "uscrt".to_string(),
+                    denom: "usdc".to_string(),
                     amount: Uint128(2_000_000),
                 }],
             );
@@ -2140,7 +2141,7 @@ mod tests {
             let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::MissingDenom(msg)) => {
-                    assert_eq!(msg, "uscrt")
+                    assert_eq!(msg, "usdc")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2168,7 +2169,7 @@ mod tests {
             let res = handle_public_sale(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::ExtraDenom(msg)) => {
-                    assert_eq!(msg, "uscrt")
+                    assert_eq!(msg, "usdc")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2183,7 +2184,7 @@ mod tests {
             let info = mock_info(
                 HumanAddr::from("delegator1"),
                 &[Coin {
-                    denom: "uscrt".to_string(),
+                    denom: "usdc".to_string(),
                     amount: Uint128(2_000_000),
                 }],
             );
@@ -2228,7 +2229,7 @@ mod tests {
             let info = mock_info(
                 HumanAddr::from("delegator1"),
                 &[Coin {
-                    denom: "uscrt".to_string(),
+                    denom: "usdc".to_string(),
                     amount: Uint128(1_000_000),
                 }],
             );
@@ -2248,7 +2249,7 @@ mod tests {
             let info = mock_info(
                 HumanAddr::from("delegator1"),
                 &[Coin {
-                    denom: "uscrt".to_string(),
+                    denom: "usdc".to_string(),
                     amount: Uint128(2_000_000),
                 }],
             );
@@ -2275,7 +2276,7 @@ mod tests {
             let res = handle_buy(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::MissingDenom(msg)) => {
-                    assert_eq!(msg, "uscrt")
+                    assert_eq!(msg, "usdc")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2303,7 +2304,7 @@ mod tests {
             let res = handle_buy(deps.as_mut(), mock_env(), info.clone());
             match res {
                 Err(ContractError::ExtraDenom(msg)) => {
-                    assert_eq!(msg, "uscrt")
+                    assert_eq!(msg, "usdc")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2318,7 +2319,7 @@ mod tests {
             let info = mock_info(
                 HumanAddr::from("delegator1"),
                 &[Coin {
-                    denom: "uscrt".to_string(),
+                    denom: "usdc".to_string(),
                     amount: Uint128(5_961_532),
                 }],
             );
@@ -2415,7 +2416,7 @@ mod tests {
                 signature: signature,
             };
             let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
+                denom: "usdc".to_string(),
                 amount: Uint128(10_000_000),
             }]);
             default_init(&mut deps);
@@ -2438,7 +2439,7 @@ mod tests {
                     from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
                     to_address: HumanAddr::from("validator1"),
                     amount: vec![Coin {
-                        denom: "uscrt".to_string(),
+                        denom: "usdc".to_string(),
                         amount: Uint128(80_000)
                     }]
                 })
@@ -2553,7 +2554,7 @@ mod tests {
                 signature: signature,
             };
             let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
+                denom: "usdc".to_string(),
                 amount: Uint128(10_000_000),
             }]);
             default_init(&mut deps);
@@ -2569,7 +2570,7 @@ mod tests {
                     from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
                     to_address: HumanAddr::from("validator1"),
                     amount: vec![Coin {
-                        denom: "uscrt".to_string(),
+                        denom: "usdc".to_string(),
                         amount: Uint128(80_000)
                     }]
                 })
@@ -2666,7 +2667,7 @@ mod tests {
         #[test]
         fn shares_to_low() {
             let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
+                denom: "usdc".to_string(),
                 amount: Uint128(10_000_000),
             }]);
             deps.querier.update_balance(
@@ -2693,7 +2694,7 @@ mod tests {
         #[test]
         fn success() {
             let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
+                denom: "usdc".to_string(),
                 amount: Uint128(10_000_000),
             }]);
             deps.querier.update_balance(
@@ -2719,7 +2720,7 @@ mod tests {
                     from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
                     to_address: HumanAddr::from("validator1"),
                     amount: vec![Coin {
-                        denom: "uscrt".to_string(),
+                        denom: "usdc".to_string(),
                         amount: Uint128(25000)
                     }]
                 })
@@ -2964,7 +2965,7 @@ mod tests {
                     from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
                     to_address: HumanAddr::from("address1"),
                     amount: vec![Coin {
-                        denom: "uscrt".to_string(),
+                        denom: "usdc".to_string(),
                         amount: Uint128(84_000)
                     }]
                 })
@@ -3215,7 +3216,7 @@ mod tests {
                     to_address: HumanAddr::from("address1"),
                     amount: vec![
                         Coin {
-                            denom: "uscrt".to_string(),
+                            denom: "usdc".to_string(),
                             amount: Uint128(84_000)
                         },
                         Coin {

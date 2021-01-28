@@ -8,7 +8,8 @@ use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Uint128};
 pub struct InitMsg {
     pub denomTicket: String,
     pub denomDelegation: String,
-    pub denomDelegationDecimal: Uint128,
+    pub denomStable: String,
+    pub denomStableDecimal: Uint128,
     pub denomShare: String,
     pub everyBlockHeight: u64,
     pub blockTimePlay: u64,
