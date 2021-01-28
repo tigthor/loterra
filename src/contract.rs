@@ -30,7 +30,7 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         blockTimePlay: msg.blockTimePlay,
         everyBlockTimePlay: msg.everyBlockTimePlay,
         blockClaim: msg.blockClaim,
-        blockIcoTimeframe: msg.blockIcoTimeframe,
+        publicSaleEndBlock: msg.publicSaleEndBlock,
         everyBlockHeight: msg.everyBlockHeight,
         denomTicket: msg.denomTicket,
         denomDelegation: msg.denomDelegation,
@@ -506,7 +506,7 @@ pub fn handle_public_sale(
     // Load the state
     let mut state = config(deps.storage).load()?;
     // Ico expire after blocktime
-    if state.blockIcoTimeframe < _env.block.height {
+    if state.publicSaleEndBlock < _env.block.height {
         return Err(ContractError::TheIcoIsEnded {});
     }
     // Check if some funds are sent
@@ -1451,7 +1451,7 @@ mod tests {
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const BLOCK_CLAIM: u64 = 0;
         const EVERY_BLOCK_CLAIM: u64 = 50000;
-        const BLOCK_ICO_TIME_FRAME: u64 = 1000000000;
+        const PUBLIC_SALE_END_BLOCK: u64 = 1000000000;
         const POLL_END_HEIGHT: u64 = 40_000;
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
 
@@ -1464,7 +1464,7 @@ mod tests {
             blockTimePlay: BLOCK_TIME_PLAY,
             everyBlockTimePlay: EVERY_BLOCK_TIME_PLAY,
             blockClaim: EVERY_BLOCK_CLAIM,
-            blockIcoTimeframe: BLOCK_ICO_TIME_FRAME,
+            publicSaleEndBlock: PUBLIC_SALE_END_BLOCK,
             pollEndHeight: POLL_END_HEIGHT,
             tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
         };
