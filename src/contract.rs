@@ -14,7 +14,6 @@ use crate::state::{
     PollInfoState, PollStatus, Proposal, State, Winner, WinnerInfoState,
 };
 
-use drand_verify::{derive_randomness, g1_from_variable, verify};
 use std::ops::{Mul, Sub};
 
 const MIN_DESC_LEN: u64 = 6;
@@ -32,7 +31,6 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         blockClaim: msg.blockClaim,
         publicSaleEndBlock: msg.publicSaleEndBlock,
         everyBlockHeight: msg.everyBlockHeight,
-        denomTicket: msg.denomTicket,
         denomDelegation: msg.denomDelegation,
         denomStableDecimal: msg.denomStableDecimal,
         denomStable: msg.denomStable,
@@ -42,12 +40,6 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         claimTicket: vec![],
         claimReward: vec![],
         holdersRewards: Uint128::zero(),
-        drandPublicKey: vec![
-            134, 143, 0, 94, 184, 230, 228, 202, 10, 71, 200, 167, 124, 234, 165, 48, 154, 71, 151,
-            138, 124, 113, 188, 92, 206, 150, 54, 107, 93, 122, 86, 153, 55, 197, 41, 238, 218,
-            102, 199, 41, 55, 132, 169, 64, 40, 1, 175, 49,
-        ]
-        .into(),
         validatorMinAmountToAllowClaim: Uint128(10_000),
         delegatorMinAmountInDelegation: Uint128(2_000),
         combinationLen: 6,
@@ -59,6 +51,7 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         pollCount: 0,
         holdersMaxPercentageReward: 20,
         workerDrandMaxPercentageReward: 10,
+        pricePerTicketToRegister: Uint128(1_000_000)
     };
     config(deps.storage).save(&state)?;
     Ok(InitResponse::default())
@@ -78,14 +71,9 @@ pub fn handle(
             previous_signature,
             signature,
         } => handle_play(deps, _env, info, round, previous_signature, signature),
-        HandleMsg::Ticket {} => handle_ticket(deps, _env, info),
         HandleMsg::PublicSale {} => handle_public_sale(deps, _env, info),
-        HandleMsg::Buy {} => handle_buy(deps, _env, info),
         HandleMsg::Reward {} => handle_reward(deps, _env, info),
         HandleMsg::Jackpot {} => handle_jackpot(deps, _env, info),
-        /*
-           TODO: Handle proposal pass a binary rather than a vec
-        */
         HandleMsg::Proposal {
             description,
             proposal,
@@ -140,20 +128,21 @@ pub fn handle_register(
     let sent = match info.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
-            if info.sent_funds[0].denom == state.denomTicket {
+            if info.sent_funds[0].denom == state.denomStable {
                 Ok(info.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denomTicket))
+                Err(ContractError::MissingDenom(state.denomStable))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denomTicket)),
+        _ => Err(ContractError::ExtraDenom(state.denomStable)),
     }?;
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
     }
-    /*
-       TODO: Check if sent is 1 ticket
-    */
+    // Handle the player is not sending too much or too less
+    if sent.u128() != state.pricePerTicketToRegister.u128() {
+        return Err(ContractError::SentTooMuch(state.denomStable.to_string()));
+    }
 
     // Check if the lottery is about to play and cancel new ticket to enter until play
     if _env.block.time >= state.blockTimePlay {
@@ -186,89 +175,6 @@ pub fn handle_register(
     })
 }
 
-pub fn handle_ticket(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-) -> Result<HandleResponse, ContractError> {
-    // Load the state
-    let mut state = config(deps.storage).load()?;
-    // convert the sender to canonical address
-    let sender = deps.api.canonical_address(&info.sender).unwrap();
-    // Ensure the sender not sending funds accidentally
-    if !info.sent_funds.is_empty() {
-        return Err(ContractError::DoNotSendFunds("Claim".to_string()));
-    }
-
-    if _env.block.height > state.blockClaim {
-        state.claimTicket = vec![];
-        state.blockClaim = _env.block.height + state.everyBlockHeight;
-    }
-    // Ensure sender is a delegator
-    let mut delegator = deps.querier.query_all_delegations(&info.sender)?;
-    if delegator.is_empty() {
-        return Err(ContractError::NoDelegations {});
-    }
-    delegator.sort_by(|a, b| b.amount.amount.cmp(&a.amount.amount));
-
-    // Ensure validator are owning 10000 upot min and the user stake the majority of his funds to this validator
-    let validatorBalance = deps
-        .querier
-        .query_balance(&delegator[0].validator, &state.denomShare)
-        .unwrap();
-    if validatorBalance.amount.u128() < state.validatorMinAmountToAllowClaim.u128() {
-        return Err(ContractError::ValidatorNotAuthorized(
-            state.validatorMinAmountToAllowClaim.to_string(),
-        ));
-    }
-    // Ensure is delegating the right denom
-    if delegator[0].amount.denom != state.denomDelegation {
-        return Err(ContractError::NoDelegations {});
-    }
-    // Ensure delegating the minimum admitted
-    if delegator[0].amount.amount < state.delegatorMinAmountInDelegation {
-        return Err(ContractError::DelegationTooLow(
-            state.delegatorMinAmountInDelegation.to_string(),
-        ));
-    }
-    // Ensure sender only can claim one time every x blocks
-    if state
-        .claimTicket
-        .iter()
-        .any(|address| deps.api.human_address(address).unwrap() == info.sender)
-    {
-        return Err(ContractError::AlreadyClaimed {});
-    }
-    // Add the sender to claimed state
-    state.claimTicket.push(sender.clone());
-
-    // Get the contract balance
-    let balance = deps
-        .querier
-        .query_balance(_env.contract.address.clone(), &state.denomTicket)?;
-    // Cancel if no amount in the contract
-    if balance.amount.is_zero() {
-        return Err(ContractError::EmptyBalance {});
-    }
-
-    // Save the new state
-    config(deps.storage).save(&state)?;
-
-    let msg = BankMsg::Send {
-        from_address: _env.contract.address,
-        to_address: deps.api.human_address(&sender).unwrap(),
-        amount: vec![Coin {
-            denom: state.denomTicket,
-            amount: Uint128(1),
-        }],
-    };
-    // Send the claimed tickets
-    Ok(HandleResponse {
-        messages: vec![msg.into()],
-        attributes: vec![attr("action", "claim"), attr("to", &sender)],
-        data: None,
-    })
-}
 
 pub fn handle_play(
     deps: DepsMut,
@@ -320,17 +226,11 @@ pub fn handle_play(
         return Err(ContractError::Unauthorized {});
     }
 
-    let pk = g1_from_variable(&state.drandPublicKey).unwrap();
-    let valid = verify(&pk, round, &previous_signature, &signature).unwrap_or(false);
-
-    if !valid {
-        return Err(ContractError::InvalidSignature {});
-    }
-    let randomness = derive_randomness(&signature);
-
-    //save beacon for other users usage
-    beacons_storage(deps.storage).set(&round.to_be_bytes(), &randomness);
-    let randomnessHash = hex::encode(randomness);
+    /*
+        Todo: create a function to query the randomness from the smart contract
+     */
+    // TODO: here the result of randomness
+    let randomnessHash = "";
 
     let n = randomnessHash
         .char_indices()
@@ -553,61 +453,6 @@ pub fn handle_public_sale(
     Ok(HandleResponse {
         messages: vec![msg.into()],
         attributes: vec![attr("action", "public sale"), attr("to", &info.sender)],
-        data: None,
-    })
-}
-
-pub fn handle_buy(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-) -> Result<HandleResponse, ContractError> {
-    // Load the state
-    let state = config(deps.storage).load()?;
-
-    // Get the funds
-    let sent = match info.sent_funds.len() {
-        0 => Err(ContractError::NoFunds {}),
-        1 => {
-            if info.sent_funds[0].denom == state.denomStable {
-                Ok(info.sent_funds[0].amount)
-            } else {
-                Err(ContractError::MissingDenom(state.denomStable.clone()))
-            }
-        }
-        _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
-    }?;
-
-    if sent.is_zero() {
-        return Err(ContractError::NoFunds {});
-    };
-
-    let balance = deps
-        .querier
-        .query_balance(&_env.contract.address, &state.denomTicket)
-        .unwrap();
-    if balance.amount.is_zero() {
-        return Err(ContractError::EmptyBalance {});
-    }
-
-    if balance.amount.u128() < sent.u128() {
-        return Err(ContractError::EmptyBalance {});
-    }
-
-    let amountToSend = sent.u128() / state.denomStableDecimal.u128();
-
-    let msg = BankMsg::Send {
-        from_address: _env.contract.address,
-        to_address: info.sender.clone(),
-        amount: vec![Coin {
-            denom: state.denomTicket,
-            amount: Uint128(amountToSend),
-        }],
-    };
-
-    Ok(HandleResponse {
-        messages: vec![msg.into()],
-        attributes: vec![attr("action", "ticket"), attr("to", &info.sender)],
         data: None,
     })
 }
@@ -997,31 +842,6 @@ pub fn handle_proposal(
         }
 
         Proposal::LotteryEveryBlockTime
-    } else if let Proposal::MinAmountDelegator = proposal {
-        match amount {
-            Some(minAmount) => {
-                proposalAmount = minAmount;
-            }
-            None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    "MinAmountDelegator amount".to_string(),
-                ));
-            }
-        }
-
-        Proposal::MinAmountDelegator
-    } else if let Proposal::MinAmountValidator = proposal {
-        match amount {
-            Some(minAmount) => {
-                proposalAmount = minAmount;
-            }
-            None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    "MinAmountValidator amount".to_string(),
-                ));
-            }
-        }
-        Proposal::MinAmountValidator
     } else if let Proposal::PrizePerRank = proposal {
         match prizePerRank {
             Some(ranks) => {
@@ -1067,7 +887,19 @@ pub fn handle_proposal(
             }
         }
         Proposal::ClaimEveryBlock
-    } else {
+    } else if let Proposal::AmountToRegister = proposal {
+        match amount {
+            Some(AmountToRegister) => {
+                proposalAmount = AmountToRegister;
+            }
+            None => {
+                return Err(ContractError::ParamRequiredForThisProposal(
+                    " AmountToRegister amount".to_string(),
+                ));
+            }
+        }
+        Proposal::AmountToRegister
+    }else {
         return Err(ContractError::ProposalNotFound {});
     };
 
@@ -1281,15 +1113,18 @@ pub fn handle_present_proposal(
         Proposal::JackpotRewardPercentage => {
             state.jackpotPercentageReward = store.amount.u128() as u8;
         }
-        Proposal::MinAmountDelegator => {
-            state.delegatorMinAmountInDelegation = store.amount;
+        Proposal::AmountToRegister => {
+            state.pricePerTicketToRegister = store.amount;
         }
+        /*Proposal::MinAmountDelegator => {
+            state.delegatorMinAmountInDelegation = store.amount;
+        }*/
         Proposal::PrizePerRank => {
             state.prizeRankWinnerPercentage = store.prizeRank;
         }
-        Proposal::MinAmountValidator => {
+       /* Proposal::MinAmountValidator => {
             state.validatorMinAmountToAllowClaim = store.amount;
-        }
+        }*/
         Proposal::HolderFeePercentage => {
             state.holdersMaxPercentageReward = store.amount.u128() as u8
         }
@@ -1322,8 +1157,6 @@ pub fn handle_present_proposal(
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
     let response = match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
-        QueryMsg::LatestDrand {} => to_binary(&query_latest(deps)?)?,
-        QueryMsg::GetRandomness { round } => to_binary(&query_get(deps, round)?)?,
         QueryMsg::Combination {} => to_binary(&query_all_combination(deps)?)?,
         QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?,
         QueryMsg::GetPoll { pollId } => to_binary(&query_poll(deps, pollId)?)?,
@@ -1435,13 +1268,8 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::borrow::Borrow;
     use std::collections::HashMap;
-    // DRAND
-    use crate::error::ContractError::Std;
-    use drand_verify::{derive_randomness, g1_from_fixed, g1_from_variable, verify};
-    use hex_literal::hex;
 
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
-        const DENOM_TICKET: &str = "ujack";
         const DENOM_DELEGATION: &str = "uscrt";
         const DENOM_STABLE: &str = "usdc";
         const DENOM_STABLE_DECIMAL: Uint128 = Uint128(1_000_000);
@@ -1456,7 +1284,6 @@ mod tests {
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
 
         let init_msg = InitMsg {
-            denomTicket: DENOM_TICKET.to_string(),
             denomDelegation: DENOM_DELEGATION.to_string(),
             denomStableDecimal: DENOM_STABLE_DECIMAL,
             denomStable: DENOM_STABLE.to_string(),
@@ -1526,40 +1353,7 @@ mod tests {
         let res = query_all_winner(deps.as_ref()).unwrap();
         println!("{:?}", res);
     }
-    /*#[test]
-    fn random (){
-        //println!("{}", 1432439234 % 100);
-        let mut deps = mock_dependencies(&[Coin{ denom: "uscrt".to_string(), amount: Uint128(100_000_000)}]);
-        default_init(&mut deps);
 
-        let res = query_config(deps.as_ref()).unwrap();
-
-        // DRAND
-        let PK_LEO_MAINNET: [u8; 48] = hex!("868f005eb8e6e4ca0a47c8a77ceaa5309a47978a7c71bc5cce96366b5d7a569937c529eeda66c7293784a9402801af31");
-        const GENESIS_TIME: u64 = 1595431050;
-        const PERIOD: f64 = 30.0;
-
-        //let pk = g1_from_fixed(PK_LEO_MAINNET).unwrap();
-        let pk = g1_from_variable(&res.drandPublicKey).unwrap();
-        let previous_signature = hex::decode("9491284489e453531c2429245dc6a9c4667f4cc2ab36295e7652de566d8ea2e16617690472d99b7d4604ecb8a8a249190e3a9c224bda3a9ea6c367c8ab6432c8f177838c20429e51fedcb8dacd5d9c7dc08b5147d6abbfc3db4b59d832290be2").unwrap();
-        let signature = hex::decode("b1af60ff60d52b38ef13f8597df977c950997b562ec8bf31b765dedf3e138801a6582b53737b654d1df047c1786acd94143c9a02c173185dcea2fa2801223180d34130bf8c6566d26773296cdc9666fdbf095417bfce6ba90bb83929081abca3").unwrap();
-        let round: u64 = 501672;
-        let result = verify(&pk, round, &previous_signature, &signature).unwrap();
-        let mut env = mock_env();
-        env.block.time = 1610566920;
-        let now = env.block.time;
-        let fromGenesis = env.block.time - GENESIS_TIME;
-        // let time = 1610566920 - 1595431050;
-        let round = (fromGenesis as f64 / PERIOD) + 1.0;
-
-        assert_eq!(result, true);
-        println!("{:?}", pk);
-        println!("{:?}", hex::encode(derive_randomness(&signature)));
-        println!("{:?}", env);
-        // println!("{}", time);
-        println!("{}", round.floor());
-        println!("{}", fromGenesis);
-    }*/
     mod register {
         use super::*;
         use crate::error::ContractError;

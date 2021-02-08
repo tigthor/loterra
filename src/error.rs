@@ -89,6 +89,10 @@ pub enum ContractError {
 
     #[error("Already voted you only can vote one time per proposal")]
     AlreadyVoted {},
+
+    #[error("Only send 1 {0}")]
+    SentTooMuch(String),
+
     // Add any other custom errors you like here.
     // Look at https://docs.rs/thiserror/1.0.21/thiserror/ for details.
 }
