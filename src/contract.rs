@@ -1,20 +1,19 @@
-use cosmwasm_std::{
-    attr, to_binary, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Deps, DepsMut, Env,
-    HandleResponse, InitResponse, MessageInfo, Order, StdError, StdResult, Uint128,
-};
+use cosmwasm_std::{attr, to_binary, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, HandleResponse, InitResponse, MessageInfo, Order, StdError, StdResult, Uint128, HumanAddr, CosmosMsg, WasmQuery, QueryRequest, Empty, from_binary, QuerierResult, QuerierWrapper, Storage, Api, Querier, Extern, LogAttribute};
 
 use crate::error::ContractError;
 use crate::msg::{
     AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
-    GetResponse, HandleMsg, InitMsg, LatestResponse, QueryMsg, RoundResponse, WinnerInfo,
+     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
 };
 use crate::state::{
-    beacons_storage, beacons_storage_read, combination_storage, combination_storage_read, config,
+    combination_storage, combination_storage_read, config,
     config_read, poll_storage, poll_storage_read, winner_storage, winner_storage_read, Combination,
     PollInfoState, PollStatus, Proposal, State, Winner, WinnerInfoState,
 };
+use crate::query::{TerrandResponse};
 
 use std::ops::{Mul, Sub};
+use hex;
 
 const MIN_DESC_LEN: u64 = 6;
 const MAX_DESC_LEN: u64 = 64;
@@ -24,7 +23,12 @@ const DRAND_GENESIS_TIME: u64 = 1595431050;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
-pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdResult<InitResponse> {
+
+pub fn init<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    msg: InitMsg,
+) -> StdResult<InitResponse> {
     let state = State {
         blockTimePlay: msg.blockTimePlay,
         everyBlockTimePlay: msg.everyBlockTimePlay,
@@ -51,29 +55,25 @@ pub fn init(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InitMsg) -> StdRe
         pollCount: 0,
         holdersMaxPercentageReward: 20,
         workerDrandMaxPercentageReward: 10,
-        pricePerTicketToRegister: Uint128(1_000_000)
+        pricePerTicketToRegister: Uint128(1_000_000),
+        terrandContractAddress: msg.terrandContractAddress
     };
-    config(deps.storage).save(&state)?;
+    config(&mut deps.storage).save(&state)?;
     Ok(InitResponse::default())
 }
 
 // And declare a custom Error variant for the ones where you will want to make use of it
-pub fn handle(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
+pub fn handle<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
     msg: HandleMsg,
-) -> Result<HandleResponse, ContractError> {
+) -> StdResult<HandleResponse>  {
     match msg {
-        HandleMsg::Register { combination } => handle_register(deps, _env, info, combination),
-        HandleMsg::Play {
-            round,
-            previous_signature,
-            signature,
-        } => handle_play(deps, _env, info, round, previous_signature, signature),
-        HandleMsg::PublicSale {} => handle_public_sale(deps, _env, info),
-        HandleMsg::Reward {} => handle_reward(deps, _env, info),
-        HandleMsg::Jackpot {} => handle_jackpot(deps, _env, info),
+        HandleMsg::Register { combination } => handle_register(deps, env, combination),
+        HandleMsg::Play {} => handle_play(deps, env),
+        HandleMsg::PublicSale {} => handle_public_sale(deps, env),
+        HandleMsg::Reward {} => handle_reward(deps, env),
+        HandleMsg::Jackpot {} => handle_jackpot(deps, env),
         HandleMsg::Proposal {
             description,
             proposal,
@@ -81,16 +81,15 @@ pub fn handle(
             prizePerRank,
         } => handle_proposal(
             deps,
-            _env,
-            info,
+            env,
             description,
             proposal,
             amount,
             prizePerRank,
         ),
-        HandleMsg::Vote { pollId, approve } => handle_vote(deps, _env, info, pollId, approve),
-        HandleMsg::PresentProposal { pollId } => handle_present_proposal(deps, _env, info, pollId),
-        HandleMsg::RejectProposal { pollId } => handle_reject_proposal(deps, _env, info, pollId),
+        HandleMsg::Vote { pollId, approve } => handle_vote(deps, env, pollId, approve),
+        HandleMsg::PresentProposal { pollId } => handle_present_proposal(deps, env, pollId),
+        HandleMsg::RejectProposal { pollId } => handle_reject_proposal(deps, env, pollId),
     }
 }
 
@@ -108,20 +107,17 @@ fn is_lower_hex(combination: &str, len: u8) -> bool {
     true
 }
 
-pub fn handle_register(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
+pub fn handle_register<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
     combination: String,
-) -> Result<HandleResponse, ContractError> {
+) -> StdResult<HandleResponse> {
     // Load the state
-    let state = config(deps.storage).load()?;
+    let state = config(&mut deps.storage).load()?;
 
     // Regex to check if the combination is allowed
     if !is_lower_hex(&combination, state.combinationLen) {
-        return Err(ContractError::CombinationNotAuthorized(
-            state.combinationLen.to_string(),
-        ));
+        return Err(StdError::generic_err(format!("Not authorized use combination of [a-f] and [0-9] with length {}", state.combinationLen)));
     }
 
     // Check if some funds are sent
@@ -131,10 +127,10 @@ pub fn handle_register(
             if info.sent_funds[0].denom == state.denomStable {
                 Ok(info.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denomStable))
+                Err(ContractError::MissingDenom(state.denomStable.clone()))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denomStable)),
+        _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
     }?;
     if sent.is_zero() {
         return Err(ContractError::NoFunds {});
@@ -145,7 +141,7 @@ pub fn handle_register(
     }
 
     // Check if the lottery is about to play and cancel new ticket to enter until play
-    if _env.block.time >= state.blockTimePlay {
+    if env.block.time >= state.blockTimePlay {
         return Err(ContractError::LotteryAboutToStart {});
     }
 
@@ -170,22 +166,28 @@ pub fn handle_register(
 
     Ok(HandleResponse {
         messages: vec![],
-        attributes: vec![attr("action", "register")],
+        log: vec![LogAttribute{ key: "action".to_string(), value: "register".to_string() }],
         data: None,
     })
 }
 
+fn encode_msg(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
+    Ok(WasmQuery::Smart { contract_addr: address, msg: to_binary(&msg)?}.into())
+}
+fn wrapper(querier: &QuerierWrapper, query: QueryRequest<Empty>) -> StdResult<TerrandResponse> {
+    let res: TerrandResponse = querier.query(&query)?;
+    Ok(res)
+}
 
 pub fn handle_play(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    round: u64,
-    previous_signature: Binary,
-    signature: Binary,
 ) -> Result<HandleResponse, ContractError> {
     // Load the state
     let mut state = config(deps.storage).load()?;
+    let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
+    let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
     // reset holders reward
     state.holdersRewards = Uint128::zero();
     // Load combinations
@@ -209,14 +211,6 @@ pub fn handle_play(
         return Err(ContractError::DoNotSendFunds("Play".to_string()));
     }
 
-    // Get the current round and check if it is a valid round.
-    let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
-    let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
-
-    if round != nextRound {
-        return Err(ContractError::InvalidRound {});
-    }
-
     // Make the contract callable for everyone every x blocks
     if _env.block.time > state.blockTimePlay {
         // Update the state
@@ -226,11 +220,16 @@ pub fn handle_play(
         return Err(ContractError::Unauthorized {});
     }
 
+    let msg = QueryMsg::GetTerrand { round: nextRound };
+    let res = encode_msg(msg, state.terrandContractAddress.clone())?;
+    let res = wrapper(&deps.querier, res)?;
+    let randomness = hex::encode(res.randomness.to_base64());
     /*
         Todo: create a function to query the randomness from the smart contract
      */
     // TODO: here the result of randomness
-    let randomnessHash = "";
+
+    let randomnessHash = randomness;
 
     let n = randomnessHash
         .char_indices()
@@ -700,12 +699,12 @@ pub fn handle_jackpot(
         // Get the contract ticket balance
         let ticketBalance = deps
             .querier
-            .query_balance(&_env.contract.address, &state.denomTicket)
+            .query_balance(&_env.contract.address, &state.denomStable)
             .unwrap();
         // Ensure the contract have the balance
         if !ticketBalance.amount.is_zero() || ticketBalance.amount > ticketWinning {
             amountToSend.push(Coin {
-                denom: state.denomTicket,
+                denom: state.denomStable,
                 amount: ticketWinning,
             });
         }
@@ -1161,6 +1160,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
         QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?,
         QueryMsg::GetPoll { pollId } => to_binary(&query_poll(deps, pollId)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
+        QueryMsg::GetTerrand {round: _}=> to_binary(&query_terrand(deps)?)?
     };
     Ok(response)
 }
@@ -1169,24 +1169,11 @@ fn query_config(deps: Deps) -> Result<ConfigResponse, ContractError> {
     let state = config_read(deps.storage).load()?;
     Ok(state)
 }
-// Query beacon by round
-fn query_get(deps: Deps, round: u64) -> Result<GetResponse, ContractError> {
-    let beacons = beacons_storage_read(deps.storage);
-    let randomness = beacons.get(&round.to_be_bytes()).unwrap_or_default();
-    Ok(GetResponse {
-        randomness: randomness.into(),
-    })
+
+fn query_terrand(_deps: Deps) -> Result<ConfigResponse, ContractError> {
+    Err(ContractError::Unauthorized {})
 }
-// Query latest beacon
-fn query_latest(deps: Deps) -> Result<LatestResponse, ContractError> {
-    let store = beacons_storage_read(deps.storage);
-    let mut iter = store.range(None, None, Order::Descending);
-    let (key, value) = iter.next().ok_or(ContractError::NoBeacon {})?;
-    Ok(LatestResponse {
-        round: u64::from_be_bytes(Binary(key).to_array()?),
-        randomness: value.into(),
-    })
-}
+
 fn query_all_combination(deps: Deps) -> Result<AllCombinationResponse, ContractError> {
     let combinations = combination_storage_read(deps.storage)
         .range(None, None, Order::Descending)
@@ -1268,6 +1255,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::borrow::Borrow;
     use std::collections::HashMap;
+    use crate::error::ContractError::Std;
 
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
         const DENOM_DELEGATION: &str = "uscrt";
@@ -1295,6 +1283,7 @@ mod tests {
             publicSaleEndBlock: PUBLIC_SALE_END_BLOCK,
             pollEndHeight: POLL_END_HEIGHT,
             tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
+            terrandContractAddress: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k")
         };
         let info = mock_info(HumanAddr::from("owner"), &[]);
         init(deps.as_mut(), mock_env(), info, init_msg).unwrap();
@@ -2204,11 +2193,7 @@ mod tests {
             let signature  = hex::decode("a619b278ab6266309c66254a82bf2404381aae232f083df1abb37f9825ba17b7618e1e0fc0503215c39e855775183be50d8ecefae9ec03e0d87184728228841bb792f3d1f8bf84f2afb7e9217b2eaddcb372d0ffdb0ad730d24b2eaf3d0751e2").unwrap().into();
             let previous_signature  = hex::decode("b6b7f91ee0617a605a4f645dce7d5bdaf487483be949104d038394fa9adfc9289a2900fb9f39ab62983c7098680c495f038f6af6ed3b637594d01a9b068dc4aa3abcb9fbd150ab519260836e115c29c808f0dc40b50ddf1e34cc482b8626293a").unwrap().into();
             let round: u64 = 504539;
-            let msg = HandleMsg::Play {
-                round: round,
-                previous_signature: previous_signature,
-                signature: signature,
-            };
+            let msg = HandleMsg::Play {};
             let mut deps = mock_dependencies(&[Coin {
                 denom: "usdc".to_string(),
                 amount: Uint128(10_000_000),
@@ -2288,11 +2273,7 @@ mod tests {
             init_combination(&mut deps);
             let signature  = hex::decode("a619b278ab6266309c66254a82bf2404381aae232f083df1abb37f9825ba17b7618e1e0fc0503215c39e855775183be50d8ecefae9ec03e0d87184728228841bb792f3d1f8bf84f2afb7e9217b2eaddcb372d0ffdb0ad730d24b2eaf3d0751e2").unwrap().into();
             let previous_signature  = hex::decode("b6b7f91ee0617a605a4f645dce7d5bdaf487483be949104d038394fa9adfc9289a2900fb9f39ab62983c7098680c495f038f6af6ed3b637594d01a9b068dc4aa3abcb9fbd150ab519260836e115c29c808f0dc40b50ddf1e34cc482b8626293a").unwrap().into();
-            let msg = HandleMsg::Play {
-                round: query_round(deps.as_ref()).unwrap().nextRound,
-                previous_signature: previous_signature,
-                signature: signature,
-            };
+            let msg = HandleMsg::Play {};
             let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
 
             match res {
@@ -2306,11 +2287,7 @@ mod tests {
             let signature  = hex::decode("a619b278ab6266309c66254a82bf2404381aae232f083df1abb37f9825ba17b7618e1e0fc0503215c39e855775183be50d8ecefae9ec03e0d87184728228841bb792f3d1f8bf84f2afb7e9217b2eaddcb372d0ffdb0ad730d24b2eaf3d0751e2").unwrap().into();
             let previous_signature  = hex::decode("b6b7f91ee0617a605a4f645dce7d5bdaf487483be949104d038394fa9adfc9289a2900fb9f39ab62983c7098680c495f038f6af6ed3b637594d01a9b068dc4aa3abcb9fbd150ab519260836e115c29c808f0dc40b50ddf1e34cc482b8626293a").unwrap().into();
             let round: u64 = 504539;
-            let msg = HandleMsg::Play {
-                round: round,
-                previous_signature: previous_signature,
-                signature: signature,
-            };
+            let msg = HandleMsg::Play {};
             let mut deps = mock_dependencies(&[Coin {
                 denom: "uscrt".to_string(),
                 amount: Uint128(10_000_000),
@@ -2342,11 +2319,7 @@ mod tests {
             let signature  = hex::decode("a619b278ab6266309c66254a82bf2404381aae232f083df1abb37f9825ba17b7618e1e0fc0503215c39e855775183be50d8ecefae9ec03e0d87184728228841bb792f3d1f8bf84f2afb7e9217b2eaddcb372d0ffdb0ad730d24b2eaf3d0751e2").unwrap().into();
             let previous_signature  = hex::decode("b6b7f91ee0617a605a4f645dce7d5bdaf487483be949104d038394fa9adfc9289a2900fb9f39ab62983c7098680c495f038f6af6ed3b637594d01a9b068dc4aa3abcb9fbd150ab519260836e115c29c808f0dc40b50ddf1e34cc482b8626293a").unwrap().into();
             let round: u64 = 504539;
-            let msg = HandleMsg::Play {
-                round: round,
-                previous_signature: previous_signature,
-                signature: signature,
-            };
+            let msg = HandleMsg::Play {};
             let mut deps = mock_dependencies(&[Coin {
                 denom: "usdc".to_string(),
                 amount: Uint128(10_000_000),

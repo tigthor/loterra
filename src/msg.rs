@@ -17,6 +17,7 @@ pub struct InitMsg {
     pub publicSaleEndBlock: u64,
     pub pollEndHeight: u64,
     pub tokenHolderSupply: Uint128,
+    pub terrandContractAddress: HumanAddr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -25,11 +26,7 @@ pub enum HandleMsg {
     /// Registering to the lottery
     Register { combination: String },
     /// Run the lottery
-    Play {
-        round: u64,
-        previous_signature: Binary,
-        signature: Binary,
-    },
+    Play {},
     /// Public sale buy the token holders with 1:1 ratio
     PublicSale {},
     /// Claim holder reward
@@ -63,8 +60,12 @@ pub enum QueryMsg {
     Winner {},
     /// Get specific poll
     GetPoll { pollId: u64 },
-    /// Get the specific round to query from Drand to play the lottery
+    /// Get the needed round for workers adding randomness to Terrand
     GetRound {},
+    /// Query Terrand smart contract to get the needed randomness to play the lottery
+    GetTerrand {
+        round: u64,
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

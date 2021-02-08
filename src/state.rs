@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Binary, CanonicalAddr, Storage, Uint128};
+use cosmwasm_std::{Binary, CanonicalAddr, Storage, Uint128, HumanAddr};
 use cosmwasm_storage::{
     bucket, bucket_read, prefixed, prefixed_read, singleton, singleton_read, Bucket,
     PrefixedStorage, ReadonlyBucket, ReadonlyPrefixedStorage, ReadonlySingleton, Singleton,
@@ -39,13 +39,14 @@ pub struct State {
     pub holdersMaxPercentageReward: u8,
     pub workerDrandMaxPercentageReward: u8,
     pub pollEndHeight: u64,
-    pub pricePerTicketToRegister: Uint128
+    pub pricePerTicketToRegister: Uint128,
+    pub terrandContractAddress: HumanAddr,
 }
 
-pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
+pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
     singleton(storage, CONFIG_KEY)
 }
-pub fn config_read(storage: &dyn Storage) -> ReadonlySingleton<State> {
+pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State>  {
     singleton_read(storage, CONFIG_KEY)
 }
 
@@ -53,10 +54,12 @@ pub fn config_read(storage: &dyn Storage) -> ReadonlySingleton<State> {
 pub struct Combination {
     pub addresses: Vec<CanonicalAddr>,
 }
-pub fn combination_storage(storage: &mut dyn Storage) -> Bucket<Combination> {
-    bucket(storage, COMBINATION_KEY)
+
+pub fn combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, Combination> {
+    bucket(COMBINATION_KEY, storage )
 }
-pub fn combination_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Combination> {
+
+pub fn combination_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Combination> {
     bucket_read(storage, COMBINATION_KEY)
 }
 
@@ -70,12 +73,13 @@ pub struct Winner {
     pub winners: Vec<WinnerInfoState>,
 }
 
-pub fn winner_storage(storage: &mut dyn Storage) -> Bucket<Winner> {
-    bucket(storage, WINNER_KEY)
+pub fn winner_storage<T: Storage>(storage: &mut T) -> Bucket<T, Winner> {
+    bucket(WINNER_KEY, storage )
 }
 
-pub fn winner_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Winner> {
-    bucket_read(storage, WINNER_KEY)
+
+pub fn winner_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Winner> {
+    bucket_read(WINNER_KEY , storage)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -113,10 +117,10 @@ pub struct PollInfoState {
     pub proposal: Proposal,
 }
 
-pub fn poll_storage(storage: &mut dyn Storage) -> Bucket<PollInfoState> {
-    bucket(storage, POLL_KEY)
+pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState>{
+    bucket(POLL_KEY, storage)
 }
 
-pub fn poll_storage_read(storage: &dyn Storage) -> ReadonlyBucket<PollInfoState> {
-    bucket_read(storage, POLL_KEY)
+pub fn poll_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoState> {
+    bucket_read(POLL_KEY, storage)
 }

@@ -4,19 +4,15 @@
   "type": "object",
   "required": [
     "blockClaim",
-    "blockIcoTimeframe",
     "blockTimePlay",
     "claimReward",
     "claimTicket",
     "combinationLen",
     "delegatorMinAmountInDelegation",
     "denomDelegation",
-    "denomDelegationDecimal",
     "denomShare",
-    "denomTicket",
-    "drandGenesisTime",
-    "drandPeriod",
-    "drandPublicKey",
+    "denomStable",
+    "denomStableDecimal",
     "everyBlockHeight",
     "everyBlockTimePlay",
     "feeForDrandWorkerInPercentage",
@@ -24,10 +20,12 @@
     "holdersRewards",
     "jackpotPercentageReward",
     "jackpotReward",
-    "owner",
     "pollCount",
     "pollEndHeight",
+    "pricePerTicketToRegister",
     "prizeRankWinnerPercentage",
+    "publicSaleEndBlock",
+    "terrandContractAddress",
     "tokenHolderPercentageFeeReward",
     "tokenHolderSupply",
     "validatorMinAmountToAllowClaim",
@@ -35,11 +33,6 @@
   ],
   "properties": {
     "blockClaim": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "blockIcoTimeframe": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
@@ -72,27 +65,14 @@
     "denomDelegation": {
       "type": "string"
     },
-    "denomDelegationDecimal": {
-      "$ref": "#/definitions/Uint128"
-    },
     "denomShare": {
       "type": "string"
     },
-    "denomTicket": {
+    "denomStable": {
       "type": "string"
     },
-    "drandGenesisTime": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "drandPeriod": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "drandPublicKey": {
-      "$ref": "#/definitions/Binary"
+    "denomStableDecimal": {
+      "$ref": "#/definitions/Uint128"
     },
     "everyBlockHeight": {
       "type": "integer",
@@ -125,9 +105,6 @@
     "jackpotReward": {
       "$ref": "#/definitions/Uint128"
     },
-    "owner": {
-      "$ref": "#/definitions/CanonicalAddr"
-    },
     "pollCount": {
       "type": "integer",
       "format": "uint64",
@@ -138,6 +115,9 @@
       "format": "uint64",
       "minimum": 0.0
     },
+    "pricePerTicketToRegister": {
+      "$ref": "#/definitions/Uint128"
+    },
     "prizeRankWinnerPercentage": {
       "type": "array",
       "items": {
@@ -145,6 +125,14 @@
         "format": "uint8",
         "minimum": 0.0
       }
+    },
+    "publicSaleEndBlock": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "terrandContractAddress": {
+      "$ref": "#/definitions/HumanAddr"
     },
     "tokenHolderPercentageFeeReward": {
       "type": "integer",
@@ -170,6 +158,9 @@
     },
     "CanonicalAddr": {
       "$ref": "#/definitions/Binary"
+    },
+    "HumanAddr": {
+      "type": "string"
     },
     "Uint128": {
       "type": "string"
