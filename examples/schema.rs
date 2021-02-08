@@ -4,8 +4,8 @@ use std::fs::create_dir_all;
 use cosmwasm_schema::{export_schema, export_schema_with_title, remove_schemas, schema_for};
 
 use lottery::msg::{
-    AllCombinationResponse, AllWinnerResponse, ConfigResponse, GetPollResponse, GetResponse,
-    HandleMsg, InitMsg, LatestResponse, QueryMsg, RoundResponse,
+    AllCombinationResponse, AllWinnerResponse, ConfigResponse, GetPollResponse,
+    HandleMsg, InitMsg, QueryMsg, RoundResponse,
 };
 
 fn main() {
@@ -18,16 +18,6 @@ fn main() {
     export_schema(&schema_for!(HandleMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
     export_schema_with_title(&mut schema_for!(ConfigResponse), &out_dir, "ConfigResponse");
-    export_schema_with_title(
-        &mut schema_for!(LatestResponse),
-        &out_dir,
-        "LatestResponseDrand",
-    );
-    export_schema_with_title(
-        &mut schema_for!(GetResponse),
-        &out_dir,
-        "GetResponseRandomness",
-    );
     export_schema_with_title(
         &mut schema_for!(AllCombinationResponse),
         &out_dir,

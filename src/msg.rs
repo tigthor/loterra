@@ -6,7 +6,6 @@ use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
-    pub denomTicket: String,
     pub denomDelegation: String,
     pub denomStable: String,
     pub denomStableDecimal: Uint128,
@@ -31,12 +30,8 @@ pub enum HandleMsg {
         previous_signature: Binary,
         signature: Binary,
     },
-    /// Claim 1 ticket every x block if you are a delegator
-    Ticket {},
     /// Public sale buy the token holders with 1:1 ratio
     PublicSale {},
-    /// Buy tickets at 1:1 ratio only integer, float number will be rounded down
-    Buy {},
     /// Claim holder reward
     Reward {},
     /// Claim jackpot
@@ -62,10 +57,6 @@ pub enum HandleMsg {
 pub enum QueryMsg {
     /// Get the config state
     Config {},
-    /// Get the last randomness
-    LatestDrand {},
-    /// Get a specific randomness
-    GetRandomness { round: u64 },
     /// Combination lottery numbers and address
     Combination {},
     /// Winner lottery rank and address
@@ -74,17 +65,6 @@ pub enum QueryMsg {
     GetPoll { pollId: u64 },
     /// Get the specific round to query from Drand to play the lottery
     GetRound {},
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct GetResponse {
-    pub randomness: Binary,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct LatestResponse {
-    pub round: u64,
-    pub randomness: Binary,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

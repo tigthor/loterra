@@ -8,7 +8,6 @@ use cosmwasm_storage::{
 };
 
 pub static CONFIG_KEY: &[u8] = b"config";
-const BEACONS_KEY: &[u8] = b"beacons";
 const COMBINATION_KEY: &[u8] = b"combination";
 const WINNER_KEY: &[u8] = b"winner";
 const POLL_KEY: &[u8] = b"poll";
@@ -20,7 +19,6 @@ pub struct State {
     pub blockClaim: u64,
     pub publicSaleEndBlock: u64,
     pub everyBlockHeight: u64,
-    pub denomTicket: String,
     pub denomDelegation: String,
     pub denomStable: String,
     pub denomStableDecimal: Uint128,
@@ -29,7 +27,6 @@ pub struct State {
     pub claimReward: Vec<CanonicalAddr>,
     pub holdersRewards: Uint128,
     pub tokenHolderSupply: Uint128,
-    pub drandPublicKey: Binary,
     pub validatorMinAmountToAllowClaim: Uint128,
     pub delegatorMinAmountInDelegation: Uint128,
     pub combinationLen: u8,
@@ -42,6 +39,7 @@ pub struct State {
     pub holdersMaxPercentageReward: u8,
     pub workerDrandMaxPercentageReward: u8,
     pub pollEndHeight: u64,
+    pub pricePerTicketToRegister: Uint128
 }
 
 pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
@@ -49,13 +47,6 @@ pub fn config(storage: &mut dyn Storage) -> Singleton<State> {
 }
 pub fn config_read(storage: &dyn Storage) -> ReadonlySingleton<State> {
     singleton_read(storage, CONFIG_KEY)
-}
-
-pub fn beacons_storage(storage: &mut dyn Storage) -> PrefixedStorage {
-    prefixed(storage, BEACONS_KEY)
-}
-pub fn beacons_storage_read(storage: &dyn Storage) -> ReadonlyPrefixedStorage {
-    prefixed_read(storage, BEACONS_KEY)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
@@ -97,14 +88,13 @@ pub enum PollStatus {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub enum Proposal {
-    MinAmountDelegator,
-    MinAmountValidator,
     LotteryEveryBlockTime,
     HolderFeePercentage,
     DrandWorkerFeePercentage,
     PrizePerRank,
     JackpotRewardPercentage,
     ClaimEveryBlock,
+    AmountToRegister,
     // test purpose
     NotExist,
 }
