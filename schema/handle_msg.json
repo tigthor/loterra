@@ -30,60 +30,18 @@
       ],
       "properties": {
         "play": {
-          "type": "object",
-          "required": [
-            "previous_signature",
-            "round",
-            "signature"
-          ],
-          "properties": {
-            "previous_signature": {
-              "$ref": "#/definitions/Binary"
-            },
-            "round": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
-            },
-            "signature": {
-              "$ref": "#/definitions/Binary"
-            }
-          }
-        }
-      }
-    },
-    {
-      "description": "Claim 1 ticket every x block if you are a delegator",
-      "type": "object",
-      "required": [
-        "ticket"
-      ],
-      "properties": {
-        "ticket": {
           "type": "object"
         }
       }
     },
     {
-      "description": "Buy the token holders with USCRT and get 1:1 ratio",
+      "description": "Public sale buy the token holders with 1:1 ratio",
       "type": "object",
       "required": [
-        "ico"
+        "public_sale"
       ],
       "properties": {
-        "ico": {
-          "type": "object"
-        }
-      }
-    },
-    {
-      "description": "Buy tickets with USCRT, 1 ticket is 1_000_000 USCRT (1SCRT) but DAO can vote this",
-      "type": "object",
-      "required": [
-        "buy"
-      ],
-      "properties": {
-        "buy": {
+        "public_sale": {
           "type": "object"
         }
       }
@@ -229,21 +187,16 @@
     }
   ],
   "definitions": {
-    "Binary": {
-      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
-      "type": "string"
-    },
     "Proposal": {
       "type": "string",
       "enum": [
-        "MinAmountDelegator",
-        "MinAmountValidator",
         "LotteryEveryBlockTime",
         "HolderFeePercentage",
         "DrandWorkerFeePercentage",
         "PrizePerRank",
         "JackpotRewardPercentage",
         "ClaimEveryBlock",
+        "AmountToRegister",
         "NotExist"
       ]
     },

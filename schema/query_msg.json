@@ -15,40 +15,6 @@
       }
     },
     {
-      "description": "Get the last randomness",
-      "type": "object",
-      "required": [
-        "latest_drand"
-      ],
-      "properties": {
-        "latest_drand": {
-          "type": "object"
-        }
-      }
-    },
-    {
-      "description": "Get a specific randomness",
-      "type": "object",
-      "required": [
-        "get_randomness"
-      ],
-      "properties": {
-        "get_randomness": {
-          "type": "object",
-          "required": [
-            "round"
-          ],
-          "properties": {
-            "round": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
-            }
-          }
-        }
-      }
-    },
-    {
       "description": "Combination lottery numbers and address",
       "type": "object",
       "required": [
@@ -95,7 +61,7 @@
       }
     },
     {
-      "description": "Get the specific round to query from Drand to play the lottery",
+      "description": "Get the needed round for workers adding randomness to Terrand",
       "type": "object",
       "required": [
         "get_round"
@@ -103,6 +69,28 @@
       "properties": {
         "get_round": {
           "type": "object"
+        }
+      }
+    },
+    {
+      "description": "Query Terrand smart contract to get the needed randomness to play the lottery",
+      "type": "object",
+      "required": [
+        "get_terrand"
+      ],
+      "properties": {
+        "get_terrand": {
+          "type": "object",
+          "required": [
+            "round"
+          ],
+          "properties": {
+            "round": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
         }
       }
     }

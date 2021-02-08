@@ -4,38 +4,20 @@
   "type": "object",
   "required": [
     "blockClaim",
-    "blockIcoTimeframe",
     "blockTimePlay",
-    "claimReward",
-    "claimTicket",
-    "combinationLen",
-    "delegatorMinAmountInDelegation",
     "denomDelegation",
-    "denomDelegationDecimal",
     "denomShare",
-    "denomTicket",
-    "drandGenesisTime",
-    "drandPeriod",
-    "drandPublicKey",
+    "denomStable",
+    "denomStableDecimal",
     "everyBlockHeight",
     "everyBlockTimePlay",
-    "feeForDrandWorkerInPercentage",
-    "holdersRewards",
-    "jackpotPercentageReward",
-    "jackpotReward",
     "pollEndHeight",
-    "prizeRankWinnerPercentage",
-    "tokenHolderPercentageFeeReward",
-    "tokenHolderSupply",
-    "validatorMinAmountToAllowClaim"
+    "publicSaleEndBlock",
+    "terrandContractAddress",
+    "tokenHolderSupply"
   ],
   "properties": {
     "blockClaim": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "blockIcoTimeframe": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
@@ -45,50 +27,17 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "claimReward": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/CanonicalAddr"
-      }
-    },
-    "claimTicket": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/CanonicalAddr"
-      }
-    },
-    "combinationLen": {
-      "type": "integer",
-      "format": "uint8",
-      "minimum": 0.0
-    },
-    "delegatorMinAmountInDelegation": {
-      "$ref": "#/definitions/Uint128"
-    },
     "denomDelegation": {
       "type": "string"
-    },
-    "denomDelegationDecimal": {
-      "$ref": "#/definitions/Uint128"
     },
     "denomShare": {
       "type": "string"
     },
-    "denomTicket": {
+    "denomStable": {
       "type": "string"
     },
-    "drandGenesisTime": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "drandPeriod": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "drandPublicKey": {
-      "$ref": "#/definitions/Binary"
+    "denomStableDecimal": {
+      "$ref": "#/definitions/Uint128"
     },
     "everyBlockHeight": {
       "type": "integer",
@@ -100,54 +49,26 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "feeForDrandWorkerInPercentage": {
-      "type": "integer",
-      "format": "uint8",
-      "minimum": 0.0
-    },
-    "holdersRewards": {
-      "$ref": "#/definitions/Uint128"
-    },
-    "jackpotPercentageReward": {
-      "type": "integer",
-      "format": "uint8",
-      "minimum": 0.0
-    },
-    "jackpotReward": {
-      "$ref": "#/definitions/Uint128"
-    },
     "pollEndHeight": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "prizeRankWinnerPercentage": {
-      "type": "array",
-      "items": {
-        "type": "integer",
-        "format": "uint8",
-        "minimum": 0.0
-      }
-    },
-    "tokenHolderPercentageFeeReward": {
+    "publicSaleEndBlock": {
       "type": "integer",
-      "format": "uint8",
+      "format": "uint64",
       "minimum": 0.0
     },
-    "tokenHolderSupply": {
-      "$ref": "#/definitions/Uint128"
+    "terrandContractAddress": {
+      "$ref": "#/definitions/HumanAddr"
     },
-    "validatorMinAmountToAllowClaim": {
+    "tokenHolderSupply": {
       "$ref": "#/definitions/Uint128"
     }
   },
   "definitions": {
-    "Binary": {
-      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
+    "HumanAddr": {
       "type": "string"
-    },
-    "CanonicalAddr": {
-      "$ref": "#/definitions/Binary"
     },
     "Uint128": {
       "type": "string"
