@@ -16,10 +16,7 @@ const POLL_KEY: &[u8] = b"poll";
 pub struct State {
     pub blockTimePlay: u64,
     pub everyBlockTimePlay: u64,
-    pub blockClaim: u64,
     pub publicSaleEndBlock: u64,
-    pub everyBlockHeight: u64,
-    pub denomDelegation: String,
     pub denomStable: String,
     pub denomStableDecimal: Uint128,
     pub denomShare: String,
