@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{Binary, CanonicalAddr, Storage, Uint128, HumanAddr};
 use cosmwasm_storage::{
-    bucket, bucket_read, prefixed, prefixed_read, singleton, singleton_read, Bucket,
-    PrefixedStorage, ReadonlyBucket, ReadonlyPrefixedStorage, ReadonlySingleton, Singleton,
+    bucket, bucket_read, singleton, singleton_read, Bucket,
+    ReadonlyBucket, ReadonlySingleton, Singleton,
 };
 
 pub static CONFIG_KEY: &[u8] = b"config";
@@ -60,7 +60,7 @@ pub fn combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, Combination
 }
 
 pub fn combination_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Combination> {
-    bucket_read(storage, COMBINATION_KEY)
+    bucket_read(COMBINATION_KEY, storage )
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -116,6 +116,7 @@ pub struct PollInfoState {
     pub prizeRank: Vec<u8>,
     pub proposal: Proposal,
 }
+
 
 pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState>{
     bucket(POLL_KEY, storage)
