@@ -133,29 +133,29 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
     }?;
     if sent.is_zero() {
-        return Err(ContractError::NoFunds {});
+        return Err(StdError::generic_err(format!("you need to send {}{} in order to register", state.pricePerTicketToRegister.clone(),state.denomStable.clone())));
     }
     // Handle the player is not sending too much or too less
     if sent.u128() != state.pricePerTicketToRegister.u128() {
-        return Err(ContractError::SentTooMuch(state.denomStable.to_string()));
+        return Err(StdError::generic_err(format!("send {}{}", state.pricePerTicketToRegister.clone(),state.denomStable.clone())));
     }
 
     // Check if the lottery is about to play and cancel new ticket to enter until play
     if env.block.time >= state.blockTimePlay {
-        return Err(ContractError::LotteryAboutToStart {});
+        return Err(StdError::generic_err("lottery is about to start wait until the end before register"));
     }
 
     // Save combination and addresses to the bucket
-    match combination_storage(deps.storage).may_load(&combination.as_bytes())? {
+    match combination_storage(&mut deps.storage).may_load(&combination.as_bytes())? {
         Some(c) => {
             let mut combinationStorage = c;
             combinationStorage
                 .addresses
                 .push(deps.api.canonical_address(&info.sender)?);
-            combination_storage(deps.storage).save(&combination.as_bytes(), &combinationStorage)?;
+            combination_storage(&mut deps.storage).save(&combination.as_bytes(), &combinationStorage)?;
         }
         None => {
-            combination_storage(deps.storage).save(
+            combination_storage(&mut deps.storage).save(
                 &combination.as_bytes(),
                 &Combination {
                     addresses: vec![deps.api.canonical_address(&info.sender)?],
@@ -179,13 +179,12 @@ fn wrapper(querier: &QuerierWrapper, query: QueryRequest<Empty>) -> StdResult<Te
     Ok(res)
 }
 
-pub fn handle_play(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-) -> Result<HandleResponse, ContractError> {
+pub fn handle_play<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env
+) -> StdResult<HandleResponse>{
     // Load the state
-    let mut state = config(deps.storage).load()?;
+    let mut state = config(&mut deps.storage).load()?;
     let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
     let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
     // reset holders reward
@@ -197,27 +196,27 @@ pub fn handle_play(
         Empty previous winner
     */
     // Get all keys in the bucket winner
-    let keys = winner_storage(deps.storage)
+    let keys = winner_storage(&mut deps.storage)
         .range(None, None, Order::Ascending)
         .flat_map(|item| item.map(|(key, _)| key))
         .collect::<Vec<Vec<u8>>>();
     // Empty winner for the next play
     for x in keys {
-        winner_storage(deps.storage).remove(x.as_ref())
+        winner_storage(&mut deps.storage).remove(x.as_ref())
     }
 
     // Ensure the sender not sending funds accidentally
     if !info.sent_funds.is_empty() {
-        return Err(ContractError::DoNotSendFunds("Play".to_string()));
+        return Err(StdError::generic_err("Do not send funds with play"));
     }
 
     // Make the contract callable for everyone every x blocks
-    if _env.block.time > state.blockTimePlay {
+    if env.block.time > state.blockTimePlay {
         // Update the state
         state.claimReward = vec![];
-        state.blockTimePlay = _env.block.time + state.everyBlockTimePlay;
+        state.blockTimePlay = env.block.time + state.everyBlockTimePlay;
     } else {
-        return Err(ContractError::Unauthorized {});
+        return Err(StdError::Unauthorized { backtrace: None });
     }
 
     let msg = QueryMsg::GetTerrand { round: nextRound };
@@ -242,7 +241,7 @@ pub fn handle_play(
     // Set jackpot amount
     let balance = deps
         .querier
-        .query_balance(&_env.contract.address, &state.denomStable)
+        .query_balance(&env.contract.address, &state.denomStable)
         .unwrap();
     // Max amount winners can claim
     let jackpot = balance
@@ -288,7 +287,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(
+                    winner_storage(&mut deps.storage).save(
                         &1_u8.to_be_bytes(),
                         &Winner {
                             winners: dataWinner,
@@ -304,7 +303,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(
+                    winner_storage(&mut deps.storage).save(
                         &2_u8.to_be_bytes(),
                         &Winner {
                             winners: dataWinner,
@@ -320,7 +319,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(
+                    winner_storage(&mut deps.storage).save(
                         &3_u8.to_be_bytes(),
                         &Winner {
                             winners: dataWinner,
@@ -336,7 +335,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(
+                    winner_storage(&mut deps.storage).save(
                         &4_u8.to_be_bytes(),
                         &Winner {
                             winners: dataWinner,
@@ -352,7 +351,7 @@ pub fn handle_play(
                     });
                 }
                 if !dataWinner.is_empty() {
-                    winner_storage(deps.storage).save(
+                    winner_storage(&mut deps.storage).save(
                         &5_u8.to_be_bytes(),
                         &Winner {
                             winners: dataWinner,
@@ -366,7 +365,7 @@ pub fn handle_play(
     }
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address,
+        from_address: env.contract.address,
         to_address: info.sender.clone(),
         amount: vec![Coin {
             denom: state.denomStable.clone(),
@@ -377,21 +376,21 @@ pub fn handle_play(
     state.jackpotReward = jackpotAfter;
 
     // Get all keys in the bucket combination
-    let keys = combination_storage(deps.storage)
+    let keys = combination_storage(&mut deps.storage)
         .range(None, None, Order::Ascending)
         .flat_map(|item| item.map(|(key, _)| key))
         .collect::<Vec<Vec<u8>>>();
     // Empty combination for the next play
     for x in keys {
-        combination_storage(deps.storage).remove(x.as_ref())
+        combination_storage(&mut deps.storage).remove(x.as_ref())
     }
 
     // Save the new state
-    config(deps.storage).save(&state)?;
+    config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "reward"), attr("to", &info.sender)],
+        log: vec![LogAttribute{ key: "action".to_string(), value: "reward".to_string() },LogAttribute{ key: "to".to_string(), value: &info.sender.to_string() }],
         data: None,
     })
 }
