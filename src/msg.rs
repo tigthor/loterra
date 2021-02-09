@@ -6,14 +6,11 @@ use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
-    pub denomDelegation: String,
     pub denomStable: String,
     pub denomStableDecimal: Uint128,
     pub denomShare: String,
-    pub everyBlockHeight: u64,
     pub blockTimePlay: u64,
     pub everyBlockTimePlay: u64,
-    pub blockClaim: u64,
     pub publicSaleEndBlock: u64,
     pub pollEndHeight: u64,
     pub tokenHolderSupply: Uint128,

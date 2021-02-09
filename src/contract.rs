@@ -18,6 +18,7 @@ use crate::query::{TerrandResponse};
 use std::ops::{Mul, Sub};
 use hex;
 use std::convert::TryInto;
+use serde::de::Unexpected::Bytes;
 
 const MIN_DESC_LEN: u64 = 6;
 const MAX_DESC_LEN: u64 = 64;
@@ -36,10 +37,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     let state = State {
         blockTimePlay: msg.blockTimePlay,
         everyBlockTimePlay: msg.everyBlockTimePlay,
-        blockClaim: msg.blockClaim,
         publicSaleEndBlock: msg.publicSaleEndBlock,
-        everyBlockHeight: msg.everyBlockHeight,
-        denomDelegation: msg.denomDelegation,
         denomStableDecimal: msg.denomStableDecimal,
         denomStable: msg.denomStable,
         denomShare: msg.denomShare,
@@ -682,7 +680,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         // Get the contract balance
         let balance = deps
             .querier
-            .query_balance(&env.contract.address, &state.denomDelegation)
+            .query_balance(&env.contract.address, &state.denomStable)
             .unwrap();
         // Ensure the contract have the balance
         if balance.amount.is_zero() {
@@ -1074,9 +1072,6 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
 
     // Valid the proposal
     match store.proposal {
-        Proposal::ClaimEveryBlock => {
-            state.blockClaim = store.amount.u128() as u64;
-        }
         Proposal::LotteryEveryBlockTime => {
             state.everyBlockTimePlay = store.amount.u128() as u64;
         }
@@ -1163,15 +1158,20 @@ fn query_all_combination<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>)
         combination: combinations,
     })
 }
-
+fn vector_as_u8_1_array(vector: Vec<u8>) -> [u8;1] {
+    let mut arr = [0u8;1];
+    for (place, element) in arr.iter_mut().zip(vector.iter()) {
+        *place = *element;
+    }
+    arr
+}
 fn query_all_winner<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdResult<AllWinnerResponse> {
     let winners = winner_storage_read(&deps.storage)
         .range(None, None, Order::Descending)
         .flat_map(|item| {
             item.and_then(|(k, winner)| {
-
                 Ok(WinnerInfo {
-                    rank: u8::from_be_bytes(k.try_into().unwrap()),
+                    rank: u8::from_be_bytes(vector_as_u8_1_array(k)),
                     winners: winner.winners,
                 })
             })
@@ -1231,11 +1231,9 @@ mod tests {
     use crate::error::ContractError::Std;
 
     fn default_init(deps: &mut OwnedDeps<MockStorage, MockApi, MockQuerier>) {
-        const DENOM_DELEGATION: &str = "uscrt";
         const DENOM_STABLE: &str = "usdc";
         const DENOM_STABLE_DECIMAL: Uint128 = Uint128(1_000_000);
         const DENOM_SHARE: &str = "upot";
-        const EVERY_BLOCK_EIGHT: u64 = 100;
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const BLOCK_CLAIM: u64 = 0;
@@ -1245,14 +1243,11 @@ mod tests {
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
 
         let init_msg = InitMsg {
-            denomDelegation: DENOM_DELEGATION.to_string(),
             denomStableDecimal: DENOM_STABLE_DECIMAL,
             denomStable: DENOM_STABLE.to_string(),
             denomShare: DENOM_SHARE.to_string(),
-            everyBlockHeight: EVERY_BLOCK_EIGHT,
             blockTimePlay: BLOCK_TIME_PLAY,
             everyBlockTimePlay: EVERY_BLOCK_TIME_PLAY,
-            blockClaim: EVERY_BLOCK_CLAIM,
             publicSaleEndBlock: PUBLIC_SALE_END_BLOCK,
             pollEndHeight: POLL_END_HEIGHT,
             tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
