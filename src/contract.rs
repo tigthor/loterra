@@ -1,4 +1,7 @@
-use cosmwasm_std::{attr, to_binary, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, HandleResponse, InitResponse, MessageInfo, Order, StdError, StdResult, Uint128, HumanAddr, CosmosMsg, WasmQuery, QueryRequest, Empty, from_binary, QuerierResult, QuerierWrapper, Storage, Api, Querier, Extern, LogAttribute};
+use cosmwasm_std::{to_binary, Binary, BankMsg, CanonicalAddr, Coin, Decimal, Env,
+                   HandleResponse, InitResponse, Order, StdError, StdResult, Uint128,
+                   HumanAddr, WasmQuery, QueryRequest, Empty,
+                   Storage, Api, Querier, Extern, LogAttribute};
 
 use crate::error::ContractError;
 use crate::msg::{
@@ -14,6 +17,7 @@ use crate::query::{TerrandResponse};
 
 use std::ops::{Mul, Sub};
 use hex;
+use std::convert::TryInto;
 
 const MIN_DESC_LEN: u64 = 6;
 const MAX_DESC_LEN: u64 = 64;
@@ -121,17 +125,17 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     }
 
     // Check if some funds are sent
-    let sent = match info.sent_funds.len() {
+    let sent = match env.message.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
-            if info.sent_funds[0].denom == state.denomStable {
-                Ok(info.sent_funds[0].amount)
+            if env.message.sent_funds[0].denom == state.denomStable {
+                Ok(env.message.sent_funds[0].amount)
             } else {
                 Err(ContractError::MissingDenom(state.denomStable.clone()))
             }
         }
         _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
-    }?;
+    }.unwrap();
     if sent.is_zero() {
         return Err(StdError::generic_err(format!("you need to send {}{} in order to register", state.pricePerTicketToRegister.clone(),state.denomStable.clone())));
     }
@@ -151,14 +155,14 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             let mut combinationStorage = c;
             combinationStorage
                 .addresses
-                .push(deps.api.canonical_address(&info.sender)?);
+                .push(deps.api.canonical_address(&env.message.sender)?);
             combination_storage(&mut deps.storage).save(&combination.as_bytes(), &combinationStorage)?;
         }
         None => {
             combination_storage(&mut deps.storage).save(
                 &combination.as_bytes(),
                 &Combination {
-                    addresses: vec![deps.api.canonical_address(&info.sender)?],
+                    addresses: vec![deps.api.canonical_address(&env.message.sender)?],
                 },
             )?;
         }
@@ -174,8 +178,8 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
 fn encode_msg(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
     Ok(WasmQuery::Smart { contract_addr: address, msg: to_binary(&msg)?}.into())
 }
-fn wrapper(querier: &QuerierWrapper, query: QueryRequest<Empty>) -> StdResult<TerrandResponse> {
-    let res: TerrandResponse = querier.query(&query)?;
+fn wrapper<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, query: QueryRequest<Empty>) -> StdResult<TerrandResponse> {
+    let res: TerrandResponse = deps.querier.query(&query)?;
     Ok(res)
 }
 
@@ -183,6 +187,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env
 ) -> StdResult<HandleResponse>{
+
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
     let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
@@ -190,7 +195,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // reset holders reward
     state.holdersRewards = Uint128::zero();
     // Load combinations
-    let store = query_all_combination(deps.as_ref()).unwrap();
+    let store = query_all_combination(&deps).unwrap();
 
     /*
         Empty previous winner
@@ -206,7 +211,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     }
 
     // Ensure the sender not sending funds accidentally
-    if !info.sent_funds.is_empty() {
+    if !env.message.sent_funds.is_empty() {
         return Err(StdError::generic_err("Do not send funds with play"));
     }
 
@@ -221,7 +226,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     let msg = QueryMsg::GetTerrand { round: nextRound };
     let res = encode_msg(msg, state.terrandContractAddress.clone())?;
-    let res = wrapper(&deps.querier, res)?;
+    let res = wrapper(&deps, res)?;
     let randomness = hex::encode(res.randomness.to_base64());
     /*
         Todo: create a function to query the randomness from the smart contract
@@ -366,7 +371,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     let msg = BankMsg::Send {
         from_address: env.contract.address,
-        to_address: info.sender.clone(),
+        to_address: env.message.sender.clone(),
         amount: vec![Coin {
             denom: state.denomStable.clone(),
             amount: feeForDrandWorker,
@@ -390,54 +395,54 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        log: vec![LogAttribute{ key: "action".to_string(), value: "reward".to_string() },LogAttribute{ key: "to".to_string(), value: &info.sender.to_string() }],
+        log: vec![LogAttribute{ key: "action".to_string(), value: "reward".to_string() },LogAttribute{ key: "to".to_string(), value: env.message.sender.to_string() }],
         data: None,
     })
 }
 
-pub fn handle_public_sale(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-) -> Result<HandleResponse, ContractError> {
+pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env
+) -> StdResult<HandleResponse> {
+
     // Load the state
-    let mut state = config(deps.storage).load()?;
+    let mut state = config(&mut deps.storage).load()?;
     // Public sale expire after blocktime
-    if state.publicSaleEndBlock < _env.block.height {
-        return Err(ContractError::TheIcoIsEnded {});
+    if state.publicSaleEndBlock < env.block.height {
+        return Err(StdError::generic_err("Public sale is ended"));
     }
     // Check if some funds are sent
-    let sent = match info.sent_funds.len() {
+    let sent = match env.message.sent_funds.len() {
         0 => Err(ContractError::NoFunds {}),
         1 => {
-            if info.sent_funds[0].denom == state.denomStable {
-                Ok(info.sent_funds[0].amount)
+            if env.message.sent_funds[0].denom == state.denomStable {
+                Ok(env.message.sent_funds[0].amount)
             } else {
                 Err(ContractError::MissingDenom(state.denomStable.clone()))
             }
         }
         _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
-    }?;
+    }.unwrap();
 
     if sent.is_zero() {
-        return Err(ContractError::NoFunds {});
+        return Err(StdError::generic_err("Send some funds"));
     };
     // Get the contract balance prepare the tx
     let balance = deps
         .querier
-        .query_balance(&_env.contract.address, &state.denomShare)
+        .query_balance(&env.contract.address, &state.denomShare)
         .unwrap();
     if balance.amount.is_zero() {
-        return Err(ContractError::EmptyBalance {});
+        return Err(StdError::generic_err("All tokens have been sold"));
     }
 
     if balance.amount.u128() < sent.u128() {
-        return Err(ContractError::EmptyBalance {});
+        return Err(StdError::generic_err("No enough balance to cover your buy, try buying less amount"));
     }
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address,
-        to_address: info.sender.clone(),
+        from_address: env.contract.address,
+        to_address: env.message.sender.clone(),
         amount: vec![Coin {
             denom: state.denomShare.clone(),
             amount: sent,
@@ -446,48 +451,47 @@ pub fn handle_public_sale(
 
     state.tokenHolderSupply += sent;
     // Save the new state
-    config(deps.storage).save(&state)?;
+    config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "public sale"), attr("to", &info.sender)],
+        log: vec![ LogAttribute{ key: "action".to_string(), value: "public sale".to_string() }, LogAttribute{ key: "to".to_string(), value: env.message.sender.to_string() }],
         data: None,
     })
 }
 
-pub fn handle_reward(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-) -> Result<HandleResponse, ContractError> {
+pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env
+) -> StdResult<HandleResponse>{
     // Load the state
-    let mut state = config(deps.storage).load()?;
+    let mut state = config(&mut deps.storage).load()?;
     // convert the sender to canonical address
-    let sender = deps.api.canonical_address(&info.sender).unwrap();
+    let sender = deps.api.canonical_address(&env.message.sender).unwrap();
     // Ensure the sender not sending funds accidentally
-    if !info.sent_funds.is_empty() {
-        return Err(ContractError::DoNotSendFunds("Reward".to_string()));
+    if !env.message.sent_funds.is_empty() {
+        return Err(StdError::generic_err("Do not send funds with reward"));
     }
     if state.tokenHolderSupply.is_zero() {
-        return Err(ContractError::Unauthorized {});
+        return Err(StdError::Unauthorized { backtrace: None });
     }
 
     // Ensure sender have some reward tokens
     let balanceSender = deps
         .querier
-        .query_balance(info.sender.clone(), &state.denomShare)
+        .query_balance(env.message.sender.clone(), &state.denomShare)
         .unwrap();
     if balanceSender.amount.is_zero() {
-        return Err(ContractError::Unauthorized {});
+        return Err(StdError::Unauthorized { backtrace: None });
     }
 
     // Ensure sender only can claim one time every x blocks
     if state
         .claimReward
         .iter()
-        .any(|address| deps.api.human_address(address).unwrap() == info.sender.clone())
+        .any(|address| deps.api.human_address(address).unwrap() == env.message.sender.clone())
     {
-        return Err(ContractError::AlreadyClaimed {});
+        return Err(StdError::generic_err("Already claimed"));
     }
     // Add the sender to claimed state
     state.claimReward.push(sender.clone());
@@ -495,16 +499,16 @@ pub fn handle_reward(
     // Get the contract balance
     let balanceContract = deps
         .querier
-        .query_balance(_env.contract.address.clone(), &state.denomStable)?;
+        .query_balance(env.contract.address.clone(), &state.denomStable)?;
     // Cancel if no amount in the contract
     if balanceContract.amount.is_zero() {
-        return Err(ContractError::EmptyBalance {});
+        return Err(StdError::generic_err("Contract balance is empty"));
     }
     // Get the percentage of shareholder
     let shareHolderPercentage =
         balanceSender.amount.u128() as u64 * 100 / state.tokenHolderSupply.u128() as u64;
     if shareHolderPercentage == 0 {
-        return Err(ContractError::SharesTooLow {});
+        return Err(StdError::generic_err("You need at least 1% of total shares to claim rewards"));
     }
 
     // Calculate the reward
@@ -515,27 +519,28 @@ pub fn handle_reward(
     // Update the holdersReward
     state.holdersRewards = state.holdersRewards.sub(reward).unwrap();
     // Save the new state
-    config(deps.storage).save(&state)?;
+    config(&mut deps.storage).save(&state)?;
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address,
+        from_address: env.contract.address,
         to_address: deps.api.human_address(&sender).unwrap(),
         amount: vec![Coin {
             denom: state.denomStable,
             amount: reward,
         }],
     };
+
     // Send the claimed tickets
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![attr("action", "reward"), attr("to", &sender)],
+        log: vec![LogAttribute{ key: "action".to_string(), value: "reward".to_string() }, LogAttribute{ key: "to".to_string(), value: env.message.sender.to_string()}],
         data: None,
     })
 }
 
-fn remove_from_storage(
-    deps: &DepsMut,
-    info: &MessageInfo,
+fn remove_from_storage<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    env: Env,
     winner: &WinnerInfo,
 ) -> Vec<WinnerInfoState> {
     // Update to claimed
@@ -544,7 +549,7 @@ fn remove_from_storage(
         .iter()
         .map(|win| {
             let mut winx = win.clone();
-            if winx.address == deps.api.canonical_address(&info.sender).unwrap() {
+            if winx.address == deps.api.canonical_address(&env.message.sender).unwrap() {
                 winx.claimed = true;
             }
             winx
@@ -553,35 +558,34 @@ fn remove_from_storage(
 }
 
 // Players claim the jackpot
-pub fn handle_jackpot(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-) -> Result<HandleResponse, ContractError> {
+pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env
+) -> StdResult<HandleResponse> {
     // Load state
-    let state = config(deps.storage).load()?;
+    let state = config(&mut deps.storage).load()?;
     // Load winners
-    let store = query_all_winner(deps.as_ref()).unwrap();
+    let store = query_all_winner(&deps).unwrap();
     // Ensure the sender is not sending funds
-    if !info.sent_funds.is_empty() {
-        return Err(ContractError::DoNotSendFunds("Jackpot".to_string()));
+    if !env.message.sent_funds.is_empty() {
+        return Err(StdError::generic_err("Do not send funds with jackpot"));
     }
     // Ensure there is jackpot reward to claim
     if state.jackpotReward.is_zero() {
-        return Err(ContractError::Unauthorized {});
+        return Err(StdError::Unauthorized { backtrace: None });
     }
     // Ensure there is some winner
     if store.winner.is_empty() {
-        return Err(ContractError::NoWinners {});
+        return Err(StdError::generic_err("No winners"));
     }
 
     let mut jackpotAmount: Uint128 = Uint128(0);
     let mut ticketWinning: Uint128 = Uint128(0);
     for winner in store.winner.clone() {
         for winnerInfo in winner.winners.clone() {
-            if winnerInfo.address == deps.api.canonical_address(&info.sender).unwrap() {
+            if winnerInfo.address == deps.api.canonical_address(&env.message.sender).unwrap() {
                 if winnerInfo.claimed {
-                    return Err(ContractError::AlreadyClaimed {});
+                    return Err(StdError::generic_err("Already claimed"));
                 }
 
                 match winner.rank {
@@ -594,8 +598,8 @@ pub fn handle_jackpot(
                             / winner.winners.clone().len() as u128;
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
-                        let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(
+                        let newAddresses = remove_from_storage(deps, env.clone(), &winner);
+                        winner_storage(&mut deps.storage).save(
                             &1_u8.to_be_bytes(),
                             &Winner {
                                 winners: newAddresses,
@@ -611,8 +615,8 @@ pub fn handle_jackpot(
                             / winner.winners.clone().len() as u128;
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
-                        let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(
+                        let newAddresses = remove_from_storage(deps, env.clone(), &winner);
+                        winner_storage(&mut deps.storage).save(
                             &2_u8.to_be_bytes(),
                             &Winner {
                                 winners: newAddresses,
@@ -628,8 +632,8 @@ pub fn handle_jackpot(
                             / winner.winners.clone().len() as u128;
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
-                        let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(
+                        let newAddresses = remove_from_storage(deps, env.clone(), &winner);
+                        winner_storage(&mut deps.storage).save(
                             &3_u8.to_be_bytes(),
                             &Winner {
                                 winners: newAddresses,
@@ -645,8 +649,8 @@ pub fn handle_jackpot(
                             / winner.winners.clone().len() as u128;
                         jackpotAmount += Uint128(prize);
                         // Remove the address from the array and save
-                        let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(
+                        let newAddresses = remove_from_storage(deps, env.clone(),&winner);
+                        winner_storage(&mut deps.storage).save(
                             &4_u8.to_be_bytes(),
                             &Winner {
                                 winners: newAddresses,
@@ -657,8 +661,8 @@ pub fn handle_jackpot(
                         // Prizes five rank
                         ticketWinning += Uint128(1);
                         // Remove the address from the array and save
-                        let newAddresses = remove_from_storage(&deps, &info, &winner);
-                        winner_storage(deps.storage).save(
+                        let newAddresses = remove_from_storage(deps, env.clone(), &winner);
+                        winner_storage(&mut deps.storage).save(
                             &5_u8.to_be_bytes(),
                             &Winner {
                                 winners: newAddresses,
@@ -678,15 +682,15 @@ pub fn handle_jackpot(
         // Get the contract balance
         let balance = deps
             .querier
-            .query_balance(&_env.contract.address, &state.denomDelegation)
+            .query_balance(&env.contract.address, &state.denomDelegation)
             .unwrap();
         // Ensure the contract have the balance
         if balance.amount.is_zero() {
-            return Err(ContractError::EmptyBalance {});
+            return Err(StdError::generic_err("Empty contract balance"));
         }
         // Ensure the contract have sufficient balance to handle the transaction
         if balance.amount < jackpotAmount {
-            return Err(ContractError::NoFunds {});
+            return Err(StdError::generic_err("Not enough funds in the contract"));
         }
         amountToSend.push(Coin {
             denom: state.denomStable.clone(),
@@ -698,7 +702,7 @@ pub fn handle_jackpot(
         // Get the contract ticket balance
         let ticketBalance = deps
             .querier
-            .query_balance(&_env.contract.address, &state.denomStable)
+            .query_balance(&env.contract.address, &state.denomStable)
             .unwrap();
         // Ensure the contract have the balance
         if !ticketBalance.amount.is_zero() || ticketBalance.amount > ticketWinning {
@@ -713,20 +717,20 @@ pub fn handle_jackpot(
     if amountToSend.is_empty() {
         return Ok(HandleResponse {
             messages: vec![],
-            attributes: vec![
-                attr("action", "jackpot reward"),
-                attr("to", &info.sender),
-                attr("jackpot_prize", "no"),
+            log: vec![
+                LogAttribute{ key: "action".to_string(), value: "jackpot reward".to_string()},
+                LogAttribute{ key: "to".to_string(), value: env.message.sender.to_string()},
+                LogAttribute{ key: "jackpot_prize".to_string(), value: "no".to_string()},
             ],
             data: None,
         });
     }
 
     let msg = BankMsg::Send {
-        from_address: _env.contract.address,
+        from_address: env.contract.address,
         to_address: deps
             .api
-            .human_address(&deps.api.canonical_address(&info.sender).unwrap())
+            .human_address(&deps.api.canonical_address(&env.message.sender).unwrap())
             .unwrap(),
         amount: amountToSend,
     };
@@ -734,40 +738,39 @@ pub fn handle_jackpot(
     // Send the jackpot
     Ok(HandleResponse {
         messages: vec![msg.into()],
-        attributes: vec![
-            attr("action", "jackpot reward"),
-            attr("to", &info.sender),
-            attr("jackpot_prize", "yes"),
+        log: vec![
+            LogAttribute{ key: "action".to_string(), value: "jackpot reward".to_string()},
+            LogAttribute{ key: "to".to_string(), value: env.message.sender.to_string()},
+            LogAttribute{ key: "jackpot_prize".to_string(), value: "yes".to_string()},
         ],
         data: None,
     })
 }
 
-pub fn handle_proposal(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
+pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
     description: String,
     proposal: Proposal,
     amount: Option<Uint128>,
     prizePerRank: Option<Vec<u8>>,
-) -> Result<HandleResponse, ContractError> {
-    let mut state = config(deps.storage).load().unwrap();
+) -> StdResult<HandleResponse>{
+    let mut state = config(&mut deps.storage).load().unwrap();
     // Increment and get the new poll id for bucket key
     let pollId = state.pollCount + 1;
     // Set the new counter
     state.pollCount = pollId;
 
     //Handle sender is not sending funds
-    if !info.sent_funds.is_empty() {
-        return Err(ContractError::DoNotSendFunds("Proposal".to_string()));
+    if !env.message.sent_funds.is_empty() {
+        return Err(StdError::generic_err("Do not send funds with proposal"));
     }
 
     // Handle the description is respecting length
     if (description.len() as u64) < MIN_DESC_LEN {
-        return Err(ContractError::DescriptionTooShort(MIN_DESC_LEN.to_string()));
+        return Err(StdError::generic_err(format!("Description min length {}", MIN_DESC_LEN.to_string())));
     } else if (description.len() as u64) > MAX_DESC_LEN {
-        return Err(ContractError::DescriptionTooLong(MAX_DESC_LEN.to_string()));
+        return Err(StdError::generic_err(format!("Description max length {}", MAX_DESC_LEN.to_string())));
     }
 
     let mut proposalAmount: Uint128 = Uint128::zero();
@@ -777,16 +780,12 @@ pub fn handle_proposal(
         match amount {
             Some(percentage) => {
                 if percentage.u128() as u8 > state.holdersMaxPercentageReward {
-                    return Err(ContractError::ParamRequiredForThisProposal(
-                        "HolderFeePercentage amount between 0 to 100".to_string(),
-                    ));
+                    return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
                 }
                 proposalAmount = percentage;
             }
             None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    "HolderFeePercentage amount".to_string(),
-                ));
+                return Err(StdError::generic_err("Amount required".to_string()));
             }
         }
 
@@ -795,16 +794,12 @@ pub fn handle_proposal(
         match amount {
             Some(percentage) => {
                 if percentage.u128() as u8 > state.workerDrandMaxPercentageReward {
-                    return Err(ContractError::ParamRequiredForThisProposal(
-                        "DrandWorkerFeePercentage amount between 0 to 100".to_string(),
-                    ));
+                    return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
                 }
                 proposalAmount = percentage;
             }
             None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    "DrandWorkerFeePercentage amount".to_string(),
-                ));
+                return Err(StdError::generic_err("Amount required".to_string()));
             }
         }
 
@@ -813,16 +808,12 @@ pub fn handle_proposal(
         match amount {
             Some(percentage) => {
                 if percentage.u128() as u8 > 100 {
-                    return Err(ContractError::ParamRequiredForThisProposal(
-                        "JackpotRewardPercentage amount between 0 to 100".to_string(),
-                    ));
+                    return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
                 }
                 proposalAmount = percentage;
             }
             None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    "JackpotRewardPercentage amount".to_string(),
-                ));
+                return Err(StdError::generic_err("Amount required".to_string()));
             }
         }
 
@@ -833,9 +824,7 @@ pub fn handle_proposal(
                 proposalAmount = blockTime;
             }
             None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    "LotteryEveryBlockTime amount".to_string(),
-                ));
+                return Err(StdError::generic_err("Amount block time required".to_string()));
             }
         }
 
@@ -844,32 +833,24 @@ pub fn handle_proposal(
         match prizePerRank {
             Some(ranks) => {
                 if ranks.len() != 4 {
-                    return Err(ContractError::ParamRequiredForThisProposal(
-                        "PrizePerRank 4 separated numbers between 0 to 100".to_string(),
-                    ));
+                    return Err(StdError::generic_err("Ranks need to be in this format [0, 90, 10, 0] numbers between 0 to 100".to_string()));
                 }
                 let mut totalPercentage = 0;
                 for rank in ranks.clone() {
                     if (rank as u8) > 100 {
-                        return Err(ContractError::ParamRequiredForThisProposal(
-                            "PrizePerRank numbers between 0 to 100".to_string(),
-                        ));
+                        return Err(StdError::generic_err("Numbers between 0 to 100".to_string()));
                     }
                     totalPercentage += rank;
                 }
                 // Ensure the repartition sum is 100%
                 if totalPercentage != 100 {
-                    return Err(ContractError::ParamRequiredForThisProposal(
-                        "PrizePerRank numbers sum need to be 100".to_string(),
-                    ));
+                    return Err(StdError::generic_err("Numbers total sum need to be equal to 100".to_string()));
                 }
 
                 proposalPrizeRank = ranks;
             }
             None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    "PrizePerRank".to_string(),
-                ));
+                return Err(StdError::generic_err("Rank is required".to_string()));
             }
         }
         Proposal::PrizePerRank
@@ -879,9 +860,7 @@ pub fn handle_proposal(
                 proposalAmount = blockTime;
             }
             None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    "ClaimEveryBlock amount".to_string(),
-                ));
+                return Err(StdError::generic_err("amount is required".to_string()));
             }
         }
         Proposal::ClaimEveryBlock
@@ -891,23 +870,21 @@ pub fn handle_proposal(
                 proposalAmount = AmountToRegister;
             }
             None => {
-                return Err(ContractError::ParamRequiredForThisProposal(
-                    " AmountToRegister amount".to_string(),
-                ));
+                return Err(StdError::generic_err("amount is required".to_string()));
             }
         }
         Proposal::AmountToRegister
     }else {
-        return Err(ContractError::ProposalNotFound {});
+        return Err(StdError::generic_err("Proposal type not founds".to_string()));
     };
 
-    let senderToCanonical = deps.api.canonical_address(&info.sender).unwrap();
+    let senderToCanonical = deps.api.canonical_address(&env.message.sender).unwrap();
 
     let newPoll = PollInfoState {
         creator: senderToCanonical,
         status: PollStatus::InProgress,
-        end_height: _env.block.height + state.pollEndHeight,
-        start_height: _env.block.height,
+        end_height: env.block.height + state.pollEndHeight,
+        start_height: env.block.height,
         description,
         yes_voters: vec![],
         no_voters: vec![],
@@ -917,56 +894,55 @@ pub fn handle_proposal(
     };
 
     // Save poll
-    poll_storage(deps.storage).save(&state.pollCount.to_be_bytes(), &newPoll)?;
+    poll_storage(&mut deps.storage).save(&state.pollCount.to_be_bytes(), &newPoll)?;
 
     // Save state
-    config(deps.storage).save(&state)?;
+    config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
         messages: vec![],
-        attributes: vec![
-            attr("action", "create a proposal"),
-            attr("proposal_id", pollId.to_string()),
-            attr("proposal_creator", &info.sender.to_string()),
-            attr("proposal_creation_result", "success"),
+        log: vec![
+            LogAttribute{ key: "action".to_string(), value: "create a proposal".to_string()},
+            LogAttribute{ key: "proposal_id".to_string(), value: pollId.to_string()},
+            LogAttribute{ key: "proposal_creator".to_string(), value: env.message.sender.to_string()},
+            LogAttribute{ key: "proposal_creation_result".to_string(), value: "success".to_string()},
         ],
         data: None,
     })
 }
 
-pub fn handle_vote(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
+pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
     pollId: u64,
     approve: bool,
-) -> Result<HandleResponse, ContractError> {
-    let store = poll_storage(deps.storage).load(&pollId.to_be_bytes())?;
-    let sender = deps.api.canonical_address(&info.sender).unwrap();
+) -> StdResult<HandleResponse> {
+    let store = poll_storage(&mut deps.storage).load(&pollId.to_be_bytes())?;
+    let sender = deps.api.canonical_address(&env.message.sender).unwrap();
 
     // Ensure the sender not sending funds accidentally
-    if !info.sent_funds.is_empty() {
-        return Err(ContractError::DoNotSendFunds("Vote".to_string()));
+    if !env.message.sent_funds.is_empty() {
+        return Err(StdError::generic_err("Do not send funds with vote"));
     }
     // Ensure the poll is still valid
-    if _env.block.height > store.end_height {
-        return Err(ContractError::ProposalExpired {});
+    if env.block.height > store.end_height {
+        return Err(StdError::generic_err("Proposal expired"));
     }
     // Ensure the voter can't vote more times
     if store.yes_voters.contains(&sender) || store.no_voters.contains(&sender) {
-        return Err(ContractError::AlreadyVoted {});
+        return Err(StdError::generic_err("Already voted"));
     }
 
     match approve {
         true => {
-            poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+            poll_storage(&mut deps.storage).update::<_>(&pollId.to_be_bytes(), |poll| {
                 let mut pollData = poll.unwrap();
                 pollData.yes_voters.push(sender.clone());
                 Ok(pollData)
             })?;
         }
         false => {
-            poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+            poll_storage(&mut deps.storage).update::<_>(&pollId.to_be_bytes(), |poll| {
                 let mut pollData = poll.unwrap();
                 pollData.no_voters.push(sender.clone());
                 Ok(pollData)
@@ -976,57 +952,57 @@ pub fn handle_vote(
 
     Ok(HandleResponse {
         messages: vec![],
-        attributes: vec![
-            attr("action", "vote"),
-            attr("proposalId", pollId.to_string()),
-            attr("voting_result", "success"),
+        log: vec![
+            LogAttribute{ key: "action".to_string(), value: "vote".to_string()},
+            LogAttribute{ key: "proposalId".to_string(), value: pollId.to_string()},
+            LogAttribute{ key: "voting_result".to_string(), value: "success".to_string()},
         ],
         data: None,
     })
 }
 
-pub fn handle_reject_proposal(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
+
+pub fn handle_reject_proposal<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
     pollId: u64,
-) -> Result<HandleResponse, ContractError> {
-    let store = poll_storage_read(deps.storage).load(&pollId.to_be_bytes())?;
-    let sender = deps.api.canonical_address(&info.sender).unwrap();
+) -> StdResult<HandleResponse> {
+    let store = poll_storage_read(&mut deps.storage).load(&pollId.to_be_bytes())?;
+    let sender = deps.api.canonical_address(&env.message.sender).unwrap();
 
     // Ensure the sender not sending funds accidentally
-    if !info.sent_funds.is_empty() {
-        return Err(ContractError::DoNotSendFunds("RejectProposal".to_string()));
+    if !env.message.sent_funds.is_empty() {
+        return Err(StdError::generic_err("Do not send funds with reject proposal"));
     }
     // Ensure end proposal height is not expired
-    if store.end_height < _env.block.height {
-        return Err(ContractError::ProposalExpired {});
+    if store.end_height < env.block.height {
+        return Err(StdError::generic_err("Proposal expired"));
     }
     // Ensure only the creator can reject a proposal OR the status of the proposal is still in progress
     if store.creator != sender || store.status != PollStatus::InProgress {
-        return Err(ContractError::Unauthorized {});
+        return Err(StdError::Unauthorized { backtrace: None });
     }
 
-    poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+    poll_storage(&mut deps.storage).update::<_>(&pollId.to_be_bytes(), |poll| {
         let mut pollData = poll.unwrap();
         // Update the status to rejected by the creator
         pollData.status = PollStatus::RejectedByCreator;
         // Update the end eight to now
-        pollData.end_height = _env.block.height;
+        pollData.end_height = env.block.height;
         Ok(pollData)
     })?;
 
     Ok(HandleResponse {
         messages: vec![],
-        attributes: vec![
-            attr("action", "creator reject the proposal"),
-            attr("proposalId", pollId.to_string()),
+        log: vec![
+            LogAttribute{ key: "action".to_string(), value: "creator reject the proposal".to_string()},
+            LogAttribute{ key: "proposal_id".to_string(), value: pollId.to_string()},
         ],
         data: None,
     })
 }
 
-fn total_weight(deps: &DepsMut, state: &State, addresses: &[CanonicalAddr]) -> Uint128 {
+fn total_weight<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, state: &State, addresses: &[CanonicalAddr]) -> Uint128 {
     let mut weight = Uint128::zero();
     for address in addresses {
         let humanAddress = deps.api.human_address(&address).unwrap();
@@ -1043,29 +1019,28 @@ fn total_weight(deps: &DepsMut, state: &State, addresses: &[CanonicalAddr]) -> U
     weight
 }
 
-pub fn handle_present_proposal(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
+pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
     pollId: u64,
-) -> Result<HandleResponse, ContractError> {
+) -> StdResult<HandleResponse> {
     // Load storage
-    let mut state = config(deps.storage).load().unwrap();
-    let store = poll_storage_read(deps.storage)
+    let mut state = config(&mut deps.storage).load().unwrap();
+    let store = poll_storage_read(&mut deps.storage)
         .load(&pollId.to_be_bytes())
         .unwrap();
 
     // Ensure the sender not sending funds accidentally
-    if !info.sent_funds.is_empty() {
-        return Err(ContractError::DoNotSendFunds("PresentProposal".to_string()));
+    if !env.message.sent_funds.is_empty() {
+        return Err(StdError::generic_err("Do not send funds with present proposal"));
     }
     // Ensure the proposal is still in Progress
     if store.status != PollStatus::InProgress {
-        return Err(ContractError::Unauthorized {});
+        return Err(StdError::Unauthorized { backtrace: None });
     }
     // Ensure the proposal is ended
-    if store.end_height > _env.block.height {
-        return Err(ContractError::ProposalNotExpired {});
+    if store.end_height > env.block.height {
+        return Err(StdError::generic_err("Proposal still in progress"));
     }
     // Calculating the weight
     let yesWeight = total_weight(&deps, &state, &store.yes_voters);
@@ -1080,7 +1055,7 @@ pub fn handle_present_proposal(
 
     // Reject the proposal
     if finalVoteWeightInPercentage < 60 {
-        poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+        poll_storage(&mut deps.storage).update::<_>(&pollId.to_be_bytes(), |poll| {
             let mut pollData = poll.unwrap();
             // Update the status to rejected
             pollData.status = PollStatus::Rejected;
@@ -1088,10 +1063,10 @@ pub fn handle_present_proposal(
         })?;
         return Ok(HandleResponse {
             messages: vec![],
-            attributes: vec![
-                attr("action", "present the proposal"),
-                attr("proposal_id", pollId.to_string()),
-                attr("proposal_result", "rejected"),
+            log: vec![
+                LogAttribute{ key: "action".to_string(), value: "present the proposal".to_string()},
+                LogAttribute{ key: "proposal_id".to_string(), value: pollId.to_string()},
+                LogAttribute{ key: "proposal_result".to_string(), value: "rejected".to_string()},
             ],
             data: None,
         });
@@ -1114,45 +1089,42 @@ pub fn handle_present_proposal(
         Proposal::AmountToRegister => {
             state.pricePerTicketToRegister = store.amount;
         }
-        /*Proposal::MinAmountDelegator => {
-            state.delegatorMinAmountInDelegation = store.amount;
-        }*/
         Proposal::PrizePerRank => {
             state.prizeRankWinnerPercentage = store.prizeRank;
         }
-       /* Proposal::MinAmountValidator => {
-            state.validatorMinAmountToAllowClaim = store.amount;
-        }*/
         Proposal::HolderFeePercentage => {
             state.holdersMaxPercentageReward = store.amount.u128() as u8
         }
         _ => {
-            return Err(ContractError::ProposalNotFound {});
+            return Err(StdError::generic_err("Proposal not funds"));
         }
     }
 
     // Save to storage
-    poll_storage(deps.storage).update::<_, StdError>(&pollId.to_be_bytes(), |poll| {
+    poll_storage(&mut deps.storage).update::<_>(&pollId.to_be_bytes(), |poll| {
         let mut pollData = poll.unwrap();
         // Update the status to passed
         pollData.status = PollStatus::Passed;
         Ok(pollData)
     })?;
 
-    config(deps.storage).save(&state)?;
+    config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
         messages: vec![],
-        attributes: vec![
-            attr("action", "present the proposal"),
-            attr("proposal_id", pollId.to_string()),
-            attr("proposal_result", "approved"),
+        log: vec![
+            LogAttribute{ key: "action".to_string(), value: "present the proposal".to_string()},
+            LogAttribute{ key: "proposal_id".to_string(), value: pollId.to_string()},
+            LogAttribute{ key: "proposal_result".to_string(), value: "approved".to_string()},
         ],
         data: None,
     })
 }
 
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractError> {
+pub fn query<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    msg: QueryMsg,
+) -> StdResult<Binary>  {
     let response = match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
         QueryMsg::Combination {} => to_binary(&query_all_combination(deps)?)?,
@@ -1164,22 +1136,23 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> Result<Binary, ContractErr
     Ok(response)
 }
 
-fn query_config(deps: Deps) -> Result<ConfigResponse, ContractError> {
-    let state = config_read(deps.storage).load()?;
+fn query_config<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdResult<ConfigResponse> {
+    let state = config_read(&deps.storage).load()?;
     Ok(state)
 }
 
-fn query_terrand(_deps: Deps) -> Result<ConfigResponse, ContractError> {
-    Err(ContractError::Unauthorized {})
+fn query_terrand<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>)  -> StdResult<StdError> {
+    return Err(StdError::Unauthorized { backtrace: None });
 }
 
-fn query_all_combination(deps: Deps) -> Result<AllCombinationResponse, ContractError> {
-    let combinations = combination_storage_read(deps.storage)
+fn query_all_combination<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>)  -> StdResult<AllCombinationResponse> {
+    let combinations = combination_storage_read(&deps.storage)
         .range(None, None, Order::Descending)
         .flat_map(|item| {
             item.and_then(|(k, combination)| {
+
                 Ok(CombinationInfo {
-                    key: String::from_utf8(k)?,
+                    key: String::from_utf8(k).unwrap(),
                     addresses: combination.addresses,
                 })
             })
@@ -1191,13 +1164,14 @@ fn query_all_combination(deps: Deps) -> Result<AllCombinationResponse, ContractE
     })
 }
 
-fn query_all_winner(deps: Deps) -> Result<AllWinnerResponse, ContractError> {
-    let winners = winner_storage_read(deps.storage)
+fn query_all_winner<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdResult<AllWinnerResponse> {
+    let winners = winner_storage_read(&deps.storage)
         .range(None, None, Order::Descending)
         .flat_map(|item| {
             item.and_then(|(k, winner)| {
+
                 Ok(WinnerInfo {
-                    rank: u8::from_be_bytes(Binary(k).to_array()?),
+                    rank: u8::from_be_bytes(k.try_into().unwrap()),
                     winners: winner.winners,
                 })
             })
@@ -1206,12 +1180,12 @@ fn query_all_winner(deps: Deps) -> Result<AllWinnerResponse, ContractError> {
     Ok(AllWinnerResponse { winner: winners })
 }
 
-fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError> {
-    let store = poll_storage_read(deps.storage);
+fn query_poll<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, pollId: u64) -> StdResult<GetPollResponse> {
+    let store = poll_storage_read(&deps.storage);
 
     let poll = match store.may_load(&pollId.to_be_bytes())? {
         Some(poll) => Some(poll),
-        None => return Err(ContractError::ProposalNotFound {}),
+        None => return Err(StdError::NotFound { kind: "not found".to_string(), backtrace: None }),
     }
     .unwrap();
 
@@ -1226,13 +1200,13 @@ fn query_poll(deps: Deps, pollId: u64) -> Result<GetPollResponse, ContractError>
     })
 }
 
-fn query_round(deps: Deps) -> Result<RoundResponse, ContractError> {
-    let state = config_read(deps.storage).load()?;
+fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>)  -> StdResult<RoundResponse> {
+    let state = config_read(&deps.storage).load()?;
     let fromGenesis = state.blockTimePlay - DRAND_GENESIS_TIME;
     let nextRound = (fromGenesis / DRAND_PERIOD) + NEXT_ROUND;
 
     Ok(RoundResponse {
-        nextRound: nextRound,
+        nextRound,
     })
 }
 
