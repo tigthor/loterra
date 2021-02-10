@@ -4,7 +4,6 @@ use cosmwasm_std::{
     StdResult, Storage, Uint128, WasmQuery,
 };
 
-use crate::error::ContractError;
 use crate::msg::{
     AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
@@ -105,6 +104,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     env: Env,
     combination: String,
 ) -> StdResult<HandleResponse> {
+    print!("{:?}", env.message.sent_funds);
     // Load the state
     let state = config(&mut deps.storage).load()?;
 
@@ -118,17 +118,25 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
 
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
-        0 => Err(ContractError::NoFunds {}),
+        0 => Err(StdError::generic_err("Send some funds to register")),
         1 => {
             if env.message.sent_funds[0].denom == state.denomStable {
                 Ok(env.message.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denomStable.clone()))
+                Err(StdError::generic_err(format!(
+                    "To register you need to send {}{}",
+                    state.pricePerTicketToRegister,
+                    state.denomStable.clone()
+                )))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
+        _ => Err(StdError::generic_err(format!(
+            "Only send {} to register",
+            state.denomStable.clone()
+        ))),
     }
     .unwrap();
+
     if sent.is_zero() {
         return Err(StdError::generic_err(format!(
             "you need to send {}{} in order to register",
@@ -434,15 +442,23 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     }
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
-        0 => Err(ContractError::NoFunds {}),
+        0 => Err(StdError::generic_err(
+            "Send some funds to buy public sale tokens",
+        )),
         1 => {
             if env.message.sent_funds[0].denom == state.denomStable {
                 Ok(env.message.sent_funds[0].amount)
             } else {
-                Err(ContractError::MissingDenom(state.denomStable.clone()))
+                Err(StdError::generic_err(format!(
+                    "To participate the public sale only {} is accepted",
+                    state.denomStable.clone()
+                )))
             }
         }
-        _ => Err(ContractError::ExtraDenom(state.denomStable.clone())),
+        _ => Err(StdError::generic_err(format!(
+            "Send only {}, no extra denom",
+            state.denomStable.clone()
+        ))),
     }
     .unwrap();
 
@@ -1359,7 +1375,6 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::ContractError::Std;
     use crate::msg::{HandleMsg, InitMsg, QueryMsg};
     use cosmwasm_std::testing::{
         mock_dependencies, mock_env, BankQuerier, MockApi, MockQuerier, MockStorage,
@@ -1397,15 +1412,24 @@ mod tests {
             terrandContractAddress: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"),
         };
 
-        init(&mut deps, mock_env("creator", &[]), init_msg).unwrap();
+        init(
+            &mut deps,
+            mock_env("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k", &[]),
+            init_msg,
+        )
+        .unwrap();
     }
 
     struct BeforeAll {
         default_length: usize,
+        default_sender: HumanAddr,
+        default_sender_two: HumanAddr,
     }
     fn before_all() -> BeforeAll {
         BeforeAll {
             default_length: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k").len(),
+            default_sender: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
+            default_sender_two: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q008"),
         }
     }
 
@@ -1461,6 +1485,31 @@ mod tests {
         );
         let res = query_all_winner(&deps).unwrap();
         println!("{:?}", res);
+    }
+    mod register {
+        use super::*;
+
+        #[test]
+        fn register_success() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                combination: "1e3fab".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            );
+            println!("{:?}", res);
+        }
     }
 
     /*mod register {
