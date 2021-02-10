@@ -96,12 +96,12 @@ pub struct GetPollResponse {
     pub prizePerRank: Vec<u8>,
 }
 
-// We define a custom struct for each query response
-pub type ConfigResponse = State;
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Round {
     pub nextRound: u64,
 }
 
 pub type RoundResponse = Round;
+
+// We define a custom struct for each query response
+pub type ConfigResponse = State;
