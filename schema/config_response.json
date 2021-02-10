@@ -3,122 +3,124 @@
   "title": "ConfigResponse",
   "type": "object",
   "required": [
-    "blockClaim",
-    "blockTimePlay",
-    "claimReward",
-    "claimTicket",
-    "combinationLen",
-    "delegatorMinAmountInDelegation",
-    "denomDelegation",
-    "denomShare",
-    "denomStable",
-    "denomStableDecimal",
-    "everyBlockHeight",
-    "everyBlockTimePlay",
-    "feeForDrandWorkerInPercentage",
-    "holdersMaxPercentageReward",
-    "holdersRewards",
-    "jackpotPercentageReward",
-    "jackpotReward",
-    "pollCount",
-    "pollEndHeight",
-    "pricePerTicketToRegister",
-    "prizeRankWinnerPercentage",
-    "publicSaleEndBlock",
-    "terrandContractAddress",
-    "tokenHolderPercentageFeeReward",
-    "tokenHolderSupply",
-    "validatorMinAmountToAllowClaim",
-    "workerDrandMaxPercentageReward"
+    "block_time_play",
+    "claim_reward",
+    "combination_len",
+    "denom_share",
+    "denom_stable",
+    "denom_stable_decimal",
+    "drand_genesis_time",
+    "drand_next_round_security",
+    "drand_period",
+    "every_block_time_play",
+    "fee_for_drand_worker_in_percentage",
+    "holders_max_percentage_reward",
+    "holders_rewards",
+    "jackpot_percentage_reward",
+    "jackpot_reward",
+    "max_description_length",
+    "min_description_length",
+    "poll_count",
+    "poll_end_height",
+    "price_per_ticket_to_register",
+    "prize_rank_winner_percentage",
+    "public_sale_end_block",
+    "terrand_contract_address",
+    "token_holder_percentage_fee_reward",
+    "token_holder_supply",
+    "worker_drand_max_percentage_reward"
   ],
   "properties": {
-    "blockClaim": {
+    "block_time_play": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "blockTimePlay": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "claimReward": {
+    "claim_reward": {
       "type": "array",
       "items": {
         "$ref": "#/definitions/CanonicalAddr"
       }
     },
-    "claimTicket": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/CanonicalAddr"
-      }
-    },
-    "combinationLen": {
+    "combination_len": {
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
     },
-    "delegatorMinAmountInDelegation": {
-      "$ref": "#/definitions/Uint128"
-    },
-    "denomDelegation": {
+    "denom_share": {
       "type": "string"
     },
-    "denomShare": {
+    "denom_stable": {
       "type": "string"
     },
-    "denomStable": {
-      "type": "string"
-    },
-    "denomStableDecimal": {
+    "denom_stable_decimal": {
       "$ref": "#/definitions/Uint128"
     },
-    "everyBlockHeight": {
+    "drand_genesis_time": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "everyBlockTimePlay": {
+    "drand_next_round_security": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "feeForDrandWorkerInPercentage": {
+    "drand_period": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "every_block_time_play": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "fee_for_drand_worker_in_percentage": {
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
     },
-    "holdersMaxPercentageReward": {
+    "holders_max_percentage_reward": {
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
     },
-    "holdersRewards": {
+    "holders_rewards": {
       "$ref": "#/definitions/Uint128"
     },
-    "jackpotPercentageReward": {
+    "jackpot_percentage_reward": {
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
     },
-    "jackpotReward": {
+    "jackpot_reward": {
       "$ref": "#/definitions/Uint128"
     },
-    "pollCount": {
+    "max_description_length": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "pollEndHeight": {
+    "min_description_length": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "pricePerTicketToRegister": {
+    "poll_count": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "poll_end_height": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "price_per_ticket_to_register": {
       "$ref": "#/definitions/Uint128"
     },
-    "prizeRankWinnerPercentage": {
+    "prize_rank_winner_percentage": {
       "type": "array",
       "items": {
         "type": "integer",
@@ -126,26 +128,23 @@
         "minimum": 0.0
       }
     },
-    "publicSaleEndBlock": {
+    "public_sale_end_block": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "terrandContractAddress": {
+    "terrand_contract_address": {
       "$ref": "#/definitions/HumanAddr"
     },
-    "tokenHolderPercentageFeeReward": {
+    "token_holder_percentage_fee_reward": {
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
     },
-    "tokenHolderSupply": {
+    "token_holder_supply": {
       "$ref": "#/definitions/Uint128"
     },
-    "validatorMinAmountToAllowClaim": {
-      "$ref": "#/definitions/Uint128"
-    },
-    "workerDrandMaxPercentageReward": {
+    "worker_drand_max_percentage_reward": {
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0

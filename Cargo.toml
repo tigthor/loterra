@@ -1,5 +1,5 @@
 [package]
-name = "lottery"
+name = "loterra"
 version = "0.1.0"
 authors = ["0xantman <antho74830@gmail.com>"]
 edition = "2018"

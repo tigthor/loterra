@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Storage, Uint128};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, Storage, Uint128};
 use cosmwasm_storage::{
     bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
     Singleton,
@@ -14,27 +14,32 @@ const POLL_KEY: &[u8] = b"poll";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
-    pub blockTimePlay: u64,
-    pub everyBlockTimePlay: u64,
-    pub publicSaleEndBlock: u64,
-    pub denomStable: String,
-    pub denomStableDecimal: Uint128,
-    pub denomShare: String,
-    pub claimReward: Vec<CanonicalAddr>,
-    pub holdersRewards: Uint128,
-    pub tokenHolderSupply: Uint128,
-    pub combinationLen: u8,
-    pub jackpotReward: Uint128,
-    pub jackpotPercentageReward: u8,
-    pub tokenHolderPercentageFeeReward: u8,
-    pub feeForDrandWorkerInPercentage: u8,
-    pub prizeRankWinnerPercentage: Vec<u8>,
-    pub pollCount: u64,
-    pub holdersMaxPercentageReward: u8,
-    pub workerDrandMaxPercentageReward: u8,
-    pub pollEndHeight: u64,
-    pub pricePerTicketToRegister: Uint128,
-    pub terrandContractAddress: HumanAddr,
+    pub block_time_play: u64,
+    pub every_block_time_play: u64,
+    pub public_sale_end_block: u64,
+    pub denom_stable: String,
+    pub denom_stable_decimal: Uint128,
+    pub denom_share: String,
+    pub claim_reward: Vec<CanonicalAddr>,
+    pub holders_rewards: Uint128,
+    pub token_holder_supply: Uint128,
+    pub combination_len: u8,
+    pub jackpot_reward: Uint128,
+    pub jackpot_percentage_reward: u8,
+    pub token_holder_percentage_fee_reward: u8,
+    pub fee_for_drand_worker_in_percentage: u8,
+    pub prize_rank_winner_percentage: Vec<u8>,
+    pub poll_count: u64,
+    pub holders_max_percentage_reward: u8,
+    pub worker_drand_max_percentage_reward: u8,
+    pub poll_end_height: u64,
+    pub price_per_ticket_to_register: Uint128,
+    pub terrand_contract_address: HumanAddr,
+    pub drand_genesis_time: u64,
+    pub drand_period: u64,
+    pub drand_next_round_security: u64,
+    pub max_description_length: u64,
+    pub min_description_length: u64
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
@@ -106,7 +111,7 @@ pub struct PollInfoState {
     pub yes_voters: Vec<CanonicalAddr>,
     pub no_voters: Vec<CanonicalAddr>,
     pub amount: Uint128,
-    pub prizeRank: Vec<u8>,
+    pub prize_rank: Vec<u8>,
     pub proposal: Proposal,
 }
 

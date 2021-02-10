@@ -48,10 +48,10 @@
         "get_poll": {
           "type": "object",
           "required": [
-            "pollId"
+            "poll_id"
           ],
           "properties": {
-            "pollId": {
+            "poll_id": {
               "type": "integer",
               "format": "uint64",
               "minimum": 0.0
@@ -76,10 +76,10 @@
       "description": "Query Terrand smart contract to get the needed randomness to play the lottery",
       "type": "object",
       "required": [
-        "get_terrand"
+        "get_randomness"
       ],
       "properties": {
-        "get_terrand": {
+        "get_randomness": {
           "type": "object",
           "required": [
             "round"

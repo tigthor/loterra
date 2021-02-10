@@ -2,19 +2,19 @@ use crate::state::{PollStatus, Proposal, State, WinnerInfoState};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Uint128};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
-    pub denomStable: String,
-    pub denomStableDecimal: Uint128,
-    pub denomShare: String,
-    pub blockTimePlay: u64,
-    pub everyBlockTimePlay: u64,
-    pub publicSaleEndBlock: u64,
-    pub pollEndHeight: u64,
-    pub tokenHolderSupply: Uint128,
-    pub terrandContractAddress: HumanAddr,
+    pub denom_stable: String,
+    pub denom_stable_decimal: Uint128,
+    pub denom_share: String,
+    pub block_time_play: u64,
+    pub every_block_time_play: u64,
+    pub public_sale_end_block: u64,
+    pub poll_end_height: u64,
+    pub token_holder_supply: Uint128,
+    pub terrand_contract_address: HumanAddr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -36,14 +36,14 @@ pub enum HandleMsg {
         description: String,
         proposal: Proposal,
         amount: Option<Uint128>,
-        prizePerRank: Option<Vec<u8>>,
+        prize_per_rank: Option<Vec<u8>>,
     },
     /// Vote the proposal
-    Vote { pollId: u64, approve: bool },
+    Vote { poll_id: u64, approve: bool },
     /// Valid a proposal
-    PresentProposal { pollId: u64 },
+    PresentProposal { poll_id: u64 },
     /// Reject a proposal
-    RejectProposal { pollId: u64 },
+    RejectProposal { poll_id: u64 },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -56,11 +56,11 @@ pub enum QueryMsg {
     /// Winner lottery rank and address
     Winner {},
     /// Get specific poll
-    GetPoll { pollId: u64 },
+    GetPoll { poll_id: u64 },
     /// Get the needed round for workers adding randomness to Terrand
     GetRound {},
     /// Query Terrand smart contract to get the needed randomness to play the lottery
-    GetTerrand { round: u64 },
+    GetRandomness { round: u64 },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -93,12 +93,12 @@ pub struct GetPollResponse {
     pub start_height: u64,
     pub description: String,
     pub amount: Uint128,
-    pub prizePerRank: Vec<u8>,
+    pub prize_per_rank: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Round {
-    pub nextRound: u64,
+    pub next_round: u64,
 }
 
 pub type RoundResponse = Round;
