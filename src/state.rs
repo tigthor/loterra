@@ -1,10 +1,10 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Binary, CanonicalAddr, Storage, Uint128, HumanAddr};
+use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Storage, Uint128};
 use cosmwasm_storage::{
-    bucket, bucket_read, singleton, singleton_read, Bucket,
-    ReadonlyBucket, ReadonlySingleton, Singleton,
+    bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
+    Singleton,
 };
 
 pub static CONFIG_KEY: &[u8] = b"config";
@@ -40,7 +40,7 @@ pub struct State {
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
     singleton(storage, CONFIG_KEY)
 }
-pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State>  {
+pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State> {
     singleton_read(storage, CONFIG_KEY)
 }
 
@@ -50,11 +50,11 @@ pub struct Combination {
 }
 
 pub fn combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, Combination> {
-    bucket(COMBINATION_KEY, storage )
+    bucket(COMBINATION_KEY, storage)
 }
 
 pub fn combination_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Combination> {
-    bucket_read(COMBINATION_KEY, storage )
+    bucket_read(COMBINATION_KEY, storage)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -68,12 +68,11 @@ pub struct Winner {
 }
 
 pub fn winner_storage<T: Storage>(storage: &mut T) -> Bucket<T, Winner> {
-    bucket(WINNER_KEY, storage )
+    bucket(WINNER_KEY, storage)
 }
 
-
 pub fn winner_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Winner> {
-    bucket_read(WINNER_KEY , storage)
+    bucket_read(WINNER_KEY, storage)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -111,8 +110,7 @@ pub struct PollInfoState {
     pub proposal: Proposal,
 }
 
-
-pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState>{
+pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState> {
     bucket(POLL_KEY, storage)
 }
 

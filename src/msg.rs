@@ -60,9 +60,7 @@ pub enum QueryMsg {
     /// Get the needed round for workers adding randomness to Terrand
     GetRound {},
     /// Query Terrand smart contract to get the needed randomness to play the lottery
-    GetTerrand {
-        round: u64,
-    }
+    GetTerrand { round: u64 },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
