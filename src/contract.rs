@@ -104,7 +104,6 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     env: Env,
     combination: String,
 ) -> StdResult<HandleResponse> {
-    print!("{:?}", env.message.sent_funds);
     // Load the state
     let state = config(&mut deps.storage).load()?;
 
@@ -134,8 +133,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             "Only send {} to register",
             state.denomStable.clone()
         ))),
-    }
-    .unwrap();
+    }?;
 
     if sent.is_zero() {
         return Err(StdError::generic_err(format!(
@@ -156,7 +154,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     // Check if the lottery is about to play and cancel new ticket to enter until play
     if env.block.time >= state.blockTimePlay {
         return Err(StdError::generic_err(
-            "lottery is about to start wait until the end before register",
+            "Lottery is about to start wait until the end before register",
         ));
     }
 
@@ -459,8 +457,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
             "Send only {}, no extra denom",
             state.denomStable.clone()
         ))),
-    }
-    .unwrap();
+    }?;
 
     if sent.is_zero() {
         return Err(StdError::generic_err("Send some funds"));
@@ -1389,6 +1386,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use std::borrow::Borrow;
     use std::collections::HashMap;
+    use cosmwasm_std::StdError::GenericErr;
 
     fn default_init<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
         const DENOM_STABLE: &str = "ust";
@@ -1500,6 +1498,144 @@ mod tests {
             let res = handle(
                 &mut deps,
                 mock_env(
+                    before_all.default_sender.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+            .unwrap();
+            assert_eq!(
+                res,
+                HandleResponse {
+                    messages: vec![],
+                    log: vec![LogAttribute {
+                        key: "action".to_string(),
+                        value: "register".to_string()
+                    }],
+                    data: None
+                }
+            );
+            // Check combination added with success
+            let store = combination_storage(&mut deps.storage).load(&"1e3fab".as_bytes()).unwrap();
+            assert_eq!(1, store.addresses.len());
+            let player1 = deps.api.canonical_address(&before_all.default_sender).unwrap();
+            assert!(store.addresses.contains(&player1));
+            //New player
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender_two.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+                .unwrap();
+            let store = combination_storage(&mut deps.storage).load(&"1e3fab".as_bytes()).unwrap();
+            let player2 = deps.api.canonical_address(&before_all.default_sender_two).unwrap();
+            assert_eq!(2, store.addresses.len());
+            assert!(store.addresses.contains(&player1));
+            assert!(store.addresses.contains(&player2));
+        }
+        #[test]
+        fn register_fail_if_sender_sent_empty_funds(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                combination: "1e3fab".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(0),
+                    }],
+                ),
+                msg.clone(),
+            );
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "you need to send 1000000ust in order to register")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn register_fail_if_sender_sent_multiple_denom() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                combination: "1e3fab".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    },Coin {
+                        denom: "wrong".to_string(),
+                        amount: Uint128(10),
+                    }],
+                ),
+                msg.clone(),
+            );
+
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Only send ust to register")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn register_fail_if_sender_sent_wrong_denom() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                combination: "1e3fab".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "wrong".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            );
+
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "To register you need to send 1000000ust")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn register_fail_wrong_combination() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                combination: "1e3far".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
                     before_all.default_sender,
                     &[Coin {
                         denom: "ust".to_string(),
@@ -1508,8 +1644,89 @@ mod tests {
                 ),
                 msg.clone(),
             );
-            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Not authorized use combination of [a-f] and [0-9] with length 6")
+                },
+                _ => panic!("Unexpected error")
+            }
         }
+        #[test]
+        fn register_fail_sent_too_much_or_less() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                combination: "1e3fae".to_string(),
+            };
+            // Fail sending less than required (1_000_000)
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_00),
+                    }],
+                ),
+                msg.clone(),
+            );
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "send 1000000ust")
+                },
+                _ => panic!("Unexpected error")
+            }
+            // Fail sending more than required (1_000_000)
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_001),
+                    }],
+                ),
+                msg.clone(),
+            );
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "send 1000000ust")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn register_fail_lottery_about_to_start() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                combination: "1e3fae".to_string(),
+            };
+            let state = config(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(
+                before_all.default_sender,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(1_000_000),
+                }],
+            );
+            // Block time is superior to blockTimePlay so the lottery is about to start
+            env.block.time = state.blockTimePlay + 1000;
+            let res = handle(
+                &mut deps,
+                env,
+                msg.clone(),
+            );
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Lottery is about to start wait until the end before register")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+
     }
 
     /*mod register {
