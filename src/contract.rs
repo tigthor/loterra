@@ -448,7 +448,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
                 Ok(env.message.sent_funds[0].amount)
             } else {
                 Err(StdError::generic_err(format!(
-                    "To participate the public sale only {} is accepted",
+                    "Only {} is accepted",
                     state.denomStable.clone()
                 )))
             }
@@ -473,7 +473,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
 
     if balance.amount.u128() < sent.u128() {
         return Err(StdError::generic_err(
-            "No enough balance to cover your buy, try buying less amount",
+            format!("you want to buy {} the contract balance only remain {} token on public sale", sent.u128(), balance.amount.u128())
         ));
     }
 
@@ -1728,526 +1728,108 @@ mod tests {
         }
 
     }
-
-    /*mod register {
+    mod public_sale {
         use super::*;
-        use crate::error::ContractError;
-        use cosmwasm_std::attr;
 
         #[test]
-        fn register_success() {
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
-                amount: Uint128(100_000_000),
-            }]);
+        fn contract_balance_sold_out (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
+            let res = handle_public_sale(&mut deps, mock_env(before_all.default_sender, &[Coin{ denom: "ust".to_string(), amount: Uint128(1_000) }]));
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "All tokens have been sold")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn contract_balance_not_enough (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "lota".to_string(), amount: Uint128(900) }]);
+            default_init(&mut deps);
+            let res = handle_public_sale(&mut deps, mock_env(before_all.default_sender, &[Coin{ denom: "ust".to_string(), amount: Uint128(1_000) }]));
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "you want to buy 1000 the contract balance only remain 900 token on public sale")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn sent_wrong_denom (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "lota".to_string(), amount: Uint128(900) }]);
+            default_init(&mut deps);
+            let res = handle_public_sale(&mut deps, mock_env(before_all.default_sender, &[Coin{ denom: "wrong".to_string(), amount: Uint128(1_000) }]));
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Only ust is accepted")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn sent_multiple_denom_right_included (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "lota".to_string(), amount: Uint128(900) }]);
+            default_init(&mut deps);
+            let res = handle_public_sale(&mut deps, mock_env(before_all.default_sender, &[Coin{ denom: "wrong".to_string(), amount: Uint128(1_000) }, Coin{ denom: "ust".to_string(), amount: Uint128(1_000) }]));
 
-            // Test if this succeed
-            let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
-            };
-            let info = mock_info(
-                HumanAddr::from("delegator1"),
-                &[Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(1),
-                }],
-            );
-            let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
-            assert_eq!(0, res.messages.len());
-            // check if we can add multiple players
-            let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
-            };
-            let info = mock_info(
-                HumanAddr::from("delegator12"),
-                &[Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(1),
-                }],
-            );
-            let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
-            // Load all combination
-            let res = query_all_combination(deps.as_ref()).unwrap();
-            // Test if the address is saved success
-            assert_eq!(2, res.combination[0].addresses.len());
-        }
-        #[test]
-        fn try_register_without_ticket_result_error() {
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
-                amount: Uint128(100_000_000),
-            }]);
-            default_init(&mut deps);
-            // Test if this succeed
-            let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
-            };
-            let info = mock_info(
-                HumanAddr::from("delegator1"),
-                &[Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(0),
-                }],
-            );
-            let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
             match res {
-                Err(ContractError::NoFunds {}) => {}
-                _ => panic!("Unexpected error"),
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Send only ust, no extra denom")
+                },
+                _ => panic!("Unexpected error")
             }
         }
         #[test]
-        fn sending_wrong_denom_ticket() {
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
-                amount: Uint128(100_000_000),
-            }]);
+        fn sent_empty(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "lota".to_string(), amount: Uint128(900) }]);
             default_init(&mut deps);
-            // Test if this succeed
-            let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
-            };
-            let info = mock_info(
-                HumanAddr::from("delegator1"),
-                &[Coin {
-                    denom: "uscrt".to_string(),
-                    amount: Uint128(2),
-                }],
-            );
-            let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-            match res {
-                Err(ContractError::MissingDenom(msg)) => {
-                    assert_eq!(msg, "ujack".to_string())
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn only_send_ticket_denom() {
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
-                amount: Uint128(100_000_000),
-            }]);
-            default_init(&mut deps);
-            // Test if this succeed
-            let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
-            };
-            let info = mock_info(
-                HumanAddr::from("delegator1"),
-                &[
-                    Coin {
-                        denom: "ujack".to_string(),
-                        amount: Uint128(3),
-                    },
-                    Coin {
-                        denom: "uscrt".to_string(),
-                        amount: Uint128(2),
-                    },
-                ],
-            );
-            let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-            match res {
-                Err(ContractError::ExtraDenom(msg)) => {
-                    assert_eq!(msg, "ujack".to_string())
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn ensure_cannot_play_lottery_when_about_to_start() {
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
-                amount: Uint128(100_000_000),
-            }]);
-            default_init(&mut deps);
-            // Test if this succeed
-            let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
-            };
-            let info = mock_info(
-                HumanAddr::from("delegator1"),
-                &[Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(2),
-                }],
-            );
-            let mut env = mock_env();
-            // If block time is superior to block time to play the lottery is about to start and we can't
-            // admit new register until the lottery play cause the result can be leaked at every moment.
-            env.block.time = 1610566930;
-            let res = handle(deps.as_mut(), env.clone(), info.clone(), msg.clone());
-            match res {
-                Err(ContractError::LotteryAboutToStart {}) => {}
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn combination_not_authorized() {
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
-                amount: Uint128(100_000_000),
-            }]);
-            default_init(&mut deps);
-            // Test if we get error if combination is not authorized len superior of len authorized
-            let msg = HandleMsg::Register {
-                combination: "1e3fabgvcc".to_string(),
-            };
-            let info = mock_info(
-                HumanAddr::from("delegator12"),
-                &[Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(3),
-                }],
-            );
-            let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
-            match res {
-                Err(ContractError::CombinationNotAuthorized(msg)) => {
-                    assert_eq!("6", msg);
-                }
-                _ => panic!("Unexpected error"),
-            }
-            // Test if we get error if combination is not authorized
-            let msg = HandleMsg::Register {
-                combination: "9a3f0g".to_string(),
-            };
-            let info = mock_info(
-                HumanAddr::from("delegator12"),
-                &[Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(3),
-                }],
-            );
-            let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
+            let res = handle_public_sale(&mut deps, mock_env(before_all.default_sender, &[Coin{ denom: "ust".to_string(), amount: Uint128(0) }]));
             println!("{:?}", res);
             match res {
-                Err(ContractError::CombinationNotAuthorized(msg)) => {
-                    assert_eq!("6", msg);
-                }
-                _ => panic!("Unexpected error"),
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Send some funds")
+                },
+                _ => panic!("Unexpected error")
             }
+        }
+        #[test]
+        fn public_sale_ended(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "lota".to_string(), amount: Uint128(900) }]);
+            default_init(&mut deps);
+            let state = config(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender, &[Coin{ denom: "ust".to_string(), amount: Uint128(1_000) }]);
+            env.block.height = state.publicSaleEndBlock + 1000;
+            let res = handle_public_sale(&mut deps, env);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Public sale is ended")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn success(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "lota".to_string(), amount: Uint128(900) }]);
+            default_init(&mut deps);
+            let mut env = mock_env(before_all.default_sender.clone(), &[Coin{ denom: "ust".to_string(), amount: Uint128(100) }]);
+            let res = handle_public_sale(&mut deps, env.clone()).unwrap();
+            assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
+                from_address: env.contract.address.clone(),
+                to_address: before_all.default_sender,
+                amount: vec![Coin { denom: "lota".to_string(), amount: Uint128(100) }]
+            }));
         }
     }
-    mod claim_ticket {
-        use super::*;
-        use crate::error::ContractError;
-        use cosmwasm_std::attr;
 
-        fn init_balance_and_staking_default(deps: &mut MockQuerier, balance: Uint128) {
-            deps.update_balance(
-                "validator2",
-                vec![Coin {
-                    denom: "upot".to_string(),
-                    amount: balance,
-                }],
-            );
-            deps.update_staking(
-                "uscrt",
-                &[Validator {
-                    address: HumanAddr::from("validator1"),
-                    commission: Decimal::percent(10),
-                    max_commission: Decimal::percent(100),
-                    max_change_rate: Decimal::percent(100),
-                }],
-                &[
-                    FullDelegation {
-                        delegator: HumanAddr::from("delegator1"),
-                        validator: HumanAddr::from("validator1"),
-                        amount: Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(1_000_000),
-                        },
-                        can_redelegate: Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(0),
-                        },
-                        accumulated_rewards: vec![Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(0),
-                        }],
-                    },
-                    FullDelegation {
-                        delegator: HumanAddr::from("delegator1"),
-                        validator: HumanAddr::from("validator2"),
-                        amount: Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(15_050_030),
-                        },
-                        can_redelegate: Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(0),
-                        },
-                        accumulated_rewards: vec![Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(0),
-                        }],
-                    },
-                    FullDelegation {
-                        delegator: HumanAddr::from("delegator1"),
-                        validator: HumanAddr::from("validator3"),
-                        amount: Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(2_004_000),
-                        },
-                        can_redelegate: Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(0),
-                        },
-                        accumulated_rewards: vec![Coin {
-                            denom: "uscrt".to_string(),
-                            amount: Uint128(0),
-                        }],
-                    },
-                ],
-            );
-        }
-        fn init_balance_and_staking_insufficiently(deps: &mut MockQuerier, balance: Uint128) {
-            deps.update_balance(
-                "validator2",
-                vec![Coin {
-                    denom: "upot".to_string(),
-                    amount: balance,
-                }],
-            );
-            deps.update_staking(
-                "uscrt",
-                &[Validator {
-                    address: HumanAddr::from("validator1"),
-                    commission: Decimal::percent(10),
-                    max_commission: Decimal::percent(100),
-                    max_change_rate: Decimal::percent(100),
-                }],
-                &[FullDelegation {
-                    delegator: HumanAddr::from("delegator1"),
-                    validator: HumanAddr::from("validator2"),
-                    amount: Coin {
-                        denom: "uscrt".to_string(),
-                        amount: Uint128(1_050),
-                    },
-                    can_redelegate: Coin {
-                        denom: "uscrt".to_string(),
-                        amount: Uint128(0),
-                    },
-                    accumulated_rewards: vec![Coin {
-                        denom: "uscrt".to_string(),
-                        amount: Uint128(0),
-                    }],
-                }],
-            );
-        }
-
-        fn init_balance_and_staking_the_incorrect_denom(deps: &mut MockQuerier, balance: Uint128) {
-            deps.update_balance(
-                "validator2",
-                vec![Coin {
-                    denom: "upot".to_string(),
-                    amount: balance,
-                }],
-            );
-            deps.update_staking(
-                "uscrt",
-                &[Validator {
-                    address: HumanAddr::from("validator1"),
-                    commission: Decimal::percent(10),
-                    max_commission: Decimal::percent(100),
-                    max_change_rate: Decimal::percent(100),
-                }],
-                &[FullDelegation {
-                    delegator: HumanAddr::from("delegator1"),
-                    validator: HumanAddr::from("validator2"),
-                    amount: Coin {
-                        denom: "ucoin".to_string(),
-                        amount: Uint128(10_050_000),
-                    },
-                    can_redelegate: Coin {
-                        denom: "ucoin".to_string(),
-                        amount: Uint128(0),
-                    },
-                    accumulated_rewards: vec![Coin {
-                        denom: "ucoin".to_string(),
-                        amount: Uint128(0),
-                    }],
-                }],
-            );
-        }
-
-        #[test]
-        fn handle_dot_not_send_funds() {
-            let mut deps = mock_dependencies(&[
-                Coin {
-                    denom: "uscrt".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-                Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-            ]);
-            init_balance_and_staking_default(&mut deps.querier, Uint128(10_000));
-            default_init(&mut deps);
-            let info = mock_info(
-                HumanAddr::from("delegator1"),
-                &[Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(3),
-                }],
-            );
-            let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
-            match res {
-                Err(ContractError::DoNotSendFunds(msg)) => {
-                    assert_eq!(msg, "Claim".to_string())
-                }
-                _ => panic!("Unexpected error"),
-            };
-        }
-        #[test]
-        fn not_allowed_to_claim_because_not_staking() {
-            let mut deps = mock_dependencies(&[
-                Coin {
-                    denom: "uscrt".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-                Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-            ]);
-            default_init(&mut deps);
-            let info = mock_info(HumanAddr::from("delegator1"), &[]);
-            let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
-            match res {
-                Err(ContractError::NoDelegations {}) => {}
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn error_no_ticket_funds_in_the_contract() {
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "uscrt".to_string(),
-                amount: Uint128(100_000_000),
-            }]);
-            init_balance_and_staking_default(&mut deps.querier, Uint128(10_000));
-            default_init(&mut deps);
-            let info = mock_info(HumanAddr::from("delegator1"), &[]);
-            let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
-            match res {
-                Err(ContractError::EmptyBalance {}) => {}
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn not_allowed_validator_need_to_stake_min_amount() {
-            let mut deps = mock_dependencies(&[
-                Coin {
-                    denom: "uscrt".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-                Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-            ]);
-            init_balance_and_staking_default(&mut deps.querier, Uint128(0));
-            default_init(&mut deps);
-            let info = mock_info(HumanAddr::from("delegator1"), &[]);
-            let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
-            match res {
-                Err(ContractError::ValidatorNotAuthorized(msg)) => {
-                    assert_eq!(msg, "10000")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn not_allowed_delegator_need_to_stake_min_amount() {
-            let mut deps = mock_dependencies(&[
-                Coin {
-                    denom: "uscrt".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-                Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-            ]);
-            init_balance_and_staking_insufficiently(&mut deps.querier, Uint128(10_000));
-            default_init(&mut deps);
-            let info = mock_info(HumanAddr::from("delegator1"), &[]);
-            let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
-            match res {
-                Err(ContractError::DelegationTooLow(msg)) => {
-                    assert_eq!(msg, "2000")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn not_allowed_delegator_need_to_stake() {
-            let mut deps = mock_dependencies(&[
-                Coin {
-                    denom: "uscrt".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-                Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-            ]);
-            init_balance_and_staking_the_incorrect_denom(&mut deps.querier, Uint128(10_000));
-            default_init(&mut deps);
-            let info = mock_info(HumanAddr::from("delegator1"), &[]);
-            let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
-            match res {
-                Err(ContractError::NoDelegations {}) => {}
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn claim_the_ticket() {
-            let mut deps = mock_dependencies(&[
-                Coin {
-                    denom: "uscrt".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-                Coin {
-                    denom: "ujack".to_string(),
-                    amount: Uint128(100_000_000),
-                },
-            ]);
-            init_balance_and_staking_default(&mut deps.querier, Uint128(10_000));
-            default_init(&mut deps);
-            let info = mock_info(HumanAddr::from("delegator1"), &[]);
-            let res = handle_ticket(deps.as_mut(), mock_env(), info.clone()).unwrap();
-            assert_eq!(1, res.messages.len());
-            assert_eq!(
-                res.messages[0],
-                CosmosMsg::Bank(BankMsg::Send {
-                    from_address: HumanAddr::from(MOCK_CONTRACT_ADDR),
-                    to_address: HumanAddr::from("delegator1"),
-                    amount: vec![Coin {
-                        denom: "ujack".to_string(),
-                        amount: Uint128(1)
-                    }]
-                })
-            );
-            // Test if state have changed correctly
-            let res = query_config(deps.as_ref()).unwrap();
-            let claimer = deps
-                .api
-                .canonical_address(&HumanAddr::from("delegator1"))
-                .unwrap();
-            // Test we added the claimer to the claimed vector
-            assert!(res.claimTicket.len() > 0);
-            // Test we added correct claimer to the claimed vector
-            assert!(res.claimTicket.contains(&claimer));
-            // Test error to claim two times
-            let res = handle_ticket(deps.as_mut(), mock_env(), info.clone());
-            match res {
-                Err(ContractError::AlreadyClaimed {}) => {}
-                _ => panic!("Unexpected error"),
-            }
-        }
-    }
+    /*
     mod public_sale {
         use super::*;
         use crate::error::ContractError;
