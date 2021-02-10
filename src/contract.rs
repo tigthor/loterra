@@ -1,8 +1,6 @@
-use cosmwasm_std::{
-    to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Empty, Env, Extern,
-    HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
-    StdResult, Storage, Uint128, WasmQuery,
-};
+use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Empty, Env,
+                   Extern, HandleResponse, HumanAddr, InitResponse, LogAttribute, Order,
+                   Querier, QueryRequest, StdError, StdResult, Storage, Uint128, WasmQuery};
 
 use crate::msg::{
     AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
@@ -16,15 +14,8 @@ use crate::state::{
 };
 
 use hex;
-use serde::de::Unexpected::Bytes;
-use std::convert::TryInto;
 use std::ops::{Mul, Sub};
 
-const MIN_DESC_LEN: u64 = 6;
-const MAX_DESC_LEN: u64 = 64;
-const NEXT_ROUND: u64 = 10;
-const DRAND_PERIOD: u64 = 30;
-const DRAND_GENESIS_TIME: u64 = 1595431050;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
@@ -35,28 +26,34 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     msg: InitMsg,
 ) -> StdResult<InitResponse> {
     let state = State {
-        blockTimePlay: msg.blockTimePlay,
-        everyBlockTimePlay: msg.everyBlockTimePlay,
-        publicSaleEndBlock: msg.publicSaleEndBlock,
-        denomStableDecimal: msg.denomStableDecimal,
-        denomStable: msg.denomStable,
-        denomShare: msg.denomShare,
-        tokenHolderSupply: msg.tokenHolderSupply,
-        pollEndHeight: msg.pollEndHeight,
-        claimReward: vec![],
-        holdersRewards: Uint128::zero(),
-        combinationLen: 6,
-        jackpotReward: Uint128::zero(),
-        jackpotPercentageReward: 80,
-        tokenHolderPercentageFeeReward: 10,
-        feeForDrandWorkerInPercentage: 1,
-        prizeRankWinnerPercentage: vec![84, 10, 5, 1],
-        pollCount: 0,
-        holdersMaxPercentageReward: 20,
-        workerDrandMaxPercentageReward: 10,
-        pricePerTicketToRegister: Uint128(1_000_000),
-        terrandContractAddress: msg.terrandContractAddress,
+        block_time_play: msg.block_time_play,
+        every_block_time_play: msg.every_block_time_play,
+        public_sale_end_block: msg.public_sale_end_block,
+        denom_stable_decimal: msg.denom_stable_decimal,
+        denom_stable: msg.denom_stable,
+        denom_share: msg.denom_share,
+        token_holder_supply: msg.token_holder_supply,
+        poll_end_height: msg.poll_end_height,
+        claim_reward: vec![],
+        holders_rewards: Uint128::zero(),
+        combination_len: 6,
+        jackpot_reward: Uint128::zero(),
+        jackpot_percentage_reward: 80,
+        token_holder_percentage_fee_reward: 10,
+        fee_for_drand_worker_in_percentage: 1,
+        prize_rank_winner_percentage: vec![84, 10, 5, 1],
+        poll_count: 0,
+        holders_max_percentage_reward: 20,
+        worker_drand_max_percentage_reward: 10,
+        price_per_ticket_to_register: Uint128(1_000_000),
+        terrand_contract_address: msg.terrand_contract_address,
+        drand_genesis_time: 1595431050,
+        drand_period: 30,
+        drand_next_round_security: 10,
+        max_description_length: 64,
+        min_description_length: 6,
     };
+
     config(&mut deps.storage).save(&state)?;
     Ok(InitResponse::default())
 }
@@ -77,11 +74,11 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             description,
             proposal,
             amount,
-            prizePerRank,
-        } => handle_proposal(deps, env, description, proposal, amount, prizePerRank),
-        HandleMsg::Vote { pollId, approve } => handle_vote(deps, env, pollId, approve),
-        HandleMsg::PresentProposal { pollId } => handle_present_proposal(deps, env, pollId),
-        HandleMsg::RejectProposal { pollId } => handle_reject_proposal(deps, env, pollId),
+            prize_per_rank,
+        } => handle_proposal(deps, env, description, proposal, amount, prize_per_rank),
+        HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, poll_id, approve),
+        HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
+        HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
     }
 }
 
@@ -108,51 +105,80 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     let state = config(&mut deps.storage).load()?;
 
     // Regex to check if the combination is allowed
-    if !is_lower_hex(&combination, state.combinationLen) {
+    if !is_lower_hex(&combination, state.combination_len) {
         return Err(StdError::generic_err(format!(
             "Not authorized use combination of [a-f] and [0-9] with length {}",
-            state.combinationLen
+            state.combination_len
         )));
     }
+   /* let payment = env
+        .message
+        .sent_funds
+        .iter()
+        .find(|x| x.denom == state.denomStable)
+        .ok_or_else(|| StdError::generic_err(format!("No {} tokens sent", &state.denomStable)))?;*/
+
+ /*   if env.message.sent_funds.is_empty(){
+        return Err(StdError::generic_err("Send some funds to register"));
+    }
+
+    if env.message.sent_funds.len() > 1 {
+        return Err(StdError::generic_err(format!(
+            "Only send {} to register",
+            state.denomStable.clone()
+        )));
+    }
+    let mut sent: Uint128 = Uint128(0);
+
+    if env.message.sent_funds[0].denom == state.denomStable {
+        //Ok(env.message.sent_funds[0].amount)
+          sent = env.message.sent_funds[0].amount;
+    } else {
+        return Err(StdError::generic_err(format!(
+            "To register you need to send {}{}",
+            state.price_per_ticket_to_register,
+            state.denomStable.clone()
+        )));
+    }*/
 
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
         0 => Err(StdError::generic_err("Send some funds to register")),
         1 => {
-            if env.message.sent_funds[0].denom == state.denomStable {
+            if env.message.sent_funds[0].denom == state.denom_stable {
                 Ok(env.message.sent_funds[0].amount)
             } else {
                 Err(StdError::generic_err(format!(
                     "To register you need to send {}{}",
-                    state.pricePerTicketToRegister,
-                    state.denomStable.clone()
+                    state.price_per_ticket_to_register,
+                    state.denom_stable.clone()
                 )))
             }
         }
         _ => Err(StdError::generic_err(format!(
             "Only send {} to register",
-            state.denomStable.clone()
+            state.denom_stable.clone()
         ))),
     }?;
 
     if sent.is_zero() {
         return Err(StdError::generic_err(format!(
             "you need to send {}{} in order to register",
-            state.pricePerTicketToRegister.clone(),
-            state.denomStable.clone()
+            state.price_per_ticket_to_register.clone(),
+            state.denom_stable.clone()
         )));
     }
     // Handle the player is not sending too much or too less
-    if sent.u128() != state.pricePerTicketToRegister.u128() {
+    if sent.u128() != state.price_per_ticket_to_register.u128() {
         return Err(StdError::generic_err(format!(
             "send {}{}",
-            state.pricePerTicketToRegister.clone(),
-            state.denomStable.clone()
+            state.price_per_ticket_to_register.clone(),
+            state.denom_stable.clone()
         )));
     }
 
     // Check if the lottery is about to play and cancel new ticket to enter until play
-    if env.block.time >= state.blockTimePlay {
+    if env.block.time >= state.block_time_play {
         return Err(StdError::generic_err(
             "Lottery is about to start wait until the end before register",
         ));
@@ -195,7 +221,7 @@ fn encode_msg(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty
     }
     .into())
 }
-fn wrapper<S: Storage, A: Api, Q: Querier>(
+fn wrapper_msg<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     query: QueryRequest<Empty>,
 ) -> StdResult<TerrandResponse> {
@@ -209,10 +235,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
-    let from_genesis = state.blockTimePlay - DRAND_GENESIS_TIME;
-    let next_round = (from_genesis / DRAND_PERIOD) + NEXT_ROUND;
+    let from_genesis = state.block_time_play - state.drand_genesis_time;
+    let next_round = (from_genesis / state.drand_period) + state.drand_next_round_security;
     // reset holders reward
-    state.holdersRewards = Uint128::zero();
+    state.holders_rewards = Uint128::zero();
     // Load combinations
     let store = query_all_combination(&deps).unwrap();
 
@@ -235,17 +261,18 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     }
 
     // Make the contract callable for everyone every x blocks
-    if env.block.time > state.blockTimePlay {
+    if env.block.time > state.block_time_play {
         // Update the state
-        state.claimReward = vec![];
-        state.blockTimePlay = env.block.time + state.everyBlockTimePlay;
+        state.claim_reward = vec![];
+        state.block_time_play = env.block.time + state.every_block_time_play;
     } else {
-        return Err(StdError::Unauthorized { backtrace: None });
+        return Err(StdError::generic_err(format!("Lottery registration is still in progress... Retry after block time {}",  state.block_time_play)));
     }
 
-    let msg = QueryMsg::GetTerrand { round: next_round };
-    let res = encode_msg(msg, state.terrandContractAddress.clone())?;
-    let res = wrapper(&deps, res)?;
+    let msg = QueryMsg::GetRandomness{ round: next_round };
+    let res = encode_msg(msg, state.terrand_contract_address.clone())?;
+    let res = wrapper_msg(&deps, res)?;
+
     let randomness = hex::encode(res.randomness.to_base64());
     /*
        Todo: create a function to query the randomness from the smart contract
@@ -257,7 +284,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let n = randomness_hash
         .char_indices()
         .rev()
-        .nth(state.combinationLen as usize - 1)
+        .nth(state.combination_len as usize - 1)
         .map(|(i, _)| i)
         .unwrap();
     let winning_combination = &randomness_hash[n..];
@@ -265,23 +292,23 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // Set jackpot amount
     let balance = deps
         .querier
-        .query_balance(&env.contract.address, &state.denomStable)
+        .query_balance(&env.contract.address, &state.denom_stable)
         .unwrap();
     // Max amount winners can claim
     let jackpot = balance
         .amount
-        .mul(Decimal::percent(state.jackpotPercentageReward as u64));
+        .mul(Decimal::percent(state.jackpot_percentage_reward as u64));
     // Drand worker fee
     let fee_for_drand_worker =
-        jackpot.mul(Decimal::percent(state.feeForDrandWorkerInPercentage as u64));
+        jackpot.mul(Decimal::percent(state.fee_for_drand_worker_in_percentage as u64));
     // Amount token holders can claim of the reward is a fee
     let token_holder_fee_reward = jackpot.mul(Decimal::percent(
-        state.tokenHolderPercentageFeeReward as u64,
+        state.token_holder_percentage_fee_reward as u64,
     ));
     // Total fees if winner of the jackpot
     let total_fee = jackpot.mul(Decimal::percent(
-        (state.feeForDrandWorkerInPercentage as u64)
-            + (state.tokenHolderPercentageFeeReward as u64),
+        (state.fee_for_drand_worker_in_percentage as u64)
+            + (state.token_holder_percentage_fee_reward as u64),
     ));
     // The jackpot after worker fee applied
     let mut jackpot_after = (jackpot - fee_for_drand_worker).unwrap();
@@ -299,15 +326,15 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
             if count == winning_combination.len() {
                 // Set the reward for token holders
-                state.holdersRewards = token_holder_fee_reward;
+                state.holders_rewards = token_holder_fee_reward;
                 // Set the new jackpot after fee
                 jackpot_after = (jackpot - total_fee).unwrap();
 
                 let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winnerAddress in combination.addresses {
+                for winner_address in combination.addresses {
                     data_winner.push(WinnerInfoState {
                         claimed: false,
-                        address: winnerAddress,
+                        address: winner_address,
                     });
                 }
                 if !data_winner.is_empty() {
@@ -320,10 +347,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                 }
             } else if count == winning_combination.len() - 1 {
                 let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winnerAddress in combination.addresses {
+                for winner_address in combination.addresses {
                     data_winner.push(WinnerInfoState {
                         claimed: false,
-                        address: winnerAddress,
+                        address: winner_address,
                     });
                 }
                 if !data_winner.is_empty() {
@@ -336,10 +363,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                 }
             } else if count == winning_combination.len() - 2 {
                 let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winnerAddress in combination.addresses {
+                for winner_address in combination.addresses {
                     data_winner.push(WinnerInfoState {
                         claimed: false,
-                        address: winnerAddress,
+                        address: winner_address,
                     });
                 }
                 if !data_winner.is_empty() {
@@ -352,10 +379,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                 }
             } else if count == winning_combination.len() - 3 {
                 let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winnerAddress in combination.addresses {
+                for winner_address in combination.addresses {
                     data_winner.push(WinnerInfoState {
                         claimed: false,
-                        address: winnerAddress,
+                        address: winner_address,
                     });
                 }
                 if !data_winner.is_empty() {
@@ -368,10 +395,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                 }
             } else if count == winning_combination.len() - 4 {
                 let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winnerAddress in combination.addresses {
+                for winner_address in combination.addresses {
                     data_winner.push(WinnerInfoState {
                         claimed: false,
-                        address: winnerAddress,
+                        address: winner_address,
                     });
                 }
                 if !data_winner.is_empty() {
@@ -390,14 +417,14 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     let msg = BankMsg::Send {
         from_address: env.contract.address,
-        to_address: env.message.sender.clone(),
+        to_address: res.worker,
         amount: vec![Coin {
-            denom: state.denomStable.clone(),
+            denom: state.denom_stable.clone(),
             amount: fee_for_drand_worker,
         }],
     };
     // Update the state
-    state.jackpotReward = jackpot_after;
+    state.jackpot_reward = jackpot_after;
 
     // Get all keys in the bucket combination
     let keys = combination_storage(&mut deps.storage)
@@ -435,7 +462,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
     // Public sale expire after blockTime
-    if state.publicSaleEndBlock < env.block.height {
+    if state.public_sale_end_block < env.block.height {
         return Err(StdError::generic_err("Public sale is ended"));
     }
     // Check if some funds are sent
@@ -444,18 +471,18 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
             "Send some funds to buy public sale tokens",
         )),
         1 => {
-            if env.message.sent_funds[0].denom == state.denomStable {
+            if env.message.sent_funds[0].denom == state.denom_stable {
                 Ok(env.message.sent_funds[0].amount)
             } else {
                 Err(StdError::generic_err(format!(
                     "Only {} is accepted",
-                    state.denomStable.clone()
+                    state.denom_stable.clone()
                 )))
             }
         }
         _ => Err(StdError::generic_err(format!(
             "Send only {}, no extra denom",
-            state.denomStable.clone()
+            state.denom_stable.clone()
         ))),
     }?;
 
@@ -465,7 +492,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     // Get the contract balance prepare the tx
     let balance = deps
         .querier
-        .query_balance(&env.contract.address, &state.denomShare)
+        .query_balance(&env.contract.address, &state.denom_share)
         .unwrap();
     if balance.amount.is_zero() {
         return Err(StdError::generic_err("All tokens have been sold"));
@@ -481,12 +508,12 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
         from_address: env.contract.address,
         to_address: env.message.sender.clone(),
         amount: vec![Coin {
-            denom: state.denomShare.clone(),
+            denom: state.denom_share.clone(),
             amount: sent,
         }],
     };
 
-    state.tokenHolderSupply += sent;
+    state.token_holder_supply += sent;
     // Save the new state
     config(&mut deps.storage).save(&state)?;
 
@@ -518,14 +545,14 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     if !env.message.sent_funds.is_empty() {
         return Err(StdError::generic_err("Do not send funds with reward"));
     }
-    if state.tokenHolderSupply.is_zero() {
+    if state.token_holder_supply.is_zero() {
         return Err(StdError::Unauthorized { backtrace: None });
     }
 
     // Ensure sender have some reward tokens
     let balance_sender = deps
         .querier
-        .query_balance(env.message.sender.clone(), &state.denomShare)
+        .query_balance(env.message.sender.clone(), &state.denom_share)
         .unwrap();
     if balance_sender.amount.is_zero() {
         return Err(StdError::Unauthorized { backtrace: None });
@@ -533,26 +560,26 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
 
     // Ensure sender only can claim one time every x blocks
     if state
-        .claimReward
+        .claim_reward
         .iter()
         .any(|address| deps.api.human_address(address).unwrap() == env.message.sender.clone())
     {
         return Err(StdError::generic_err("Already claimed"));
     }
     // Add the sender to claimed state
-    state.claimReward.push(sender.clone());
+    state.claim_reward.push(sender.clone());
 
     // Get the contract balance
     let balance_contract = deps
         .querier
-        .query_balance(env.contract.address.clone(), &state.denomStable)?;
+        .query_balance(env.contract.address.clone(), &state.denom_stable)?;
     // Cancel if no amount in the contract
     if balance_contract.amount.is_zero() {
         return Err(StdError::generic_err("Contract balance is empty"));
     }
     // Get the percentage of shareholder
     let share_holder_percentage =
-        balance_sender.amount.u128() as u64 * 100 / state.tokenHolderSupply.u128() as u64;
+        balance_sender.amount.u128() as u64 * 100 / state.token_holder_supply.u128() as u64;
     if share_holder_percentage == 0 {
         return Err(StdError::generic_err(
             "You need at least 1% of total shares to claim rewards",
@@ -561,11 +588,11 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
 
     // Calculate the reward
     let reward = state
-        .holdersRewards
+        .holders_rewards
         .mul(Decimal::percent(share_holder_percentage));
 
     // Update the holdersReward
-    state.holdersRewards = state.holdersRewards.sub(reward).unwrap();
+    state.holders_rewards = state.holders_rewards.sub(reward).unwrap();
     // Save the new state
     config(&mut deps.storage).save(&state)?;
 
@@ -573,7 +600,7 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
         from_address: env.contract.address,
         to_address: deps.api.human_address(&sender).unwrap(),
         amount: vec![Coin {
-            denom: state.denomStable,
+            denom: state.denom_stable,
             amount: reward,
         }],
     };
@@ -628,7 +655,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Do not send funds with jackpot"));
     }
     // Ensure there is jackpot reward to claim
-    if state.jackpotReward.is_zero() {
+    if state.jackpot_reward.is_zero() {
         return Err(StdError::Unauthorized { backtrace: None });
     }
     // Ensure there is some winner
@@ -639,9 +666,9 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     let mut jackpot_amount: Uint128 = Uint128(0);
     let mut ticket_winning: Uint128 = Uint128(0);
     for winner in store.winner.clone() {
-        for winnerInfo in winner.winners.clone() {
-            if winnerInfo.address == deps.api.canonical_address(&env.message.sender).unwrap() {
-                if winnerInfo.claimed {
+        for winner_info in winner.winners.clone() {
+            if winner_info.address == deps.api.canonical_address(&env.message.sender).unwrap() {
+                if winner_info.claimed {
                     return Err(StdError::generic_err("Already claimed"));
                 }
 
@@ -649,8 +676,8 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
                     1 => {
                         // Prizes first rank
                         let prize = state
-                            .jackpotReward
-                            .mul(Decimal::percent(state.prizeRankWinnerPercentage[0] as u64))
+                            .jackpot_reward
+                            .mul(Decimal::percent(state.prize_rank_winner_percentage[0] as u64))
                             .u128()
                             / winner.winners.clone().len() as u128;
                         jackpot_amount += Uint128(prize);
@@ -666,8 +693,8 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
                     2 => {
                         // Prizes second rank
                         let prize = state
-                            .jackpotReward
-                            .mul(Decimal::percent(state.prizeRankWinnerPercentage[1] as u64))
+                            .jackpot_reward
+                            .mul(Decimal::percent(state.prize_rank_winner_percentage[1] as u64))
                             .u128()
                             / winner.winners.clone().len() as u128;
                         jackpot_amount += Uint128(prize);
@@ -683,8 +710,8 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
                     3 => {
                         // Prizes third rank
                         let prize = state
-                            .jackpotReward
-                            .mul(Decimal::percent(state.prizeRankWinnerPercentage[2] as u64))
+                            .jackpot_reward
+                            .mul(Decimal::percent(state.prize_rank_winner_percentage[2] as u64))
                             .u128()
                             / winner.winners.clone().len() as u128;
                         jackpot_amount += Uint128(prize);
@@ -700,8 +727,8 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
                     4 => {
                         // Prizes four rank
                         let prize = state
-                            .jackpotReward
-                            .mul(Decimal::percent(state.prizeRankWinnerPercentage[3] as u64))
+                            .jackpot_reward
+                            .mul(Decimal::percent(state.prize_rank_winner_percentage[3] as u64))
                             .u128()
                             / winner.winners.clone().len() as u128;
                         jackpot_amount += Uint128(prize);
@@ -739,7 +766,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         // Get the contract balance
         let balance = deps
             .querier
-            .query_balance(&env.contract.address, &state.denomStable)
+            .query_balance(&env.contract.address, &state.denom_stable)
             .unwrap();
         // Ensure the contract have the balance
         if balance.amount.is_zero() {
@@ -750,7 +777,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
             return Err(StdError::generic_err("Not enough funds in the contract"));
         }
         amount_to_send.push(Coin {
-            denom: state.denomStable.clone(),
+            denom: state.denom_stable.clone(),
             amount: jackpot_amount,
         });
     }
@@ -759,12 +786,12 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         // Get the contract ticket balance
         let ticket_balance = deps
             .querier
-            .query_balance(&env.contract.address, &state.denomStable)
+            .query_balance(&env.contract.address, &state.denom_stable)
             .unwrap();
         // Ensure the contract have the balance
         if !ticket_balance.amount.is_zero() || ticket_balance.amount > ticket_winning {
             amount_to_send.push(Coin {
-                denom: state.denomStable,
+                denom: state.denom_stable,
                 amount: ticket_winning,
             });
         }
@@ -832,9 +859,9 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     let mut state = config(&mut deps.storage).load().unwrap();
     // Increment and get the new poll id for bucket key
-    let poll_id = state.pollCount + 1;
+    let poll_id = state.poll_count + 1;
     // Set the new counter
-    state.pollCount = poll_id;
+    state.poll_count = poll_id;
 
     //Handle sender is not sending funds
     if !env.message.sent_funds.is_empty() {
@@ -842,15 +869,15 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     }
 
     // Handle the description is respecting length
-    if (description.len() as u64) < MIN_DESC_LEN {
+    if (description.len() as u64) < state.min_description_length {
         return Err(StdError::generic_err(format!(
             "Description min length {}",
-            MIN_DESC_LEN.to_string()
+            state.min_description_length.to_string()
         )));
-    } else if (description.len() as u64) > MAX_DESC_LEN {
+    } else if (description.len() as u64) > state.max_description_length {
         return Err(StdError::generic_err(format!(
             "Description max length {}",
-            MAX_DESC_LEN.to_string()
+            state.max_description_length.to_string()
         )));
     }
 
@@ -860,7 +887,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     let proposal_type = if let Proposal::HolderFeePercentage = proposal {
         match amount {
             Some(percentage) => {
-                if percentage.u128() as u8 > state.holdersMaxPercentageReward {
+                if percentage.u128() as u8 > state.holders_max_percentage_reward {
                     return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
                 }
                 proposal_amount = percentage;
@@ -874,7 +901,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     } else if let Proposal::DrandWorkerFeePercentage = proposal {
         match amount {
             Some(percentage) => {
-                if percentage.u128() as u8 > state.workerDrandMaxPercentageReward {
+                if percentage.u128() as u8 > state.worker_drand_max_percentage_reward {
                     return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
                 }
                 proposal_amount = percentage;
@@ -901,8 +928,8 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         Proposal::JackpotRewardPercentage
     } else if let Proposal::LotteryEveryBlockTime = proposal {
         match amount {
-            Some(blockTime) => {
-                proposal_amount = blockTime;
+            Some(block_time) => {
+                proposal_amount = block_time;
             }
             None => {
                 return Err(StdError::generic_err(
@@ -946,8 +973,8 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         Proposal::PrizePerRank
     } else if let Proposal::ClaimEveryBlock = proposal {
         match amount {
-            Some(blockTime) => {
-                proposal_amount = blockTime;
+            Some(block_time) => {
+                proposal_amount = block_time;
             }
             None => {
                 return Err(StdError::generic_err("amount is required".to_string()));
@@ -956,8 +983,8 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         Proposal::ClaimEveryBlock
     } else if let Proposal::AmountToRegister = proposal {
         match amount {
-            Some(AmountToRegister) => {
-                proposal_amount = AmountToRegister;
+            Some(amount_to_register) => {
+                proposal_amount = amount_to_register;
             }
             None => {
                 return Err(StdError::generic_err("amount is required".to_string()));
@@ -975,18 +1002,18 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     let new_poll = PollInfoState {
         creator: sender_to_canonical,
         status: PollStatus::InProgress,
-        end_height: env.block.height + state.pollEndHeight,
+        end_height: env.block.height + state.poll_end_height,
         start_height: env.block.height,
         description,
         yes_voters: vec![],
         no_voters: vec![],
         amount: proposal_amount,
-        prizeRank: proposal_prize_rank,
+        prize_rank: proposal_prize_rank,
         proposal: proposal_type,
     };
 
     // Save poll
-    poll_storage(&mut deps.storage).save(&state.pollCount.to_be_bytes(), &new_poll)?;
+    poll_storage(&mut deps.storage).save(&state.poll_count.to_be_bytes(), &new_poll)?;
 
     // Save state
     config(&mut deps.storage).save(&state)?;
@@ -1133,7 +1160,7 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
 
         let balance = deps
             .querier
-            .query_balance(human_address, &state.denomShare)
+            .query_balance(human_address, &state.denom_share)
             .unwrap();
 
         if !balance.amount.is_zero() {
@@ -1176,7 +1203,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     let mut final_vote_weight_in_percentage: u128 = 0;
     if !yes_weight.is_zero() {
         let yes_weight_by_hundred = yes_weight.u128() * 100;
-        final_vote_weight_in_percentage = yes_weight_by_hundred / state.tokenHolderSupply.u128();
+        final_vote_weight_in_percentage = yes_weight_by_hundred / state.token_holder_supply.u128();
     }
 
     // Reject the proposal
@@ -1210,22 +1237,22 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     // Valid the proposal
     match store.proposal {
         Proposal::LotteryEveryBlockTime => {
-            state.everyBlockTimePlay = store.amount.u128() as u64;
+            state.every_block_time_play = store.amount.u128() as u64;
         }
         Proposal::DrandWorkerFeePercentage => {
-            state.feeForDrandWorkerInPercentage = store.amount.u128() as u8;
+            state.fee_for_drand_worker_in_percentage = store.amount.u128() as u8;
         }
         Proposal::JackpotRewardPercentage => {
-            state.jackpotPercentageReward = store.amount.u128() as u8;
+            state.jackpot_percentage_reward = store.amount.u128() as u8;
         }
         Proposal::AmountToRegister => {
-            state.pricePerTicketToRegister = store.amount;
+            state.price_per_ticket_to_register = store.amount;
         }
         Proposal::PrizePerRank => {
-            state.prizeRankWinnerPercentage = store.prizeRank;
+            state.prize_rank_winner_percentage = store.prize_rank;
         }
         Proposal::HolderFeePercentage => {
-            state.holdersMaxPercentageReward = store.amount.u128() as u8
+            state.holders_max_percentage_reward = store.amount.u128() as u8
         }
         _ => {
             return Err(StdError::generic_err("Proposal not funds"));
@@ -1270,9 +1297,9 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
         QueryMsg::Combination {} => to_binary(&query_all_combination(deps)?)?,
         QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?,
-        QueryMsg::GetPoll { pollId } => to_binary(&query_poll(deps, pollId)?)?,
+        QueryMsg::GetPoll { poll_id } => to_binary(&query_poll(deps, poll_id)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
-        QueryMsg::GetTerrand { round: _ } => to_binary(&query_terrand(deps)?)?,
+        QueryMsg::GetRandomness{ round: _ } => to_binary(&query_terrand_randomness(deps)?)?,
     };
     Ok(response)
 }
@@ -1284,7 +1311,7 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
     Ok(state)
 }
 
-fn query_terrand<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> StdResult<StdError> {
+fn query_terrand_randomness<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> StdResult<StdError> {
     return Err(StdError::Unauthorized { backtrace: None });
 }
 
@@ -1355,37 +1382,30 @@ fn query_poll<S: Storage, A: Api, Q: Querier>(
         start_height: poll.start_height,
         description: poll.description,
         amount: poll.amount,
-        prizePerRank: poll.prizeRank,
+        prize_per_rank: poll.prize_rank,
     })
 }
 
 fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdResult<RoundResponse> {
     let state = config_read(&deps.storage).load()?;
-    let from_genesis = state.blockTimePlay - DRAND_GENESIS_TIME;
-    let next_round = (from_genesis / DRAND_PERIOD) + NEXT_ROUND;
+    let from_genesis = state.block_time_play - state.drand_genesis_time;
+    let next_round = (from_genesis / state.drand_period) + state.drand_next_round_security;
 
     Ok(RoundResponse {
-        nextRound: next_round,
+        next_round: next_round,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::msg::{HandleMsg, InitMsg, QueryMsg};
+    use crate::msg::{HandleMsg, InitMsg};
     use cosmwasm_std::testing::{
-        mock_dependencies, mock_env, BankQuerier, MockApi, MockQuerier, MockStorage,
-        MOCK_CONTRACT_ADDR,
+        mock_dependencies, mock_env
     };
-    use cosmwasm_std::{
-        coins, from_binary, Api, Binary, CanonicalAddr, CosmosMsg, Decimal, FullDelegation,
-        HumanAddr, MessageInfo, QuerierResult, StdError::NotFound, Storage, Uint128, Validator,
+    use cosmwasm_std::{Api, CosmosMsg,
+        HumanAddr, Storage, Uint128,
     };
-    use cosmwasm_storage::{bucket, bucket_read, singleton, singleton_read};
-    use schemars::JsonSchema;
-    use serde::{Deserialize, Serialize};
-    use std::borrow::Borrow;
-    use std::collections::HashMap;
     use cosmwasm_std::StdError::GenericErr;
 
     fn default_init<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
@@ -1399,15 +1419,15 @@ mod tests {
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
 
         let init_msg = InitMsg {
-            denomStableDecimal: DENOM_STABLE_DECIMAL,
-            denomStable: DENOM_STABLE.to_string(),
-            denomShare: DENOM_SHARE.to_string(),
-            blockTimePlay: BLOCK_TIME_PLAY,
-            everyBlockTimePlay: EVERY_BLOCK_TIME_PLAY,
-            publicSaleEndBlock: PUBLIC_SALE_END_BLOCK,
-            pollEndHeight: POLL_END_HEIGHT,
-            tokenHolderSupply: TOKEN_HOLDER_SUPPLY,
-            terrandContractAddress: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"),
+            denom_stable_decimal: DENOM_STABLE_DECIMAL,
+            denom_stable: DENOM_STABLE.to_string(),
+            denom_share: DENOM_SHARE.to_string(),
+            block_time_play: BLOCK_TIME_PLAY,
+            every_block_time_play: EVERY_BLOCK_TIME_PLAY,
+            public_sale_end_block: PUBLIC_SALE_END_BLOCK,
+            poll_end_height: POLL_END_HEIGHT,
+            token_holder_supply: TOKEN_HOLDER_SUPPLY,
+            terrand_contract_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"),
         };
 
         init(
@@ -1444,7 +1464,7 @@ mod tests {
         let mut deps = mock_dependencies(before_all.default_length, &[]);
         default_init(&mut deps);
         let res = query_round(&deps).unwrap();
-        println!("{:?}", res.nextRound);
+        println!("{:?}", res.next_round);
     }
     #[test]
     fn testing_saved_address_winner() {
@@ -1466,7 +1486,7 @@ mod tests {
             .api
             .canonical_address(&HumanAddr::from("address2".to_string()))
             .unwrap();
-        winner_storage(&mut deps.storage).save(
+        let _x = winner_storage(&mut deps.storage).save(
             &2_u8.to_be_bytes(),
             &Winner {
                 winners: vec![
@@ -1480,7 +1500,7 @@ mod tests {
                     },
                 ],
             },
-        );
+        ).unwrap();
         let res = query_all_winner(&deps).unwrap();
         println!("{:?}", res);
     }
@@ -1524,7 +1544,7 @@ mod tests {
             let player1 = deps.api.canonical_address(&before_all.default_sender).unwrap();
             assert!(store.addresses.contains(&player1));
             //New player
-            let res = handle(
+            let _res = handle(
                 &mut deps,
                 mock_env(
                     before_all.default_sender_two.clone(),
@@ -1712,8 +1732,8 @@ mod tests {
                     amount: Uint128(1_000_000),
                 }],
             );
-            // Block time is superior to blockTimePlay so the lottery is about to start
-            env.block.time = state.blockTimePlay + 1000;
+            // Block time is superior to block_time_play so the lottery is about to start
+            env.block.time = state.block_time_play  + 1000;
             let res = handle(
                 &mut deps,
                 env,
@@ -1805,7 +1825,7 @@ mod tests {
             default_init(&mut deps);
             let state = config(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender, &[Coin{ denom: "ust".to_string(), amount: Uint128(1_000) }]);
-            env.block.height = state.publicSaleEndBlock + 1000;
+            env.block.height = state.public_sale_end_block + 1000;
             let res = handle_public_sale(&mut deps, env);
             match res {
                 Err(GenericErr{msg, backtrace: None, }) => {
@@ -1819,22 +1839,69 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "lota".to_string(), amount: Uint128(900) }]);
             default_init(&mut deps);
-            let stateBefore = config(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(before_all.default_sender.clone(), &[Coin{ denom: "ust".to_string(), amount: Uint128(100) }]);
+            let state_before = config(&mut deps.storage).load().unwrap();
+            let env = mock_env(before_all.default_sender.clone(), &[Coin{ denom: "ust".to_string(), amount: Uint128(100) }]);
             let res = handle_public_sale(&mut deps, env.clone()).unwrap();
-            let stateAfter = config(&mut deps.storage).load().unwrap();
+            let state_after = config(&mut deps.storage).load().unwrap();
 
             assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
                 from_address: env.contract.address.clone(),
                 to_address: before_all.default_sender,
                 amount: vec![Coin { denom: "lota".to_string(), amount: Uint128(100) }]
             }));
-            assert!(stateAfter.tokenHolderSupply > stateBefore.tokenHolderSupply);
+            assert!(state_after.token_holder_supply > state_before.token_holder_supply);
         }
     }
     mod play {
         use super::*;
-
+        #[test]
+        fn not_allowed_registration_in_progress(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_play(&mut deps, env.clone());
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Lottery registration is still in progress... Retry after block time 1610566920")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn do_not_send_funds_with_play(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let state = config(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender.clone(), &[Coin{ denom: "ust".to_string(), amount: Uint128(9) }]);
+            env.block.time = state.block_time_play + 1000;
+            let res = handle_play(&mut deps, env.clone());
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Do not send funds with play")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn do_(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let state = config(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            env.block.time = state.block_time_play + 1000;
+            let res = handle_play(&mut deps, env.clone());
+            println!("{:?}", res);
+            /*match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Do not send funds with play")
+                },
+                _ => panic!("Unexpected error")
+            }*/
+        }
     }
     /*
 
@@ -1952,11 +2019,11 @@ mod tests {
             // Test fees is now superior to 0
             assert_ne!(0, res.holdersRewards.u128());
             // Test block to play superior block height
-            assert!(res.blockTimePlay > env.block.time);
+            assert!(res.block_time_play > env.block.time);
             // Test if round was saved
             let res = query_latest(deps.as_ref()).unwrap();
             println!("{:?}", res);
-            assert_eq!(roundFromQuerier.nextRound, res.round);
+            assert_eq!(roundFromQuerier.next_round, res.round);
 
             // Test if winners have been added at rank 1
             let res = winner_storage_read(deps.as_ref().storage)
@@ -2087,7 +2154,7 @@ mod tests {
             let env = mock_env();
             // Add rewards
             let mut state = config(deps.as_mut().storage).load().unwrap();
-            state.tokenHolderSupply = Uint128(1_000_000);
+            state.token_holder_supply = Uint128(1_000_000);
             config(deps.as_mut().storage).save(&state);
             let res = handle_reward(deps.as_mut(), env.clone(), info.clone());
             match res {
@@ -2163,7 +2230,7 @@ mod tests {
             default_init(&mut deps);
             // Add rewards
             let mut state = config(deps.as_mut().storage).load().unwrap();
-            state.tokenHolderSupply = Uint128(1_000_000);
+            state.token_holder_supply = Uint128(1_000_000);
             config(deps.as_mut().storage).save(&state);
 
             let info = mock_info(HumanAddr::from("validator1"), &[]);
@@ -2190,7 +2257,7 @@ mod tests {
             default_init(&mut deps);
             // Add rewards
             let mut state = config(deps.as_mut().storage).load().unwrap();
-            state.tokenHolderSupply = Uint128(1_000_000);
+            state.token_holder_supply = Uint128(1_000_000);
             state.holdersRewards = Uint128(50_000);
             config(deps.as_mut().storage).save(&state);
             let info = mock_info(HumanAddr::from("validator1"), &[]);
@@ -2734,7 +2801,7 @@ mod tests {
             description: "I think we need to up to a more expensive".to_string(),
             proposal: Proposal::HolderFeePercentage,
             amount: Option::from(Uint128(15)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         let storage = poll_storage_read(deps.as_ref().storage)
@@ -2748,7 +2815,7 @@ mod tests {
             description: "I think we need to up to a more expensive".to_string(),
             proposal: Proposal::MinAmountValidator,
             amount: Option::from(Uint128(15_000)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         let storage = poll_storage_read(deps.as_ref().storage)
@@ -2762,21 +2829,21 @@ mod tests {
             description: "I think we need to up to new prize rank".to_string(),
             proposal: Proposal::PrizePerRank,
             amount: None,
-            prizePerRank: Option::from(vec![60, 20, 10, 10]),
+            prize_per_rank: Option::from(vec![60, 20, 10, 10]),
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         let storage = poll_storage_read(deps.as_ref().storage)
             .load(&3_u64.to_be_bytes())
             .unwrap();
         assert_eq!(Proposal::PrizePerRank, storage.proposal);
-        assert_eq!(vec![60, 20, 10, 10], storage.prizeRank);
+        assert_eq!(vec![60, 20, 10, 10], storage.prize_rank);
 
         // Test success proposal MinAmountDelegator
         let msg = HandleMsg::Proposal {
             description: "I think we need to up to new amount delegator".to_string(),
             proposal: Proposal::MinAmountDelegator,
             amount: Option::from(Uint128(10_000)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         let storage = poll_storage_read(deps.as_ref().storage)
@@ -2790,7 +2857,7 @@ mod tests {
             description: "I think we need to up to new jackpot percentage".to_string(),
             proposal: Proposal::JackpotRewardPercentage,
             amount: Option::from(Uint128(10)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         let storage = poll_storage_read(deps.as_ref().storage)
@@ -2804,7 +2871,7 @@ mod tests {
             description: "I think we need to up to new worker percentage".to_string(),
             proposal: Proposal::DrandWorkerFeePercentage,
             amount: Option::from(Uint128(10)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         let storage = poll_storage_read(deps.as_ref().storage)
@@ -2818,7 +2885,7 @@ mod tests {
             description: "I think we need to up to new block time".to_string(),
             proposal: Proposal::LotteryEveryBlockTime,
             amount: Option::from(Uint128(100000)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         let storage = poll_storage_read(deps.as_ref().storage)
@@ -2832,7 +2899,7 @@ mod tests {
             description: "I think we need to up to new block time".to_string(),
             proposal: Proposal::ClaimEveryBlock,
             amount: Option::from(Uint128(100000)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         let storage = poll_storage_read(deps.as_ref().storage)
@@ -2843,14 +2910,14 @@ mod tests {
 
         // Test saved correctly the state
         let res = config_read(deps.as_ref().storage).load().unwrap();
-        assert_eq!(8, res.pollCount);
+        assert_eq!(8, res.poll_count);
 
         // Test error description too short
         let msg = HandleMsg::Proposal {
             description: "I".to_string(),
             proposal: Proposal::DrandWorkerFeePercentage,
             amount: Option::from(Uint128(10)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
@@ -2865,7 +2932,7 @@ mod tests {
             description: "I erweoi oweijr w oweijr woerwe oirjewoi rewoirj ewoirjewr weiorjewoirjwerieworijewewriewo werioj ew".to_string(),
             proposal: Proposal::DrandWorkerFeePercentage,
             amount: Option::from(Uint128(10)),
-            prizePerRank: None
+            prize_per_rank: None
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
@@ -2880,7 +2947,7 @@ mod tests {
             description: "Default".to_string(),
             proposal: Proposal::NotExist,
             amount: Option::from(Uint128(10)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
         match res {
@@ -2912,7 +2979,7 @@ mod tests {
         let info = mock_info(HumanAddr::from("address2"), &[]);
 
         let msg = HandleMsg::Vote {
-            pollId: 1,
+            poll_id: 1,
             approve: false,
         };
         // Error not found storage key
@@ -2928,13 +2995,13 @@ mod tests {
             description: "I think we need to up to new block time".to_string(),
             proposal: Proposal::LotteryEveryBlockTime,
             amount: Option::from(Uint128(100000)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
 
         // Test success proposal HolderFeePercentage
         let msg = HandleMsg::Vote {
-            pollId: 1,
+            poll_id: 1,
             approve: false,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
@@ -2953,7 +3020,7 @@ mod tests {
 
         // Test only can vote one time per proposal
         let msg = HandleMsg::Vote {
-            pollId: 1,
+            poll_id: 1,
             approve: true,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
@@ -2999,12 +3066,12 @@ mod tests {
             description: "I think we need to up to new block time".to_string(),
             proposal: Proposal::LotteryEveryBlockTime,
             amount: Option::from(Uint128(100000)),
-            prizePerRank: None,
+            prize_per_rank: None,
         };
         let res = handle(deps.as_mut(), mock_env(), info.clone(), msg.clone());
 
         // Init reject proposal
-        let msg = HandleMsg::RejectProposal { pollId: 1 };
+        let msg = HandleMsg::RejectProposal { poll_id: 1 };
         let env = mock_env();
 
         // test error do not send funds with reject proposal
@@ -3081,7 +3148,7 @@ mod tests {
                 description: "I think we need to up to new block time".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(200_000)),
-                prizePerRank: None,
+                prize_per_rank: None,
             };
             handle(deps, env.clone(), info.clone(), msg.clone());
         }
@@ -3089,7 +3156,7 @@ mod tests {
         fn init_voter(address: String, deps: DepsMut, vote: bool, env: &Env) {
             let info = mock_info(HumanAddr::from(address.clone()), &[]);
             let msg = HandleMsg::Vote {
-                pollId: 1,
+                poll_id: 1,
                 approve: vote,
             };
             handle(deps, env.clone(), info.clone(), msg.clone());
@@ -3105,7 +3172,7 @@ mod tests {
             // Init proposal
             init_proposal(deps.as_mut(), &env);
 
-            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let mut env = mock_env();
             // expire the proposal to allow presentation
             env.block.height = 100_000;
@@ -3150,7 +3217,7 @@ mod tests {
             init_voter("address2".to_string(), deps.as_mut(), false, &env);
 
             // Init present proposal
-            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let mut env = mock_env();
             // expire the proposal to allow presentation
             env.block.height = 100_000;
@@ -3167,8 +3234,8 @@ mod tests {
             // check if state remain the same since the vote was rejected
             let stateAfter = config_read(deps.as_ref().storage).load().unwrap();
             assert_eq!(
-                stateBefore.everyBlockTimePlay,
-                stateAfter.everyBlockTimePlay
+                stateBefore.every_block_time_play,
+                stateAfter.every_block_time_play
             );
         }
         #[test]
@@ -3176,7 +3243,7 @@ mod tests {
             let mut deps = mock_dependencies(&[]);
             default_init(&mut deps);
             let mut state = config(deps.as_mut().storage).load().unwrap();
-            state.tokenHolderSupply = Uint128(1_000_000);
+            state.token_holder_supply = Uint128(1_000_000);
             config(deps.as_mut().storage).save(&state);
 
             let info = mock_info(HumanAddr::from("sender"), &[]);
@@ -3204,7 +3271,7 @@ mod tests {
             init_voter("address2".to_string(), deps.as_mut(), true, &env);
 
             // Init present proposal
-            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let mut env = mock_env();
             // expire the proposal to allow presentation
             env.block.height = 100_000;
@@ -3220,10 +3287,10 @@ mod tests {
             assert_eq!(0, res.messages.len());
             // check if state the vote was rejected
             let state = config_read(deps.as_ref().storage).load().unwrap();
-            assert_eq!(200000, state.everyBlockTimePlay);
+            assert_eq!(200000, state.every_block_time_play);
 
             // Test can't REpresent the proposal
-            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let mut env = mock_env();
             // expire the proposal to allow presentation
             env.block.height = 100_000;
@@ -3261,7 +3328,7 @@ mod tests {
             init_voter("address1".to_string(), deps.as_mut(), true, &env);
             init_voter("address2".to_string(), deps.as_mut(), true, &env);
 
-            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let info = mock_info(
                 HumanAddr::from("sender"),
                 &[Coin {
@@ -3281,7 +3348,7 @@ mod tests {
             }
 
             // proposal not expired
-            let msg = HandleMsg::PresentProposal { pollId: 1 };
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let info = mock_info(HumanAddr::from("sender"), &[]);
             let mut env = mock_env();
             env.block.height = 10_000;

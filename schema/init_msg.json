@@ -3,66 +3,50 @@
   "title": "InitMsg",
   "type": "object",
   "required": [
-    "blockClaim",
-    "blockTimePlay",
-    "denomDelegation",
-    "denomShare",
-    "denomStable",
-    "denomStableDecimal",
-    "everyBlockHeight",
-    "everyBlockTimePlay",
-    "pollEndHeight",
-    "publicSaleEndBlock",
-    "terrandContractAddress",
-    "tokenHolderSupply"
+    "block_time_play",
+    "denom_share",
+    "denom_stable",
+    "denom_stable_decimal",
+    "every_block_time_play",
+    "poll_end_height",
+    "public_sale_end_block",
+    "terrand_contract_address",
+    "token_holder_supply"
   ],
   "properties": {
-    "blockClaim": {
+    "block_time_play": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "blockTimePlay": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "denomDelegation": {
+    "denom_share": {
       "type": "string"
     },
-    "denomShare": {
+    "denom_stable": {
       "type": "string"
     },
-    "denomStable": {
-      "type": "string"
-    },
-    "denomStableDecimal": {
+    "denom_stable_decimal": {
       "$ref": "#/definitions/Uint128"
     },
-    "everyBlockHeight": {
+    "every_block_time_play": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "everyBlockTimePlay": {
+    "poll_end_height": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "pollEndHeight": {
+    "public_sale_end_block": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "publicSaleEndBlock": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "terrandContractAddress": {
+    "terrand_contract_address": {
       "$ref": "#/definitions/HumanAddr"
     },
-    "tokenHolderSupply": {
+    "token_holder_supply": {
       "$ref": "#/definitions/Uint128"
     }
   },

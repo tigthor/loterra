@@ -97,7 +97,7 @@
             "description": {
               "type": "string"
             },
-            "prizePerRank": {
+            "prize_per_rank": {
               "type": [
                 "array",
                 "null"
@@ -126,13 +126,13 @@
           "type": "object",
           "required": [
             "approve",
-            "pollId"
+            "poll_id"
           ],
           "properties": {
             "approve": {
               "type": "boolean"
             },
-            "pollId": {
+            "poll_id": {
               "type": "integer",
               "format": "uint64",
               "minimum": 0.0
@@ -151,10 +151,10 @@
         "present_proposal": {
           "type": "object",
           "required": [
-            "pollId"
+            "poll_id"
           ],
           "properties": {
-            "pollId": {
+            "poll_id": {
               "type": "integer",
               "format": "uint64",
               "minimum": 0.0
@@ -173,10 +173,10 @@
         "reject_proposal": {
           "type": "object",
           "required": [
-            "pollId"
+            "poll_id"
           ],
           "properties": {
-            "pollId": {
+            "poll_id": {
               "type": "integer",
               "format": "uint64",
               "minimum": 0.0

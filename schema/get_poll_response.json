@@ -7,7 +7,7 @@
     "creator",
     "description",
     "end_height",
-    "prizePerRank",
+    "prize_per_rank",
     "start_height",
     "status"
   ],
@@ -26,7 +26,7 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "prizePerRank": {
+    "prize_per_rank": {
       "type": "array",
       "items": {
         "type": "integer",

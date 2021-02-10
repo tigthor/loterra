@@ -3,10 +3,10 @@
   "title": "RoundResponse",
   "type": "object",
   "required": [
-    "nextRound"
+    "next_round"
   ],
   "properties": {
-    "nextRound": {
+    "next_round": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
