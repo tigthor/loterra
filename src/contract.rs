@@ -532,14 +532,6 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("No rewards to claim"));
     }
 
-    /*let balance_sender = deps
-        .querier
-        .query_balance(env.message.sender.clone(), &state.denom_share)
-        .unwrap();*/
-    /*if balance_sender.amount.is_zero() {
-        return Err(StdError::generic_err("No rewards to claim"));
-    }*/
-
     // Ensure sender only can claim one time every x blocks
     if state
         .claim_reward
@@ -1386,7 +1378,7 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
     })
 }
 /*{
-"denom_stable":"ULUNA",
+"denom_stable":"uluna",
 "denom_stable_decimal":"1000000",
 "denom_share":"LOTA",
 "block_time_play":1610566920,
@@ -1395,9 +1387,16 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
 "poll_end_height": 30,
 "token_holder_supply": "1000000",
 "terrand_contract_address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k",
-"loterra_contract_address": "terra18eh6fea27pvky3cfqyrxmevypfhs5zrrf076c4"
+"loterra_contract_address": "terra18vd8fpwxzck93qlwghaj6arh4p7c5n896xzem5"
 }
+{"name":"loterra","symbol":"LOTA","decimals": 6,"initial_balances":[{"address":"terra1dcegyrekltswvyy0xy69ydgxn9x8x32zdtapd8","amount":"5000000"}]}
 
+//erc20 loterra
+terra18vd8fpwxzck93qlwghaj6arh4p7c5n896xzem5
+
+terra18vd8fpwxzck93qlwghaj6arh4p7c5n896xzem5 '{"transfer":{"recipient": "terra10pyejy66429refv3g35g2t7am0was7ya7kz2a4", "amount": "1000000"}}' --from test1 --chain-id=localterra 1000000uluna  --fees=1000000uluna --gas=auto --broadcast-mode=block
+// lottera contract
+terra10pyejy66429refv3g35g2t7am0was7ya7kz2a4
 {
     "proposal":{
         "description":"my first proposal",
