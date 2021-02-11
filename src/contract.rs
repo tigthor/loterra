@@ -1,12 +1,10 @@
-use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Empty, Env,
-                   Extern, HandleResponse, HumanAddr, InitResponse, LogAttribute, Order,
-                   Querier, QueryRequest, StdError, StdResult, Storage, Uint128, WasmQuery};
+use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Empty, Env, Extern, HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError, StdResult, Storage, Uint128, WasmQuery, WasmMsg, CosmosMsg};
 
 use crate::msg::{
     AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
 };
-use crate::query::TerrandResponse;
+use crate::query::{TerrandResponse, LoterraBalanceResponse};
 use crate::state::{
     combination_storage, combination_storage_read, config, config_read, poll_storage,
     poll_storage_read, winner_storage, winner_storage_read, Combination, PollInfoState, PollStatus,
@@ -19,7 +17,6 @@ use std::ops::{Mul, Sub};
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
-
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     _env: Env,
@@ -47,6 +44,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         worker_drand_max_percentage_reward: 10,
         price_per_ticket_to_register: Uint128(1_000_000),
         terrand_contract_address: msg.terrand_contract_address,
+        loterra_contract_address: msg.loterra_contract_address,
         drand_genesis_time: 1595431050,
         drand_period: 30,
         drand_next_round_security: 10,
@@ -184,14 +182,14 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-fn encode_msg(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
+fn encode_msg_query(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
     Ok(WasmQuery::Smart {
         contract_addr: address,
         msg: to_binary(&msg)?,
     }
     .into())
 }
-fn wrapper_msg<S: Storage, A: Api, Q: Querier>(
+fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     query: QueryRequest<Empty>,
 ) -> StdResult<TerrandResponse> {
@@ -240,8 +238,8 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     }
 
     let msg = QueryMsg::GetRandomness{ round: next_round };
-    let res = encode_msg(msg, state.terrand_contract_address.clone())?;
-    let res = wrapper_msg(&deps, res)?;
+    let res = encode_msg_query(msg, state.terrand_contract_address.clone())?;
+    let res = wrapper_msg_terrand(&deps, res)?;
 
     let randomness = hex::encode(res.randomness.to_base64());
     let randomness_hash = randomness;
@@ -420,6 +418,22 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+fn encode_msg_execute(msg: QueryMsg, address: HumanAddr) -> StdResult<CosmosMsg> {
+    Ok(WasmMsg::Execute {
+        contract_addr: address,
+        msg: to_binary(&msg)?,
+        send: vec![],
+    }
+        .into())
+}
+fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<LoterraBalanceResponse> {
+    let res: LoterraBalanceResponse = deps.querier.query(&query)?;
+    Ok(res)
+}
+
 pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -455,35 +469,30 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Send some funds"));
     };
     // Get the contract balance prepare the tx
-    let balance = deps
-        .querier
-        .query_balance(&env.contract.address, &state.denom_share)
-        .unwrap();
-    if balance.amount.is_zero() {
+    let msg_balance = QueryMsg::Balance{ address: env.contract.address };
+    let res_balance = encode_msg_query(msg_balance, state.loterra_contract_address.clone())?;
+    let lottera_balance = wrapper_msg_loterra(&deps, res_balance)?;
+
+    if lottera_balance.balance.is_zero() {
         return Err(StdError::generic_err("All tokens have been sold"));
     }
 
-    if balance.amount.u128() < sent.u128() {
+
+    if lottera_balance.balance.u128() < sent.u128() {
         return Err(StdError::generic_err(
-            format!("you want to buy {} the contract balance only remain {} token on public sale", sent.u128(), balance.amount.u128())
+            format!("you want to buy {} the contract balance only remain {} token on public sale", sent.u128(), lottera_balance.balance.u128())
         ));
     }
 
-    let msg = BankMsg::Send {
-        from_address: env.contract.address,
-        to_address: env.message.sender.clone(),
-        amount: vec![Coin {
-            denom: state.denom_share.clone(),
-            amount: sent,
-        }],
-    };
+    let msg_transfer = QueryMsg::Transfer { recipient: env.message.sender.clone(), amount: sent};
+    let res_transfer = encode_msg_execute(msg_transfer, state.loterra_contract_address.clone())?;
 
     state.token_holder_supply += sent;
     // Save the new state
     config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
-        messages: vec![msg.into()],
+        messages: vec![res_transfer.into()],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -515,13 +524,21 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     }
 
     // Ensure sender have some reward tokens
-    let balance_sender = deps
-        .querier
-        .query_balance(env.message.sender.clone(), &state.denom_share)
-        .unwrap();
-    if balance_sender.amount.is_zero() {
+    let msg = QueryMsg::Balance{ address: env.message.sender.clone() };
+    let res = encode_msg_query(msg, state.loterra_contract_address.clone())?;
+    let lottera_balance = wrapper_msg_loterra(&deps, res)?;
+
+    if lottera_balance.balance.is_zero() {
         return Err(StdError::generic_err("No rewards to claim"));
     }
+
+    /*let balance_sender = deps
+        .querier
+        .query_balance(env.message.sender.clone(), &state.denom_share)
+        .unwrap();*/
+    /*if balance_sender.amount.is_zero() {
+        return Err(StdError::generic_err("No rewards to claim"));
+    }*/
 
     // Ensure sender only can claim one time every x blocks
     if state
@@ -544,7 +561,7 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     }
     // Get the percentage of shareholder
     let share_holder_percentage =
-        balance_sender.amount.u128() as u64 * 100 / state.token_holder_supply.u128() as u64;
+        lottera_balance.balance.u128() as u64 * 100 / state.token_holder_supply.u128() as u64;
     if share_holder_percentage == 0 {
         return Err(StdError::generic_err(
             "You need at least 1% of total shares to claim rewards",
@@ -1123,13 +1140,13 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
     for address in addresses {
         let human_address = deps.api.human_address(&address).unwrap();
 
-        let balance = deps
-            .querier
-            .query_balance(human_address, &state.denom_share)
-            .unwrap();
+        // Ensure sender have some reward tokens
+        let msg = QueryMsg::Balance{ address: human_address };
+        let res = encode_msg_query(msg, state.loterra_contract_address.clone()).unwrap();
+        let lottera_balance = wrapper_msg_loterra(&deps, res).unwrap();
 
-        if !balance.amount.is_zero() {
-            weight += balance.amount;
+        if !lottera_balance.balance.is_zero() {
+            weight += lottera_balance.balance;
         }
     }
     weight
@@ -1265,6 +1282,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::GetPoll { poll_id } => to_binary(&query_poll(deps, poll_id)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
         QueryMsg::GetRandomness{ round: _ } => to_binary(&query_terrand_randomness(deps)?)?,
+        QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
+        QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
     };
     Ok(response)
 }
@@ -1277,6 +1296,12 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
 }
 
 fn query_terrand_randomness<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> StdResult<StdError> {
+    return Err(StdError::Unauthorized { backtrace: None });
+}
+fn query_loterra_balance<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> StdResult<StdError> {
+    return Err(StdError::Unauthorized { backtrace: None });
+}
+fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> StdResult<StdError> {
     return Err(StdError::Unauthorized { backtrace: None });
 }
 
@@ -1360,7 +1385,27 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
         next_round: next_round,
     })
 }
+/*{
+"denom_stable":"ULUNA",
+"denom_stable_decimal":"1000000",
+"denom_share":"LOTA",
+"block_time_play":1610566920,
+"every_block_time_play": 30,
+"public_sale_end_block": 2520000,
+"poll_end_height": 30,
+"token_holder_supply": "1000000",
+"terrand_contract_address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k",
+"loterra_contract_address": "terra18eh6fea27pvky3cfqyrxmevypfhs5zrrf076c4"
+}
 
+{
+    "proposal":{
+        "description":"my first proposal",
+        "proposal":"DrandWorkerFeePercentage",
+        "amount":5
+    }
+}
+*/
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1392,7 +1437,8 @@ mod tests {
             public_sale_end_block: PUBLIC_SALE_END_BLOCK,
             poll_end_height: POLL_END_HEIGHT,
             token_holder_supply: TOKEN_HOLDER_SUPPLY,
-            terrand_contract_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"),
+            terrand_contract_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand"),
+            loterra_contract_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5loterra")
         };
 
         init(

@@ -7,7 +7,6 @@ use loterra::msg::{
     AllCombinationResponse, AllWinnerResponse, ConfigResponse, GetPollResponse, HandleMsg, InitMsg,
     QueryMsg, RoundResponse,
 };
-use loterra::query::TerrandResponse;
 
 fn main() {
     let mut out_dir = current_dir().unwrap();
@@ -35,5 +34,4 @@ fn main() {
         "GetPollResponse",
     );
     export_schema_with_title(&mut schema_for!(RoundResponse), &out_dir, "RoundResponse");
-    export_schema_with_title(&mut schema_for!(TerrandResponse), &out_dir, "TerrandResponse");
 }
