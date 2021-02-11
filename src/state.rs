@@ -35,6 +35,7 @@ pub struct State {
     pub poll_end_height: u64,
     pub price_per_ticket_to_register: Uint128,
     pub terrand_contract_address: HumanAddr,
+    pub loterra_contract_address: HumanAddr,
     pub drand_genesis_time: u64,
     pub drand_period: u64,
     pub drand_next_round_security: u64,
