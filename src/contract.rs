@@ -111,36 +111,6 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             state.combination_len
         )));
     }
-   /* let payment = env
-        .message
-        .sent_funds
-        .iter()
-        .find(|x| x.denom == state.denomStable)
-        .ok_or_else(|| StdError::generic_err(format!("No {} tokens sent", &state.denomStable)))?;*/
-
- /*   if env.message.sent_funds.is_empty(){
-        return Err(StdError::generic_err("Send some funds to register"));
-    }
-
-    if env.message.sent_funds.len() > 1 {
-        return Err(StdError::generic_err(format!(
-            "Only send {} to register",
-            state.denomStable.clone()
-        )));
-    }
-    let mut sent: Uint128 = Uint128(0);
-
-    if env.message.sent_funds[0].denom == state.denomStable {
-        //Ok(env.message.sent_funds[0].amount)
-          sent = env.message.sent_funds[0].amount;
-    } else {
-        return Err(StdError::generic_err(format!(
-            "To register you need to send {}{}",
-            state.price_per_ticket_to_register,
-            state.denomStable.clone()
-        )));
-    }*/
-
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
         0 => Err(StdError::generic_err("Send some funds to register")),
@@ -274,11 +244,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let res = wrapper_msg(&deps, res)?;
 
     let randomness = hex::encode(res.randomness.to_base64());
-    /*
-       Todo: create a function to query the randomness from the smart contract
-    */
-    // TODO: here the result of randomness
-
     let randomness_hash = randomness;
 
     let n = randomness_hash
@@ -555,7 +520,7 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
         .query_balance(env.message.sender.clone(), &state.denom_share)
         .unwrap();
     if balance_sender.amount.is_zero() {
-        return Err(StdError::Unauthorized { backtrace: None });
+        return Err(StdError::generic_err("No rewards to claim"));
     }
 
     // Ensure sender only can claim one time every x blocks
@@ -1869,7 +1834,7 @@ mod tests {
             }
         }
         #[test]
-        fn do_not_send_funds_with_play(){
+        fn do_not_send_funds(){
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
             default_init(&mut deps);
@@ -1902,6 +1867,94 @@ mod tests {
                 _ => panic!("Unexpected error")
             }*/
         }
+    }
+    mod reward {
+        use super::*;
+
+        #[test]
+        fn do_not_send_funds(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[Coin{ denom: "ust".to_string(), amount: Uint128(9) }]);
+            let res = handle_reward(&mut deps, env);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Do not send funds with reward")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn token_holder_supply_is_empty(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.token_holder_supply = Uint128::zero();
+            config(&mut deps.storage).save(&state);
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_reward(&mut deps, env);
+            match res {
+                Err(StdError::Unauthorized { .. }) => {},
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn only_token_holders_can_claim_rewards(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_reward(&mut deps, env);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "No rewards to claim")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+
+        #[test]
+        fn need_1_percent_to_be_able_to_claim(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.holders_rewards = Uint128(1_000_000);
+            config(&mut deps.storage).save(&state);
+            deps.querier.update_balance(before_all.default_sender.clone(), vec![Coin{ denom: "lota".to_string(), amount: Uint128(1_000) }]);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_reward(&mut deps, env);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "You need at least 1% of total shares to claim reward")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn success(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.holders_rewards = Uint128(1_000_000);
+            config(&mut deps.storage).save(&state);
+            deps.querier.update_balance(before_all.default_sender.clone(), vec![Coin{ denom: "lota".to_string(), amount: Uint128(10_000) }]);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_reward(&mut deps, env.clone());
+
+            //Handle claiming multiple times within the time frame
+            let res = handle_reward(&mut deps, env.clone());
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Already claimed")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+
     }
     /*
 
