@@ -18,8 +18,6 @@ pub struct State {
     pub every_block_time_play: u64,
     pub public_sale_end_block: u64,
     pub denom_stable: String,
-    pub denom_stable_decimal: Uint128,
-    pub denom_share: String,
     pub claim_reward: Vec<CanonicalAddr>,
     pub holders_rewards: Uint128,
     pub token_holder_supply: Uint128,
@@ -32,15 +30,10 @@ pub struct State {
     pub poll_count: u64,
     pub holders_max_percentage_reward: u8,
     pub worker_drand_max_percentage_reward: u8,
-    pub poll_end_height: u64,
+    pub poll_default_end_height: u64,
     pub price_per_ticket_to_register: Uint128,
     pub terrand_contract_address: HumanAddr,
     pub loterra_contract_address: HumanAddr,
-    pub drand_genesis_time: u64,
-    pub drand_period: u64,
-    pub drand_next_round_security: u64,
-    pub max_description_length: u64,
-    pub min_description_length: u64
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {

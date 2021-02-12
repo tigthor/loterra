@@ -7,12 +7,10 @@ use cosmwasm_std::{CanonicalAddr, HumanAddr, Uint128, Binary};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
     pub denom_stable: String,
-    pub denom_stable_decimal: Uint128,
-    pub denom_share: String,
     pub block_time_play: u64,
     pub every_block_time_play: u64,
     pub public_sale_end_block: u64,
-    pub poll_end_height: u64,
+    pub poll_default_end_height: u64,
     pub token_holder_supply: Uint128,
     pub terrand_contract_address: HumanAddr,
     pub loterra_contract_address: HumanAddr,
