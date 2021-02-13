@@ -877,7 +877,10 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         match amount {
             Some(percentage) => {
                 if percentage.u128() as u8 > state.holders_max_percentage_reward {
-                    return Err(StdError::generic_err(format!("Amount between 0 to {}",state.holders_max_percentage_reward)));
+                    return Err(StdError::generic_err(format!(
+                        "Amount between 0 to {}",
+                        state.holders_max_percentage_reward
+                    )));
                 }
                 proposal_amount = percentage;
             }
@@ -891,7 +894,10 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         match amount {
             Some(percentage) => {
                 if percentage.u128() as u8 > state.worker_drand_max_percentage_reward {
-                    return Err(StdError::generic_err(format!("Amount between 0 to {}",state.worker_drand_max_percentage_reward)));
+                    return Err(StdError::generic_err(format!(
+                        "Amount between 0 to {}",
+                        state.worker_drand_max_percentage_reward
+                    )));
                 }
                 proposal_amount = percentage;
             }
@@ -1223,7 +1229,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     }
 
     // Reject the proposal
-    if final_vote_weight_in_percentage < 60 || store.yes_voters.len() <= store.no_voters.len(){
+    if final_vote_weight_in_percentage < 60 || store.yes_voters.len() <= store.no_voters.len() {
         poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
             let mut poll_data = poll.unwrap();
             // Update the status to rejected
@@ -1518,7 +1524,7 @@ mod tests {
             default_length: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k").len(),
             default_sender: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
             default_sender_two: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q008"),
-            default_sender_owner: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k")
+            default_sender_owner: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"),
         }
     }
 
@@ -1580,7 +1586,7 @@ mod tests {
     mod register {
         use super::*;
         #[test]
-        fn security_active(){
+        fn security_active() {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
@@ -1603,10 +1609,13 @@ mod tests {
             );
             match res {
                 Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => {
+                    assert_eq!(
                         msg,
-                        backtrace: None,
-                    }) => {
-                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                        "Contract deactivated for preventing security issue found"
+                    )
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -1890,7 +1899,7 @@ mod tests {
     mod public_sale {
         use super::*;
         #[test]
-        fn security_active(){
+        fn security_active() {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
@@ -1909,10 +1918,13 @@ mod tests {
             );
             match res {
                 Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => {
+                    assert_eq!(
                         msg,
-                        backtrace: None,
-                    }) => {
-                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                        "Contract deactivated for preventing security issue found"
+                    )
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2145,7 +2157,7 @@ mod tests {
         use super::*;
 
         #[test]
-        fn security_active(){
+        fn security_active() {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
@@ -2156,10 +2168,13 @@ mod tests {
             let res = handle_play(&mut deps, env);
             match res {
                 Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => {
+                    assert_eq!(
                         msg,
-                        backtrace: None,
-                    }) => {
-                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                        "Contract deactivated for preventing security issue found"
+                    )
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2247,7 +2262,7 @@ mod tests {
         use super::*;
 
         #[test]
-        fn security_active(){
+        fn security_active() {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
@@ -2258,10 +2273,13 @@ mod tests {
             let res = handle_reward(&mut deps, env);
             match res {
                 Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => {
+                    assert_eq!(
                         msg,
-                        backtrace: None,
-                    }) => {
-                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                        "Contract deactivated for preventing security issue found"
+                    )
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2414,7 +2432,7 @@ mod tests {
         use super::*;
 
         #[test]
-        fn security_active(){
+        fn security_active() {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
@@ -2425,10 +2443,13 @@ mod tests {
             let res = handle_jackpot(&mut deps, env);
             match res {
                 Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => {
+                    assert_eq!(
                         msg,
-                        backtrace: None,
-                    }) => {
-                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                        "Contract deactivated for preventing security issue found"
+                    )
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2951,9 +2972,9 @@ mod tests {
             let res = handle(&mut deps, env.clone(), msg_security_migration);
             match res {
                 Err(GenericErr {
-                        msg,
-                        backtrace: None,
-                    }) => {
+                    msg,
+                    backtrace: None,
+                }) => {
                     assert_eq!(msg, "Migration address is required")
                 }
                 _ => panic!("Unexpected error"),
@@ -3105,7 +3126,12 @@ mod tests {
                 _ => panic!("Unexpected error"),
             }
         }
-        fn msg_constructor_success(proposal: Proposal, amount: Option<Uint128>, prize_per_rank: Option<Vec<u8>>, contract_migration_address: Option<HumanAddr>) -> HandleMsg {
+        fn msg_constructor_success(
+            proposal: Proposal,
+            amount: Option<Uint128>,
+            prize_per_rank: Option<Vec<u8>>,
+            contract_migration_address: Option<HumanAddr>,
+        ) -> HandleMsg {
             HandleMsg::Proposal {
                 description: "This is my first proposal".to_string(),
                 proposal,
@@ -3130,14 +3156,54 @@ mod tests {
             assert_eq!(state.poll_count, 0);
             let env = mock_env(before_all.default_sender.clone(), &[]);
 
-            let msg_lottery_every_block_time = msg_constructor_success(Proposal::LotteryEveryBlockTime, Option::from(Uint128(22)), None, None);
-            let msg_claim_every_block = msg_constructor_success(Proposal::ClaimEveryBlock, Option::from(Uint128(22)), None, None);
-            let msg_amount_to_register = msg_constructor_success(Proposal::AmountToRegister, Option::from(Uint128(22)), None, None);
-            let msg_holder_fee_percentage = msg_constructor_success(Proposal::HolderFeePercentage, Option::from(Uint128(20)), None, None);
-            let msg_prize_rank = msg_constructor_success(Proposal::PrizePerRank, None, Option::from(vec![10,10,10,70]), None);
-            let msg_jackpot_reward_percentage = msg_constructor_success(Proposal::JackpotRewardPercentage, Option::from(Uint128(80)), None, None);
-            let msg_drand_fee_worker = msg_constructor_success(Proposal::DrandWorkerFeePercentage, Option::from(Uint128(10)), None, None);
-            let msg_security_migration = msg_constructor_success(Proposal::SecurityMigration, None, None, Option::from(before_all.default_sender_two.clone()));
+            let msg_lottery_every_block_time = msg_constructor_success(
+                Proposal::LotteryEveryBlockTime,
+                Option::from(Uint128(22)),
+                None,
+                None,
+            );
+            let msg_claim_every_block = msg_constructor_success(
+                Proposal::ClaimEveryBlock,
+                Option::from(Uint128(22)),
+                None,
+                None,
+            );
+            let msg_amount_to_register = msg_constructor_success(
+                Proposal::AmountToRegister,
+                Option::from(Uint128(22)),
+                None,
+                None,
+            );
+            let msg_holder_fee_percentage = msg_constructor_success(
+                Proposal::HolderFeePercentage,
+                Option::from(Uint128(20)),
+                None,
+                None,
+            );
+            let msg_prize_rank = msg_constructor_success(
+                Proposal::PrizePerRank,
+                None,
+                Option::from(vec![10, 10, 10, 70]),
+                None,
+            );
+            let msg_jackpot_reward_percentage = msg_constructor_success(
+                Proposal::JackpotRewardPercentage,
+                Option::from(Uint128(80)),
+                None,
+                None,
+            );
+            let msg_drand_fee_worker = msg_constructor_success(
+                Proposal::DrandWorkerFeePercentage,
+                Option::from(Uint128(10)),
+                None,
+                None,
+            );
+            let msg_security_migration = msg_constructor_success(
+                Proposal::SecurityMigration,
+                None,
+                None,
+                Option::from(before_all.default_sender_two.clone()),
+            );
 
             let res = handle(&mut deps, env.clone(), msg_lottery_every_block_time).unwrap();
             assert_eq!(res.log.len(), 4);
@@ -3475,13 +3541,16 @@ mod tests {
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
-        fn create_poll_security_migration<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env) {
+        fn create_poll_security_migration<S: Storage, A: Api, Q: Querier>(
+            mut deps: &mut Extern<S, A, Q>,
+            env: Env,
+        ) {
             let msg = HandleMsg::Proposal {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::SecurityMigration,
                 amount: None,
                 prize_per_rank: None,
-                contract_migration_address:Option::from(HumanAddr::from("newAddress".to_string())),
+                contract_migration_address: Option::from(HumanAddr::from("newAddress".to_string())),
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
@@ -3665,7 +3734,6 @@ mod tests {
                     amount: Uint128(100_000),
                 }],
             );
-
         }
     }
     mod switch {
