@@ -1583,7 +1583,38 @@ mod tests {
     }
     mod register {
         use super::*;
-
+        #[test]
+        fn security_active(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.security_switch_on_off = true;
+            config(&mut deps.storage).save(&state);
+            let msg = HandleMsg::Register {
+                combination: "1e3fab".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            );
+            match res {
+                Err(GenericErr {
+                        msg,
+                        backtrace: None,
+                    }) => {
+                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                }
+                _ => panic!("Unexpected error"),
+            }
+        }
         #[test]
         fn register_success() {
             let before_all = before_all();
@@ -1862,7 +1893,34 @@ mod tests {
     }
     mod public_sale {
         use super::*;
-
+        #[test]
+        fn security_active(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.security_switch_on_off = true;
+            config(&mut deps.storage).save(&state);
+            let res = handle_public_sale(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000),
+                    }],
+                ),
+            );
+            match res {
+                Err(GenericErr {
+                        msg,
+                        backtrace: None,
+                    }) => {
+                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                }
+                _ => panic!("Unexpected error"),
+            }
+        }
         #[test]
         fn contract_balance_sold_out() {
             let before_all = before_all();
@@ -2089,6 +2147,27 @@ mod tests {
     }
     mod play {
         use super::*;
+
+        #[test]
+        fn security_active(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.security_switch_on_off = true;
+            config(&mut deps.storage).save(&state);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_play(&mut deps, env);
+            match res {
+                Err(GenericErr {
+                        msg,
+                        backtrace: None,
+                    }) => {
+                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                }
+                _ => panic!("Unexpected error"),
+            }
+        }
         #[test]
         fn not_allowed_registration_in_progress() {
             let before_all = before_all();
@@ -2171,6 +2250,26 @@ mod tests {
     mod reward {
         use super::*;
 
+        #[test]
+        fn security_active(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.security_switch_on_off = true;
+            config(&mut deps.storage).save(&state);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_reward(&mut deps, env);
+            match res {
+                Err(GenericErr {
+                        msg,
+                        backtrace: None,
+                    }) => {
+                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                }
+                _ => panic!("Unexpected error"),
+            }
+        }
         #[test]
         fn do_not_send_funds() {
             let before_all = before_all();
@@ -2318,6 +2417,26 @@ mod tests {
     mod jackpot {
         use super::*;
 
+        #[test]
+        fn security_active(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.security_switch_on_off = true;
+            config(&mut deps.storage).save(&state);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_jackpot(&mut deps, env);
+            match res {
+                Err(GenericErr {
+                        msg,
+                        backtrace: None,
+                    }) => {
+                    assert_eq!(msg, "Contract deactivated for preventing security issue found")
+                }
+                _ => panic!("Unexpected error"),
+            }
+        }
         #[test]
         fn do_not_send_funds() {
             let before_all = before_all();
