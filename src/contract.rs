@@ -1091,7 +1091,7 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
         let msg = QueryMsg::Balance {
             address: human_address,
         };
-        let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone())?;
+        let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone()).unwrap();
         let res = encode_msg_query(msg, lottera_human).unwrap();
         let lottera_balance = wrapper_msg_loterra(&deps, res).unwrap();
 
