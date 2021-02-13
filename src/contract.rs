@@ -92,8 +92,25 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
         HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
         HandleMsg::Switch {} => handle_switch(deps, env),
+        HandleMsg::Renounce {} => handle_renounce(deps, env)
     }
 }
+
+pub fn handle_renounce<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> StdResult<HandleResponse> {
+    // Load the state
+    let mut state = config(&mut deps.storage).load()?;
+    let sender = deps.api.canonical_address(&env.message.sender)?;
+    if state.admin != sender {
+        return Err(StdError::Unauthorized { backtrace: None });
+    }
+    state.admin = deps.api.canonical_address(&env.contract.address)?;
+    config(&mut deps.storage).save(&state)?;
+    Ok(HandleResponse::default())
+}
+
 pub fn handle_switch<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -3770,6 +3787,38 @@ mod tests {
             println!("{:?}", res);
             let state = config(&mut deps.storage).load().unwrap();
             assert!(!state.security_switch_on_off);
+        }
+    }
+
+    mod renounce {
+        use super::*;
+        // handle_renounce
+        #[test]
+        fn only_admin() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender_two, &[]);
+
+            let res = handle_renounce(&mut deps, env);
+            match res {
+                Err(StdError::Unauthorized { .. }) => {}
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
+        fn success() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender_owner.clone(), &[]);
+
+            // Transfer power to admin
+            let res = handle_renounce(&mut deps, env.clone()).unwrap();
+            assert_eq!(res.messages.len(), 0);
+            let state = config(&mut deps.storage).load().unwrap();
+            assert_ne!(state.admin, deps.api.canonical_address(&before_all.default_sender_owner).unwrap());
+            assert_eq!(state.admin, deps.api.canonical_address(&env.contract.address).unwrap());
         }
     }
 }

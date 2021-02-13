@@ -44,8 +44,11 @@ pub enum HandleMsg {
     PresentProposal { poll_id: u64 },
     /// Reject a proposal
     RejectProposal { poll_id: u64 },
+    /// Admin
     /// Security owner can switch on off to prevent exploit
     Switch {},
+    /// Admin renounce and restore contract address to admin for full decentralization
+    Renounce {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
