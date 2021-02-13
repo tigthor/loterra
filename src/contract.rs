@@ -722,7 +722,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     }
 
     // Build the amount transaction
-    let mut amount_to_send: Vec<Coin> = vec![Coin {
+    let amount_to_send: Vec<Coin> = vec![Coin {
         denom: state.denom_stable.clone(),
         amount: jackpot_amount,
     }];
@@ -1333,7 +1333,7 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     Ok(RoundResponse {
-        next_round: next_round,
+        next_round,
     })
 }
 /*{
@@ -1372,8 +1372,6 @@ mod tests {
 
     fn default_init<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
         const DENOM_STABLE: &str = "ust";
-        const DENOM_STABLE_DECIMAL: Uint128 = Uint128(1_000_000);
-        const DENOM_SHARE: &str = "lota";
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const PUBLIC_SALE_END_BLOCK: u64 = 1000000000;
@@ -2103,8 +2101,8 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.token_holder_supply = Uint128::zero();
-            config(&mut deps.storage).save(&state);
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            config(&mut deps.storage).save(&state).unwrap();
+            let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_reward(&mut deps, env);
             match res {
                 Err(StdError::Unauthorized { .. }) => {}
@@ -2148,7 +2146,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.holders_rewards = Uint128(1_000_000);
-            config(&mut deps.storage).save(&state);
+            config(&mut deps.storage).save(&state).unwrap();
             deps.querier.update_balance(
                 before_all.default_sender.clone(),
                 vec![Coin {
@@ -2181,7 +2179,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.holders_rewards = Uint128(1_000_000);
-            config(&mut deps.storage).save(&state);
+            config(&mut deps.storage).save(&state).unwrap();
             deps.querier.update_balance(
                 before_all.default_sender.clone(),
                 vec![Coin {
@@ -2190,7 +2188,7 @@ mod tests {
                 }],
             );
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_reward(&mut deps, env.clone());
+            let _res = handle_reward(&mut deps, env.clone());
 
             //Handle claiming multiple times within the time frame
             let res = handle_reward(&mut deps, env.clone());
@@ -2275,7 +2273,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.jackpot_reward = Uint128(1_000_000);
-            config(&mut deps.storage).save(&state);
+            config(&mut deps.storage).save(&state).unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone());
@@ -2301,9 +2299,9 @@ mod tests {
                 }],
             );
             default_init(&mut deps);
-            let mut stateBefore = config(&mut deps.storage).load().unwrap();
-            stateBefore.jackpot_reward = Uint128(1_000_000);
-            config(&mut deps.storage).save(&stateBefore);
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+            state_before.jackpot_reward = Uint128(1_000_000);
+            config(&mut deps.storage).save(&state_before).unwrap();
 
             winner_storage(&mut deps.storage).save(
                 &1_u8.to_be_bytes(),
@@ -2325,7 +2323,7 @@ mod tests {
                         },
                     ],
                 },
-            );
+            ).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone());
             println!("{:?}", res);
@@ -2361,9 +2359,9 @@ mod tests {
                 }],
             );
             default_init(&mut deps);
-            let mut stateBefore = config(&mut deps.storage).load().unwrap();
-            stateBefore.jackpot_reward = Uint128(1_000_000);
-            config(&mut deps.storage).save(&stateBefore);
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+            state_before.jackpot_reward = Uint128(1_000_000);
+            config(&mut deps.storage).save(&state_before).unwrap();
 
             winner_storage(&mut deps.storage).save(
                 &1_u8.to_be_bytes(),
@@ -2385,7 +2383,7 @@ mod tests {
                         },
                     ],
                 },
-            );
+            ).unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone()).unwrap();
@@ -2424,8 +2422,8 @@ mod tests {
             assert!(store.winners[1].claimed);
             assert!(!store.winners[0].claimed);
 
-            let stateAfter = config(&mut deps.storage).load().unwrap();
-            assert_eq!(stateAfter.jackpot_reward, stateBefore.jackpot_reward);
+            let state_after = config(&mut deps.storage).load().unwrap();
+            assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);
         }
         #[test]
         fn success_multiple_win() {
@@ -2438,9 +2436,9 @@ mod tests {
                 }],
             );
             default_init(&mut deps);
-            let mut stateBefore = config(&mut deps.storage).load().unwrap();
-            stateBefore.jackpot_reward = Uint128(1_000_000);
-            config(&mut deps.storage).save(&stateBefore);
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+            state_before.jackpot_reward = Uint128(1_000_000);
+            config(&mut deps.storage).save(&state_before).unwrap();
 
             winner_storage(&mut deps.storage).save(
                 &1_u8.to_be_bytes(),
@@ -2462,7 +2460,7 @@ mod tests {
                         },
                     ],
                 },
-            );
+            ).unwrap();
             winner_storage(&mut deps.storage).save(
                 &2_u8.to_be_bytes(),
                 &Winner {
@@ -2490,7 +2488,7 @@ mod tests {
                         },
                     ],
                 },
-            );
+            ).unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone()).unwrap();
@@ -2539,8 +2537,8 @@ mod tests {
             assert!(store.winners[2].claimed);
             assert!(!store.winners[0].claimed);
 
-            let stateAfter = config(&mut deps.storage).load().unwrap();
-            assert_eq!(stateAfter.jackpot_reward, stateBefore.jackpot_reward);
+            let state_after = config(&mut deps.storage).load().unwrap();
+            assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);
         }
     }
 
@@ -2901,7 +2899,7 @@ mod tests {
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
             };
-            let res = handle(&mut deps, env, msg).unwrap();
+            let _res = handle(&mut deps, env, msg).unwrap();
         }
         #[test]
         fn do_not_send_funds() {
@@ -3031,7 +3029,7 @@ mod tests {
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
 
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
             let msg = HandleMsg::Vote {
                 poll_id: 1,
                 approve: false,
@@ -3066,7 +3064,7 @@ mod tests {
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
             };
-            let res = handle(&mut deps, env, msg).unwrap();
+            let _res = handle(&mut deps, env, msg).unwrap();
         }
         #[test]
         fn do_not_send_funds() {
@@ -3147,7 +3145,7 @@ mod tests {
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
             let msg = HandleMsg::RejectProposal { poll_id: 1 };
-            let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
+            let env = mock_env(before_all.default_sender_two.clone(), &[]);
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3170,7 +3168,7 @@ mod tests {
             create_poll(&mut deps, env.clone());
             let msg = HandleMsg::RejectProposal { poll_id: 1 };
 
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             assert_eq!(res.messages.len(), 0);
             assert_eq!(res.log.len(), 2);
@@ -3190,7 +3188,7 @@ mod tests {
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
             };
-            let res = handle(&mut deps, env, msg).unwrap();
+            let _res = handle(&mut deps, env, msg).unwrap();
         }
         #[test]
         fn do_not_send_funds() {
@@ -3341,7 +3339,7 @@ mod tests {
                     amount: Uint128(100_000),
                 }],
             );
-            let res = handle(&mut deps, env.clone(), msg);
+            let _res = handle(&mut deps, env.clone(), msg);
 
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             let poll_state = poll_storage(&mut deps.storage)
