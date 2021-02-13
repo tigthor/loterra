@@ -84,7 +84,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
         HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
         HandleMsg::Switch {} => handle_switch(deps, env),
-        HandleMsg::InitMigration {} => handle_switch(deps, env),
     }
 }
 pub fn handle_switch<S: Storage, A: Api, Q: Querier>(
@@ -103,6 +102,7 @@ pub fn handle_switch<S: Storage, A: Api, Q: Querier>(
 
     Ok(HandleResponse::default())
 }
+
 // There is probably some built-in function for this, but this is a simple way to do it
 fn is_lower_hex(combination: &str, len: u8) -> bool {
     if combination.len() != (len as usize) {
@@ -846,7 +846,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     let mut proposal_amount: Uint128 = Uint128::zero();
     let mut proposal_prize_rank: Vec<u8> = vec![];
     let mut proposal_human_address: Option<HumanAddr> = None;
-    
+
     let proposal_type = if let Proposal::HolderFeePercentage = proposal {
         match amount {
             Some(percentage) => {
@@ -1154,6 +1154,10 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
     weight
 }
 
+/*
+        TODO: Migration execution
+ */
+
 pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -1237,6 +1241,20 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
         }
         Proposal::HolderFeePercentage => {
             state.holders_max_percentage_reward = store.amount.u128() as u8
+        }
+        Proposal::SecurityMigration =>{
+            let contract_balance = deps.querier.query_balance(&env.contract.address, &state.denom_stable.clone())?;
+            let amount_to_send = contract_balance.amount.sub(Uint128(2_000_000))?;
+            let msg = BankMsg::Send {
+                from_address: env.contract.address,
+                to_address: store.migration_address?,
+                amount: vec![Coin{ denom: state.denom_stable.to_string(), amount: amount_to_send }],
+            };
+            Ok(HandleResponse{
+                messages: vec![msg.into()],
+                log: vec![],
+                data: None
+            })
         }
         _ => {
             return Err(StdError::generic_err("Proposal not funds"));
