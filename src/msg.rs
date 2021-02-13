@@ -46,7 +46,7 @@ pub enum HandleMsg {
     RejectProposal { poll_id: u64 },
     /// Admin
     /// Security owner can switch on off to prevent exploit
-    Switch {},
+    SafeLock {},
     /// Admin renounce and restore contract address to admin for full decentralization
     Renounce {},
 }
