@@ -35,7 +35,7 @@ pub struct State {
     pub price_per_ticket_to_register: Uint128,
     pub terrand_contract_address: CanonicalAddr,
     pub loterra_contract_address: CanonicalAddr,
-    pub security_switch_on_off: bool,
+    pub safe_lock: bool,
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {

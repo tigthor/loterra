@@ -54,7 +54,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         price_per_ticket_to_register: Uint128(1_000_000),
         terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
         loterra_contract_address: deps.api.canonical_address(&msg.loterra_contract_address)?,
-        security_switch_on_off: false,
+        safe_lock: false,
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -91,7 +91,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, poll_id, approve),
         HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
         HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
-        HandleMsg::Switch {} => handle_switch(deps, env),
+        HandleMsg::SafeLock {} => handle_switch(deps, env),
         HandleMsg::Renounce {} => handle_renounce(deps, env)
     }
 }
@@ -106,6 +106,10 @@ pub fn handle_renounce<S: Storage, A: Api, Q: Querier>(
     if state.admin != sender {
         return Err(StdError::Unauthorized { backtrace: None });
     }
+    if state.safe_lock {
+        return Err(StdError::generic_err("Contract is locked"));
+    }
+
     state.admin = deps.api.canonical_address(&env.contract.address)?;
     config(&mut deps.storage).save(&state)?;
     Ok(HandleResponse::default())
@@ -122,7 +126,7 @@ pub fn handle_switch<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::Unauthorized { backtrace: None });
     }
 
-    state.security_switch_on_off = !state.security_switch_on_off;
+    state.safe_lock = !state.safe_lock;
     config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse::default())
@@ -149,7 +153,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load the state
     let state = config(&mut deps.storage).load()?;
-    if state.security_switch_on_off {
+    if state.safe_lock {
         return Err(StdError::generic_err(
             "Contract deactivated for preventing security issue found",
         ));
@@ -260,7 +264,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
 
-    if state.security_switch_on_off {
+    if state.safe_lock {
         return Err(StdError::generic_err(
             "Contract deactivated for preventing security issue found",
         ));
@@ -510,7 +514,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
-    if state.security_switch_on_off {
+    if state.safe_lock {
         return Err(StdError::generic_err(
             "Contract deactivated for preventing security issue found",
         ));
@@ -604,7 +608,7 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
-    if state.security_switch_on_off {
+    if state.safe_lock {
         return Err(StdError::generic_err(
             "Contract deactivated for preventing security issue found",
         ));
@@ -704,7 +708,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load state
     let state = config(&mut deps.storage).load()?;
-    if state.security_switch_on_off {
+    if state.safe_lock {
         return Err(StdError::generic_err(
             "Contract deactivated for preventing security issue found",
         ));
@@ -1608,7 +1612,7 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.security_switch_on_off = true;
+            state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let msg = HandleMsg::Register {
                 combination: "1e3fab".to_string(),
@@ -1921,7 +1925,7 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.security_switch_on_off = true;
+            state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let res = handle_public_sale(
                 &mut deps,
@@ -2179,7 +2183,7 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.security_switch_on_off = true;
+            state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_play(&mut deps, env);
@@ -2284,7 +2288,7 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.security_switch_on_off = true;
+            state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_reward(&mut deps, env);
@@ -2454,7 +2458,7 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.security_switch_on_off = true;
+            state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env);
@@ -3781,12 +3785,12 @@ mod tests {
             let res = handle_switch(&mut deps, env.clone()).unwrap();
             assert_eq!(res.messages.len(), 0);
             let state = config(&mut deps.storage).load().unwrap();
-            assert!(state.security_switch_on_off);
+            assert!(state.safe_lock);
             // Switch to On
             let res = handle_switch(&mut deps, env).unwrap();
             println!("{:?}", res);
             let state = config(&mut deps.storage).load().unwrap();
-            assert!(!state.security_switch_on_off);
+            assert!(!state.safe_lock);
         }
     }
 
@@ -3803,6 +3807,25 @@ mod tests {
             let res = handle_renounce(&mut deps, env);
             match res {
                 Err(StdError::Unauthorized { .. }) => {}
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
+        fn safe_lock_on() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender_owner, &[]);
+
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.safe_lock = true;
+            config(&mut deps.storage).save(&state).unwrap();
+
+            let res = handle_renounce(&mut deps, env);
+            match res {
+                Err(GenericErr {msg, backtrace:None}) => {
+                    assert_eq!(msg, "Contract is locked");
+                }
                 _ => panic!("Unexpected error"),
             }
         }
