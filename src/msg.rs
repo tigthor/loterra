@@ -46,8 +46,6 @@ pub enum HandleMsg {
     RejectProposal { poll_id: u64 },
     /// Security owner can switch on off to prevent exploit
     Switch{},
-    /// Initialize migration to a new contract
-    InitMigration{},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
