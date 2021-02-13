@@ -14,6 +14,7 @@ const POLL_KEY: &[u8] = b"poll";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
+    pub admin: CanonicalAddr,
     pub block_time_play: u64,
     pub every_block_time_play: u64,
     pub public_sale_end_block: u64,
@@ -34,6 +35,7 @@ pub struct State {
     pub price_per_ticket_to_register: Uint128,
     pub terrand_contract_address: CanonicalAddr,
     pub loterra_contract_address: CanonicalAddr,
+    pub security_switch_on_off: bool,
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {

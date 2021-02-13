@@ -43,6 +43,8 @@ pub enum HandleMsg {
     PresentProposal { poll_id: u64 },
     /// Reject a proposal
     RejectProposal { poll_id: u64 },
+    /// Security owner can switch on off to prevent exploit
+    Switch{},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
