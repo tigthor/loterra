@@ -2,7 +2,7 @@ use crate::state::{PollStatus, Proposal, State, WinnerInfoState};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, Uint128, Binary};
+use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -61,9 +61,7 @@ pub enum QueryMsg {
     /// Query Terrand smart contract to get the needed randomness to play the lottery
     GetRandomness { round: u64 },
     /// Query Loterra smart contract to get the balance
-    Balance {
-        address: HumanAddr
-    },
+    Balance { address: HumanAddr },
     /// Query Loterra send
     Transfer {
         recipient: HumanAddr,
