@@ -3360,6 +3360,16 @@ mod tests {
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
+        fn create_poll_security_migration<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env) {
+            let msg = HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal: Proposal::SecurityMigration,
+                amount: None,
+                prize_per_rank: None,
+                contract_migration_address:Option::from(HumanAddr::from("newAddress".to_string())),
+            };
+            let _res = handle(&mut deps, env, msg).unwrap();
+        }
         #[test]
         fn do_not_send_funds() {
             let before_all = before_all();
@@ -3526,6 +3536,21 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             assert_eq!(poll_state.status, PollStatus::Passed);
+
+            create_poll_security_migration(&mut deps, env.clone());
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Vote {
+                poll_id: 2,
+                approve: true,
+            };
+            deps.querier.update_balance(
+                before_all.default_sender.clone(),
+                vec![Coin {
+                    denom: "lota".to_string(),
+                    amount: Uint128(100_000),
+                }],
+            );
+
         }
     }
     mod switch {
