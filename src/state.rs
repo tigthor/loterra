@@ -32,8 +32,8 @@ pub struct State {
     pub worker_drand_max_percentage_reward: u8,
     pub poll_default_end_height: u64,
     pub price_per_ticket_to_register: Uint128,
-    pub terrand_contract_address: HumanAddr,
-    pub loterra_contract_address: HumanAddr,
+    pub terrand_contract_address: CanonicalAddr,
+    pub loterra_contract_address: CanonicalAddr,
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {

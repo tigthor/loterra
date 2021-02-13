@@ -29,7 +29,7 @@ const MIN_DESCRIPTION_LEN: u64 = 6;
 // #[serde(rename_all = "snake_case")]
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
-    _env: Env,
+    env: Env,
     msg: InitMsg,
 ) -> StdResult<InitResponse> {
     let state = State {
@@ -51,8 +51,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         holders_max_percentage_reward: 20,
         worker_drand_max_percentage_reward: 10,
         price_per_ticket_to_register: Uint128(1_000_000),
-        terrand_contract_address: msg.terrand_contract_address,
-        loterra_contract_address: msg.loterra_contract_address,
+        terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
+        loterra_contract_address: deps.api.canonical_address(&msg.loterra_contract_address)?,
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -248,7 +248,8 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     }
 
     let msg = QueryMsg::GetRandomness { round: next_round };
-    let res = encode_msg_query(msg, state.terrand_contract_address.clone())?;
+    let terrand_human = deps.api.human_address(&state.terrand_contract_address.clone())?;
+    let res = encode_msg_query(msg, terrand_human)?;
     let res = wrapper_msg_terrand(&deps, res)?;
 
     let randomness = hex::encode(res.randomness.to_base64());
@@ -487,7 +488,8 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     let msg_balance = QueryMsg::Balance {
         address: env.contract.address,
     };
-    let res_balance = encode_msg_query(msg_balance, state.loterra_contract_address.clone())?;
+    let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone())?;
+    let res_balance = encode_msg_query(msg_balance, lottera_human)?;
     let lottera_balance = wrapper_msg_loterra(&deps, res_balance)?;
 
     if lottera_balance.balance.is_zero() {
@@ -506,7 +508,8 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
         recipient: env.message.sender.clone(),
         amount: sent,
     };
-    let res_transfer = encode_msg_execute(msg_transfer, state.loterra_contract_address.clone())?;
+    let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone())?;
+    let res_transfer = encode_msg_execute(msg_transfer, lottera_human)?;
 
     state.token_holder_supply += sent;
     // Save the new state
@@ -548,7 +551,8 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     let msg = QueryMsg::Balance {
         address: env.message.sender.clone(),
     };
-    let res = encode_msg_query(msg, state.loterra_contract_address.clone())?;
+    let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone())?;
+    let res = encode_msg_query(msg, lottera_human)?;
     let lottera_balance = wrapper_msg_loterra(&deps, res)?;
 
     if lottera_balance.balance.is_zero() {
@@ -1087,7 +1091,8 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
         let msg = QueryMsg::Balance {
             address: human_address,
         };
-        let res = encode_msg_query(msg, state.loterra_contract_address.clone()).unwrap();
+        let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone())?;
+        let res = encode_msg_query(msg, lottera_human).unwrap();
         let lottera_balance = wrapper_msg_loterra(&deps, res).unwrap();
 
         if !lottera_balance.balance.is_zero() {
