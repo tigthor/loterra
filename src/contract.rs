@@ -78,11 +78,13 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             proposal,
             amount,
             prize_per_rank,
-        } => handle_proposal(deps, env, description, proposal, amount, prize_per_rank),
+            contract_migration_address,
+        } => handle_proposal(deps, env, description, proposal, amount, prize_per_rank, contract_migration_address),
         HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, poll_id, approve),
         HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
         HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
         HandleMsg::Switch {} => handle_switch(deps, env),
+        HandleMsg::InitMigration {} => handle_switch(deps, env),
     }
 }
 pub fn handle_switch<S: Storage, A: Api, Q: Querier>(
@@ -815,6 +817,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     proposal: Proposal,
     amount: Option<Uint128>,
     prize_per_rank: Option<Vec<u8>>,
+    contract_migration_address: Option<HumanAddr>
 ) -> StdResult<HandleResponse> {
     let mut state = config(&mut deps.storage).load().unwrap();
     // Increment and get the new poll id for bucket key
@@ -842,7 +845,8 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
 
     let mut proposal_amount: Uint128 = Uint128::zero();
     let mut proposal_prize_rank: Vec<u8> = vec![];
-
+    let mut proposal_human_address: Option<HumanAddr> = None;
+    
     let proposal_type = if let Proposal::HolderFeePercentage = proposal {
         match amount {
             Some(percentage) => {
@@ -950,6 +954,19 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             }
         }
         Proposal::AmountToRegister
+    }else if let Proposal::SecurityMigration = proposal{
+        let sender = deps.api.canonical_address(&env.message.sender)?;
+        if state.admin != sender{
+            return Err(StdError::Unauthorized { backtrace: None });
+        }
+        match contract_migration_address {
+            Some(migration_address) => {
+                proposal_human_address = Option::from(migration_address);
+            }
+            None => {
+                return Err(StdError::generic_err("Migration address is required".to_string()));
+            }
+        }
     } else {
         return Err(StdError::generic_err(
             "Proposal type not founds".to_string(),
@@ -969,6 +986,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         amount: proposal_amount,
         prize_rank: proposal_prize_rank,
         proposal: proposal_type,
+        migration_address: proposal_human_address
     };
 
     // Save poll
@@ -1363,6 +1381,7 @@ fn query_poll<S: Storage, A: Api, Q: Querier>(
         description: poll.description,
         amount: poll.amount,
         prize_per_rank: poll.prize_rank,
+        migration_address: poll.migration_address
     })
 }
 

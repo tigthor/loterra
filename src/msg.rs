@@ -36,6 +36,7 @@ pub enum HandleMsg {
         proposal: Proposal,
         amount: Option<Uint128>,
         prize_per_rank: Option<Vec<u8>>,
+        contract_migration_address: Option<HumanAddr>
     },
     /// Vote the proposal
     Vote { poll_id: u64, approve: bool },
@@ -45,6 +46,8 @@ pub enum HandleMsg {
     RejectProposal { poll_id: u64 },
     /// Security owner can switch on off to prevent exploit
     Switch{},
+    /// Initialize migration to a new contract
+    InitMigration{},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -102,6 +105,7 @@ pub struct GetPollResponse {
     pub description: String,
     pub amount: Uint128,
     pub prize_per_rank: Vec<u8>,
+    pub migration_address: Option<HumanAddr>
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
