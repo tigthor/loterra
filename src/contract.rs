@@ -1592,7 +1592,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.security_switch_on_off = true;
-            config(&mut deps.storage).save(&state);
+            config(&mut deps.storage).save(&state).unwrap();
             let msg = HandleMsg::Register {
                 combination: "1e3fab".to_string(),
             };
@@ -1905,7 +1905,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.security_switch_on_off = true;
-            config(&mut deps.storage).save(&state);
+            config(&mut deps.storage).save(&state).unwrap();
             let res = handle_public_sale(
                 &mut deps,
                 mock_env(
@@ -2163,7 +2163,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.security_switch_on_off = true;
-            config(&mut deps.storage).save(&state);
+            config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_play(&mut deps, env);
             match res {
@@ -2268,7 +2268,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.security_switch_on_off = true;
-            config(&mut deps.storage).save(&state);
+            config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_reward(&mut deps, env);
             match res {
@@ -2438,7 +2438,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.security_switch_on_off = true;
-            config(&mut deps.storage).save(&state);
+            config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env);
             match res {
@@ -3722,8 +3722,8 @@ mod tests {
             assert_eq!(poll_state.status, PollStatus::Passed);
 
             create_poll_security_migration(&mut deps, env.clone());
-            let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let _env = mock_env(before_all.default_sender.clone(), &[]);
+            let _msg = HandleMsg::Vote {
                 poll_id: 2,
                 approve: true,
             };
