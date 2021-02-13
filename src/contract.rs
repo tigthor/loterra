@@ -950,6 +950,10 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     if env.block.height > store.end_height {
         return Err(StdError::generic_err("Proposal expired"));
     }
+    // Ensure the poll is still valid
+    if store.status != PollStatus::InProgress {
+        return Err(StdError::generic_err("Proposal is deactivated"));
+    }
     // Ensure the voter can't vote more times
     if store.yes_voters.contains(&sender) || store.no_voters.contains(&sender) {
         return Err(StdError::generic_err("Already voted"));
@@ -2396,6 +2400,9 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
             default_init(&mut deps);
+            let state = config(&mut deps.storage).load().unwrap();
+            assert_eq!(state.poll_count, 0);
+
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let msg = HandleMsg::Proposal {
                 description: "This is my first proposal".to_string(),
@@ -2408,9 +2415,127 @@ mod tests {
 
             let poll_state = poll_storage(&mut deps.storage).load(&1_u64.to_be_bytes()).unwrap();
             assert_eq!(poll_state.creator, deps.api.canonical_address(&before_all.default_sender).unwrap());
+
+            let state = config(&mut deps.storage).load().unwrap();
+            assert_eq!(state.poll_count, 1);
         }
+    }
+    mod vote{
+        use super::*;
+        // handle_vote
+        fn create_poll<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env){
+            let msg = HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal: Proposal::LotteryEveryBlockTime,
+                amount: Option::from(Uint128(22)),
+                prize_per_rank: None
+            };
+            let res = handle(&mut deps, env, msg).unwrap();
+        }
+        #[test]
+        fn do_not_send_funds(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            create_poll(&mut deps, env.clone());
 
+            let env = mock_env(before_all.default_sender.clone(), &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: false
+            };
+            let res = handle(&mut deps, env.clone(), msg);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Do not send funds with vote")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn poll_deactivated(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            create_poll(&mut deps, env.clone());
 
+            // Save to storage
+            poll_storage(&mut deps.storage).update::<_>(&1_u64.to_be_bytes(), |poll| {
+                let mut poll_data = poll.unwrap();
+                // Update the status to passed
+                poll_data.status = PollStatus::RejectedByCreator;
+                Ok(poll_data)
+            }).unwrap();
+
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: false
+            };
+            let res = handle(&mut deps, env.clone(), msg);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Proposal is deactivated")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn poll_expired(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            create_poll(&mut deps, env.clone());
+
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let poll_state = poll_storage(&mut deps.storage).load(&1_u64.to_be_bytes()).unwrap();
+            env.block.height = poll_state.end_height + 1;
+
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: false
+            };
+            let res = handle(&mut deps, env.clone(), msg);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Proposal expired")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn success(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            create_poll(&mut deps, env.clone());
+
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: false
+            };
+            let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
+            let poll_state = poll_storage(&mut deps.storage).load(&1_u64.to_be_bytes()).unwrap();
+            assert_eq!(res.log.len(), 3);
+            assert_eq!(poll_state.no_voters.len(), 1);
+
+            // Try to vote multiple times
+            let res = handle(&mut deps, env.clone(), msg);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Already voted")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
     }
 
     /*
