@@ -1,2 +1,2 @@
-2113ea0f34e3c391b917d301d71f78be035f7b809fe8c12bf37c199d6571c8c3  LoTerra.wasm
+437134da06ea9fb6afa571cee6c92fd9899edc8c6694c8e6c19b81f7f00d3a0d  LoTerra.wasm
 d8f2bb6a9d3383a8a45ee7be67076e27cff0dfe26d79dbbeb10d1d95a18dfd69  lottery.wasm
