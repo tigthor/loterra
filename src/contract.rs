@@ -1186,10 +1186,6 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
     weight
 }
 
-/*
-       TODO: Migration execution
-*/
-
 pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -1227,7 +1223,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     }
 
     // Reject the proposal
-    if final_vote_weight_in_percentage < 60 {
+    if final_vote_weight_in_percentage < 60 && store.yes_voters.len() < store.no_voters.len(){
         poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
             let mut poll_data = poll.unwrap();
             // Update the status to rejected
@@ -1454,9 +1450,9 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
 "poll_default_end_height": 30,
 "token_holder_supply": "1000000",
 "terrand_contract_address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k",
-"loterra_contract_address": "terra18vd8fpwxzck93qlwghaj6arh4p7c5n896xzem5"
+"loterra_contract_address": "terra1jzxdryg2x8vdcwydhzddk68hrl4kve6yk43u8p"
 }
-{"name":"loterra","symbol":"LOTA","decimals": 6,"initial_balances":[{"address":"terra1dcegyrekltswvyy0xy69ydgxn9x8x32zdtapd8","amount":"5000000"}]}
+{"name":"loterra","symbol":"LOTA","decimals": 6,"initial_balances":[{"address":"terra1np82azjrpfr2ax77s854w4nyh9k63ng7vj26h0","amount":"5000000"}]}
 
 //erc20 loterra
 terra18vd8fpwxzck93qlwghaj6arh4p7c5n896xzem5
