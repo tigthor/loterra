@@ -110,7 +110,7 @@ pub struct PollInfoState {
     pub amount: Uint128,
     pub prize_rank: Vec<u8>,
     pub proposal: Proposal,
-    pub migration_address: Option<HumanAddr>
+    pub migration_address: Option<HumanAddr>,
 }
 
 pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState> {

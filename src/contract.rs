@@ -79,7 +79,15 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             amount,
             prize_per_rank,
             contract_migration_address,
-        } => handle_proposal(deps, env, description, proposal, amount, prize_per_rank, contract_migration_address),
+        } => handle_proposal(
+            deps,
+            env,
+            description,
+            proposal,
+            amount,
+            prize_per_rank,
+            contract_migration_address,
+        ),
         HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, poll_id, approve),
         HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
         HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
@@ -125,7 +133,9 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     // Load the state
     let state = config(&mut deps.storage).load()?;
     if state.security_switch_on_off {
-        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+        return Err(StdError::generic_err(
+            "Contract deactivated for preventing security issue found",
+        ));
     }
     // Regex to check if the combination is allowed
     if !is_lower_hex(&combination, state.combination_len) {
@@ -234,7 +244,9 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let mut state = config(&mut deps.storage).load()?;
 
     if state.security_switch_on_off {
-        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+        return Err(StdError::generic_err(
+            "Contract deactivated for preventing security issue found",
+        ));
     }
 
     let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
@@ -275,7 +287,9 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     }
 
     let msg = QueryMsg::GetRandomness { round: next_round };
-    let terrand_human = deps.api.human_address(&state.terrand_contract_address.clone())?;
+    let terrand_human = deps
+        .api
+        .human_address(&state.terrand_contract_address.clone())?;
     let res = encode_msg_query(msg, terrand_human)?;
     let res = wrapper_msg_terrand(&deps, res)?;
 
@@ -480,7 +494,9 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
     if state.security_switch_on_off {
-        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+        return Err(StdError::generic_err(
+            "Contract deactivated for preventing security issue found",
+        ));
     }
     // Public sale expire after blockTime
     if state.public_sale_end_block < env.block.height {
@@ -518,7 +534,9 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     let msg_balance = QueryMsg::Balance {
         address: env.contract.address,
     };
-    let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone())?;
+    let lottera_human = deps
+        .api
+        .human_address(&state.loterra_contract_address.clone())?;
     let res_balance = encode_msg_query(msg_balance, lottera_human)?;
     let lottera_balance = wrapper_msg_loterra(&deps, res_balance)?;
 
@@ -538,7 +556,9 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
         recipient: env.message.sender.clone(),
         amount: sent,
     };
-    let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone())?;
+    let lottera_human = deps
+        .api
+        .human_address(&state.loterra_contract_address.clone())?;
     let res_transfer = encode_msg_execute(msg_transfer, lottera_human)?;
 
     state.token_holder_supply += sent;
@@ -568,7 +588,9 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
     if state.security_switch_on_off {
-        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+        return Err(StdError::generic_err(
+            "Contract deactivated for preventing security issue found",
+        ));
     }
     // convert the sender to canonical address
     let sender = deps.api.canonical_address(&env.message.sender).unwrap();
@@ -584,7 +606,9 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     let msg = QueryMsg::Balance {
         address: env.message.sender.clone(),
     };
-    let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone())?;
+    let lottera_human = deps
+        .api
+        .human_address(&state.loterra_contract_address.clone())?;
     let res = encode_msg_query(msg, lottera_human)?;
     let lottera_balance = wrapper_msg_loterra(&deps, res)?;
 
@@ -664,7 +688,9 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     // Load state
     let state = config(&mut deps.storage).load()?;
     if state.security_switch_on_off {
-        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+        return Err(StdError::generic_err(
+            "Contract deactivated for preventing security issue found",
+        ));
     }
     let sender_to_canonical = deps.api.canonical_address(&env.message.sender).unwrap();
     // Load winners
@@ -817,7 +843,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     proposal: Proposal,
     amount: Option<Uint128>,
     prize_per_rank: Option<Vec<u8>>,
-    contract_migration_address: Option<HumanAddr>
+    contract_migration_address: Option<HumanAddr>,
 ) -> StdResult<HandleResponse> {
     let mut state = config(&mut deps.storage).load().unwrap();
     // Increment and get the new poll id for bucket key
@@ -851,7 +877,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         match amount {
             Some(percentage) => {
                 if percentage.u128() as u8 > state.holders_max_percentage_reward {
-                    return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
+                    return Err(StdError::generic_err(format!("Amount between 0 to {}",state.holders_max_percentage_reward)));
                 }
                 proposal_amount = percentage;
             }
@@ -865,7 +891,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         match amount {
             Some(percentage) => {
                 if percentage.u128() as u8 > state.worker_drand_max_percentage_reward {
-                    return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
+                    return Err(StdError::generic_err(format!("Amount between 0 to {}",state.worker_drand_max_percentage_reward)));
                 }
                 proposal_amount = percentage;
             }
@@ -954,19 +980,22 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             }
         }
         Proposal::AmountToRegister
-    }else if let Proposal::SecurityMigration = proposal{
-        let sender = deps.api.canonical_address(&env.message.sender)?;
-        if state.admin != sender{
-            return Err(StdError::Unauthorized { backtrace: None });
-        }
+    } else if let Proposal::SecurityMigration = proposal {
         match contract_migration_address {
             Some(migration_address) => {
+                let sender = deps.api.canonical_address(&env.message.sender)?;
+                if state.admin != sender {
+                    return Err(StdError::Unauthorized { backtrace: None });
+                }
                 proposal_human_address = Option::from(migration_address);
             }
             None => {
-                return Err(StdError::generic_err("Migration address is required".to_string()));
+                return Err(StdError::generic_err(
+                    "Migration address is required".to_string(),
+                ));
             }
         }
+        Proposal::SecurityMigration
     } else {
         return Err(StdError::generic_err(
             "Proposal type not founds".to_string(),
@@ -986,7 +1015,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         amount: proposal_amount,
         prize_rank: proposal_prize_rank,
         proposal: proposal_type,
-        migration_address: proposal_human_address
+        migration_address: proposal_human_address,
     };
 
     // Save poll
@@ -1143,7 +1172,10 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
         let msg = QueryMsg::Balance {
             address: human_address,
         };
-        let lottera_human = deps.api.human_address(&state.loterra_contract_address.clone()).unwrap();
+        let lottera_human = deps
+            .api
+            .human_address(&state.loterra_contract_address.clone())
+            .unwrap();
         let res = encode_msg_query(msg, lottera_human).unwrap();
         let lottera_balance = wrapper_msg_loterra(&deps, res).unwrap();
 
@@ -1155,8 +1187,8 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
 }
 
 /*
-        TODO: Migration execution
- */
+       TODO: Migration execution
+*/
 
 pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -1242,19 +1274,23 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
         Proposal::HolderFeePercentage => {
             state.holders_max_percentage_reward = store.amount.u128() as u8
         }
-        Proposal::SecurityMigration =>{
-            let contract_balance = deps.querier.query_balance(&env.contract.address, &state.denom_stable.clone())?;
-            let amount_to_send = contract_balance.amount.sub(Uint128(2_000_000))?;
+        Proposal::SecurityMigration => {
+            let contract_balance = deps
+                .querier
+                .query_balance(&env.contract.address, &state.denom_stable.clone())?;
             let msg = BankMsg::Send {
                 from_address: env.contract.address,
-                to_address: store.migration_address?,
-                amount: vec![Coin{ denom: state.denom_stable.to_string(), amount: amount_to_send }],
+                to_address: store.migration_address.unwrap(),
+                amount: vec![Coin {
+                    denom: state.denom_stable.to_string(),
+                    amount: contract_balance.amount,
+                }],
             };
-            Ok(HandleResponse{
+            return Ok(HandleResponse {
                 messages: vec![msg.into()],
                 log: vec![],
-                data: None
-            })
+                data: None,
+            });
         }
         _ => {
             return Err(StdError::generic_err("Proposal not funds"));
@@ -1399,7 +1435,7 @@ fn query_poll<S: Storage, A: Api, Q: Querier>(
         description: poll.description,
         amount: poll.amount,
         prize_per_rank: poll.prize_rank,
-        migration_address: poll.migration_address
+        migration_address: poll.migration_address,
     })
 }
 
@@ -1408,9 +1444,7 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
     let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
-    Ok(RoundResponse {
-        next_round,
-    })
+    Ok(RoundResponse { next_round })
 }
 /*{
 "denom_stable":"uust",
@@ -1481,12 +1515,14 @@ mod tests {
         default_length: usize,
         default_sender: HumanAddr,
         default_sender_two: HumanAddr,
+        default_sender_owner: HumanAddr,
     }
     fn before_all() -> BeforeAll {
         BeforeAll {
             default_length: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k").len(),
             default_sender: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
             default_sender_two: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q008"),
+            default_sender_owner: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k")
         }
     }
 
@@ -2379,27 +2415,29 @@ mod tests {
             state_before.jackpot_reward = Uint128(1_000_000);
             config(&mut deps.storage).save(&state_before).unwrap();
 
-            winner_storage(&mut deps.storage).save(
-                &1_u8.to_be_bytes(),
-                &Winner {
-                    winners: vec![
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&HumanAddr("address2".to_string()))
-                                .unwrap(),
-                        },
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&before_all.default_sender)
-                                .unwrap(),
-                        },
-                    ],
-                },
-            ).unwrap();
+            winner_storage(&mut deps.storage)
+                .save(
+                    &1_u8.to_be_bytes(),
+                    &Winner {
+                        winners: vec![
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&HumanAddr("address2".to_string()))
+                                    .unwrap(),
+                            },
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&before_all.default_sender)
+                                    .unwrap(),
+                            },
+                        ],
+                    },
+                )
+                .unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone());
             println!("{:?}", res);
@@ -2439,27 +2477,29 @@ mod tests {
             state_before.jackpot_reward = Uint128(1_000_000);
             config(&mut deps.storage).save(&state_before).unwrap();
 
-            winner_storage(&mut deps.storage).save(
-                &1_u8.to_be_bytes(),
-                &Winner {
-                    winners: vec![
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&HumanAddr("address2".to_string()))
-                                .unwrap(),
-                        },
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&before_all.default_sender)
-                                .unwrap(),
-                        },
-                    ],
-                },
-            ).unwrap();
+            winner_storage(&mut deps.storage)
+                .save(
+                    &1_u8.to_be_bytes(),
+                    &Winner {
+                        winners: vec![
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&HumanAddr("address2".to_string()))
+                                    .unwrap(),
+                            },
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&before_all.default_sender)
+                                    .unwrap(),
+                            },
+                        ],
+                    },
+                )
+                .unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone()).unwrap();
@@ -2516,55 +2556,59 @@ mod tests {
             state_before.jackpot_reward = Uint128(1_000_000);
             config(&mut deps.storage).save(&state_before).unwrap();
 
-            winner_storage(&mut deps.storage).save(
-                &1_u8.to_be_bytes(),
-                &Winner {
-                    winners: vec![
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&HumanAddr("address2".to_string()))
-                                .unwrap(),
-                        },
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&before_all.default_sender)
-                                .unwrap(),
-                        },
-                    ],
-                },
-            ).unwrap();
-            winner_storage(&mut deps.storage).save(
-                &2_u8.to_be_bytes(),
-                &Winner {
-                    winners: vec![
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&HumanAddr("address2".to_string()))
-                                .unwrap(),
-                        },
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&before_all.default_sender)
-                                .unwrap(),
-                        },
-                        WinnerInfoState {
-                            claimed: false,
-                            address: deps
-                                .api
-                                .canonical_address(&before_all.default_sender)
-                                .unwrap(),
-                        },
-                    ],
-                },
-            ).unwrap();
+            winner_storage(&mut deps.storage)
+                .save(
+                    &1_u8.to_be_bytes(),
+                    &Winner {
+                        winners: vec![
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&HumanAddr("address2".to_string()))
+                                    .unwrap(),
+                            },
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&before_all.default_sender)
+                                    .unwrap(),
+                            },
+                        ],
+                    },
+                )
+                .unwrap();
+            winner_storage(&mut deps.storage)
+                .save(
+                    &2_u8.to_be_bytes(),
+                    &Winner {
+                        winners: vec![
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&HumanAddr("address2".to_string()))
+                                    .unwrap(),
+                            },
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&before_all.default_sender)
+                                    .unwrap(),
+                            },
+                            WinnerInfoState {
+                                claimed: false,
+                                address: deps
+                                    .api
+                                    .canonical_address(&before_all.default_sender)
+                                    .unwrap(),
+                            },
+                        ],
+                    },
+                )
+                .unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone()).unwrap();
@@ -2638,6 +2682,7 @@ mod tests {
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
+                contract_migration_address: None,
             };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
@@ -2671,7 +2716,8 @@ mod tests {
                  ".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
-                prize_per_rank: None
+                prize_per_rank: None,
+                contract_migration_address: None
             };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
@@ -2708,6 +2754,7 @@ mod tests {
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
+                contract_migration_address: None,
             };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
@@ -2728,6 +2775,7 @@ mod tests {
                 proposal,
                 amount: None,
                 prize_per_rank: None,
+                contract_migration_address: None,
             }
         }
         fn msg_constructor_amount_out(proposal: Proposal) -> HandleMsg {
@@ -2736,6 +2784,7 @@ mod tests {
                 proposal,
                 amount: Option::from(Uint128(250)),
                 prize_per_rank: None,
+                contract_migration_address: None,
             }
         }
 
@@ -2745,6 +2794,7 @@ mod tests {
                 proposal,
                 amount: None,
                 prize_per_rank: Option::from(vec![10, 20, 23, 23, 23, 23]),
+                contract_migration_address: None,
             }
         }
 
@@ -2754,6 +2804,7 @@ mod tests {
                 proposal,
                 amount: None,
                 prize_per_rank: Option::from(vec![100, 20, 23, 23]),
+                contract_migration_address: None,
             }
         }
 
@@ -2780,6 +2831,18 @@ mod tests {
             let msg_holder_fee_per_percentage = msg_constructor_none(Proposal::HolderFeePercentage);
             let msg_amount_to_register = msg_constructor_none(Proposal::AmountToRegister);
             let msg_claim_every_block = msg_constructor_none(Proposal::ClaimEveryBlock);
+            let msg_security_migration = msg_constructor_none(Proposal::SecurityMigration);
+
+            let res = handle(&mut deps, env.clone(), msg_security_migration);
+            match res {
+                Err(GenericErr {
+                        msg,
+                        backtrace: None,
+                    }) => {
+                    assert_eq!(msg, "Migration address is required")
+                }
+                _ => panic!("Unexpected error"),
+            }
 
             let res = handle(&mut deps, env.clone(), msg_lottery_every_block_time);
             match res {
@@ -2872,7 +2935,7 @@ mod tests {
                     msg,
                     backtrace: None,
                 }) => {
-                    assert_eq!(msg, "Amount between 0 to 100")
+                    assert_eq!(msg, "Amount between 0 to 10")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2894,7 +2957,7 @@ mod tests {
                     msg,
                     backtrace: None,
                 }) => {
-                    assert_eq!(msg, "Amount between 0 to 100")
+                    assert_eq!(msg, "Amount between 0 to 20")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2927,6 +2990,16 @@ mod tests {
                 _ => panic!("Unexpected error"),
             }
         }
+        fn msg_constructor_success(proposal: Proposal, amount: Option<Uint128>, prize_per_rank: Option<Vec<u8>>, contract_migration_address: Option<HumanAddr>) -> HandleMsg {
+            HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal,
+                amount,
+                prize_per_rank,
+                contract_migration_address,
+            }
+        }
+
         #[test]
         fn success() {
             let before_all = before_all();
@@ -2940,17 +3013,19 @@ mod tests {
             default_init(&mut deps);
             let state = config(&mut deps.storage).load().unwrap();
             assert_eq!(state.poll_count, 0);
-
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Proposal {
-                description: "This is my first proposal".to_string(),
-                proposal: Proposal::LotteryEveryBlockTime,
-                amount: Option::from(Uint128(22)),
-                prize_per_rank: None,
-            };
-            let res = handle(&mut deps, env.clone(), msg).unwrap();
-            assert_eq!(res.log.len(), 4);
 
+            let msg_lottery_every_block_time = msg_constructor_success(Proposal::LotteryEveryBlockTime, Option::from(Uint128(22)), None, None);
+            let msg_claim_every_block = msg_constructor_success(Proposal::ClaimEveryBlock, Option::from(Uint128(22)), None, None);
+            let msg_amount_to_register = msg_constructor_success(Proposal::AmountToRegister, Option::from(Uint128(22)), None, None);
+            let msg_holder_fee_percentage = msg_constructor_success(Proposal::HolderFeePercentage, Option::from(Uint128(20)), None, None);
+            let msg_prize_rank = msg_constructor_success(Proposal::PrizePerRank, None, Option::from(vec![10,10,10,70]), None);
+            let msg_jackpot_reward_percentage = msg_constructor_success(Proposal::JackpotRewardPercentage, Option::from(Uint128(80)), None, None);
+            let msg_drand_fee_worker = msg_constructor_success(Proposal::DrandWorkerFeePercentage, Option::from(Uint128(10)), None, None);
+            let msg_security_migration = msg_constructor_success(Proposal::SecurityMigration, None, None, Option::from(before_all.default_sender_two.clone()));
+
+            let res = handle(&mut deps, env.clone(), msg_lottery_every_block_time).unwrap();
+            assert_eq!(res.log.len(), 4);
             let poll_state = poll_storage(&mut deps.storage)
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
@@ -2960,9 +3035,25 @@ mod tests {
                     .canonical_address(&before_all.default_sender)
                     .unwrap()
             );
-
             let state = config(&mut deps.storage).load().unwrap();
             assert_eq!(state.poll_count, 1);
+
+            let res = handle(&mut deps, env.clone(), msg_claim_every_block).unwrap();
+            assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_amount_to_register).unwrap();
+            assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_holder_fee_percentage).unwrap();
+            assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_prize_rank).unwrap();
+            assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_jackpot_reward_percentage).unwrap();
+            assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_drand_fee_worker).unwrap();
+            assert_eq!(res.log.len(), 4);
+            // Only owner init proposal for security migration
+            let env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            let res = handle(&mut deps, env.clone(), msg_security_migration).unwrap();
+            assert_eq!(res.log.len(), 4);
         }
     }
     mod vote {
@@ -2974,6 +3065,7 @@ mod tests {
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
+                contract_migration_address: None,
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
@@ -3139,6 +3231,7 @@ mod tests {
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
+                contract_migration_address: None,
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
@@ -3263,6 +3356,7 @@ mod tests {
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
+                contract_migration_address: None,
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
@@ -3432,6 +3526,42 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             assert_eq!(poll_state.status, PollStatus::Passed);
+        }
+    }
+    mod switch {
+        use super::*;
+        // handle_switch
+
+        #[test]
+        fn only_admin() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender_two, &[]);
+
+            let res = handle_switch(&mut deps, env);
+            match res {
+                Err(StdError::Unauthorized { .. }) => {}
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
+        fn success() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender_owner, &[]);
+
+            // Switch to Off
+            let res = handle_switch(&mut deps, env.clone()).unwrap();
+            assert_eq!(res.messages.len(), 0);
+            let state = config(&mut deps.storage).load().unwrap();
+            assert!(state.security_switch_on_off);
+            // Switch to On
+            let res = handle_switch(&mut deps, env).unwrap();
+            println!("{:?}", res);
+            let state = config(&mut deps.storage).load().unwrap();
+            assert!(!state.security_switch_on_off);
         }
     }
 }
