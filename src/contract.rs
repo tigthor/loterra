@@ -33,6 +33,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     msg: InitMsg,
 ) -> StdResult<InitResponse> {
     let state = State {
+        admin: deps.api.canonical_address(&env.message.sender)?,
         block_time_play: msg.block_time_play,
         every_block_time_play: msg.every_block_time_play,
         public_sale_end_block: msg.public_sale_end_block,
@@ -53,6 +54,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         price_per_ticket_to_register: Uint128(1_000_000),
         terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
         loterra_contract_address: deps.api.canonical_address(&msg.loterra_contract_address)?,
+        security_switch_on_off: false,
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -80,9 +82,25 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, poll_id, approve),
         HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
         HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
+        HandleMsg::Switch {} => handle_switch(deps, env),
     }
 }
+pub fn handle_switch<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+) -> StdResult<HandleResponse> {
+    // Load the state
+    let mut state = config(&mut deps.storage).load()?;
+    let sender = deps.api.canonical_address(&env.message.sender)?;
+    if state.admin != sender {
+        return Err(StdError::Unauthorized { backtrace: None });
+    }
 
+    state.security_switch_on_off = !state.security_switch_on_off;
+    config(&mut deps.storage).save(&state)?;
+
+    Ok(HandleResponse::default())
+}
 // There is probably some built-in function for this, but this is a simple way to do it
 fn is_lower_hex(combination: &str, len: u8) -> bool {
     if combination.len() != (len as usize) {
@@ -104,7 +122,9 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load the state
     let state = config(&mut deps.storage).load()?;
-
+    if state.security_switch_on_off {
+        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+    }
     // Regex to check if the combination is allowed
     if !is_lower_hex(&combination, state.combination_len) {
         return Err(StdError::generic_err(format!(
@@ -210,6 +230,11 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
+
+    if state.security_switch_on_off {
+        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+    }
+
     let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
     // reset holders reward
@@ -452,6 +477,9 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
+    if state.security_switch_on_off {
+        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+    }
     // Public sale expire after blockTime
     if state.public_sale_end_block < env.block.height {
         return Err(StdError::generic_err("Public sale is ended"));
@@ -537,6 +565,9 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
+    if state.security_switch_on_off {
+        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+    }
     // convert the sender to canonical address
     let sender = deps.api.canonical_address(&env.message.sender).unwrap();
     // Ensure the sender not sending funds accidentally
@@ -630,6 +661,9 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load state
     let state = config(&mut deps.storage).load()?;
+    if state.security_switch_on_off {
+        return Err(StdError::generic_err("Contract deactivated for preventing security issue found"));
+    }
     let sender_to_canonical = deps.api.canonical_address(&env.message.sender).unwrap();
     // Load winners
     let store = query_all_winner(&deps).unwrap();
