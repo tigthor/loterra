@@ -110,7 +110,11 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     }
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
-        0 => Err(StdError::generic_err("Send some funds to register")),
+        0 => Err(StdError::generic_err(format!(
+            "you need to send {}{} in order to register",
+            state.price_per_ticket_to_register.clone(),
+            state.denom_stable.clone()
+        ))),
         1 => {
             if env.message.sent_funds[0].denom == state.denom_stable {
                 Ok(env.message.sent_funds[0].amount)
@@ -445,9 +449,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     }
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
-        0 => Err(StdError::generic_err(
-            "Send some funds to buy public sale tokens",
-        )),
+        0 => Err(StdError::generic_err(format!("Send some {} to participate at public sale", state.denom_stable.clone()))),
         1 => {
             if env.message.sent_funds[0].denom == state.denom_stable {
                 Ok(env.message.sent_funds[0].amount)
@@ -465,7 +467,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     }?;
 
     if sent.is_zero() {
-        return Err(StdError::generic_err("Send some funds"));
+        return Err(StdError::generic_err(format!("Send some {} to participate at public sale", state.denom_stable.clone())));
     };
     // Get the contract balance prepare the tx
     let msg_balance = QueryMsg::Balance{ address: env.contract.address };
@@ -782,7 +784,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                 proposal_amount = percentage;
             }
             None => {
-                return Err(StdError::generic_err("Amount required".to_string()));
+                return Err(StdError::generic_err("Amount is required".to_string()));
             }
         }
 
@@ -796,7 +798,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                 proposal_amount = percentage;
             }
             None => {
-                return Err(StdError::generic_err("Amount required".to_string()));
+                return Err(StdError::generic_err("Amount is required".to_string()));
             }
         }
 
@@ -810,7 +812,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                 proposal_amount = percentage;
             }
             None => {
-                return Err(StdError::generic_err("Amount required".to_string()));
+                return Err(StdError::generic_err("Amount is required".to_string()));
             }
         }
 
@@ -866,7 +868,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                 proposal_amount = block_time;
             }
             None => {
-                return Err(StdError::generic_err("amount is required".to_string()));
+                return Err(StdError::generic_err("Amount is required".to_string()));
             }
         }
         Proposal::ClaimEveryBlock
@@ -876,7 +878,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                 proposal_amount = amount_to_register;
             }
             None => {
-                return Err(StdError::generic_err("amount is required".to_string()));
+                return Err(StdError::generic_err("Amount is required".to_string()));
             }
         }
         Proposal::AmountToRegister
@@ -1734,7 +1736,7 @@ mod tests {
             println!("{:?}", res);
             match res {
                 Err(GenericErr{msg, backtrace: None, }) => {
-                    assert_eq!(msg, "Send some funds")
+                    assert_eq!(msg, "Send some ust to participate at public sale")
                 },
                 _ => panic!("Unexpected error")
             }
@@ -2160,8 +2162,256 @@ mod tests {
             let stateAfter = config(&mut deps.storage).load().unwrap();
             assert_eq!(stateAfter.jackpot_reward, stateBefore.jackpot_reward);
         }
+
     }
 
+    mod proposal {
+        use super::*;
+        // handle_proposal
+        #[test]
+        fn description_min_error (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Proposal {
+                description: "This".to_string(),
+                proposal: Proposal::LotteryEveryBlockTime,
+                amount: Option::from(Uint128(22)),
+                prize_per_rank: None
+            };
+            let res = handle(&mut deps, env.clone(), msg);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Description min length 6")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn description_max_error (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Proposal {
+                description: "let env = mock_env(before_all.default_sender.clone(), &[]);\
+                 let env = mock_env(before_all.default_sender.clone(), &[]); let env \
+                 = mock_env(before_all.default_sender.clone(), &[]); let env = mock_env(before_all.default_sender.clone(), &[]);\
+                 let env = mock_env(before_all.default_sender.clone(), &[]);let env = mock_env(before_all.default_sender.clone(), &[]);
+                 ".to_string(),
+                proposal: Proposal::LotteryEveryBlockTime,
+                amount: Option::from(Uint128(22)),
+                prize_per_rank: None
+            };
+            let res = handle(&mut deps, env.clone(), msg);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Description max length 255")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn do_not_send_funds (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[Coin{ denom: "ust".to_string(), amount: Uint128(1_000) }]);
+            let msg = HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal: Proposal::LotteryEveryBlockTime,
+                amount: Option::from(Uint128(22)),
+                prize_per_rank: None
+            };
+            let res = handle(&mut deps, env.clone(), msg);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Do not send funds with proposal")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+
+        fn msg_constructor_none (proposal: Proposal) -> HandleMsg{
+            HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal,
+                amount: None,
+                prize_per_rank: None
+            }
+        }
+        fn msg_constructor_amount_out (proposal: Proposal) -> HandleMsg{
+            HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal,
+                amount: Option::from(Uint128(250)),
+                prize_per_rank: None
+            }
+        }
+
+        fn msg_constructor_prize_len_out (proposal: Proposal) -> HandleMsg{
+            HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal,
+                amount: None,
+                prize_per_rank: Option::from(vec![10,20,23,23,23,23])
+            }
+        }
+
+        fn msg_constructor_prize_sum_out (proposal: Proposal) -> HandleMsg{
+            HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal,
+                amount: None,
+                prize_per_rank: Option::from(vec![100,20,23,23])
+            }
+        }
+
+        #[test]
+        fn all_proposal_amount_error (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+
+            let msg_drand_worker_fee_percentage = msg_constructor_none (Proposal::DrandWorkerFeePercentage);
+            let msg_lottery_every_block_time = msg_constructor_none (Proposal::LotteryEveryBlockTime);
+            let msg_jackpot_reward_percentage = msg_constructor_none (Proposal::JackpotRewardPercentage);
+            let msg_prize_per_rank = msg_constructor_none (Proposal::PrizePerRank);
+            let msg_holder_fee_per_percentage = msg_constructor_none (Proposal::HolderFeePercentage);
+            let msg_amount_to_register = msg_constructor_none (Proposal::AmountToRegister);
+            let msg_claim_every_block = msg_constructor_none (Proposal::ClaimEveryBlock);
+
+
+            let res = handle(&mut deps, env.clone(), msg_lottery_every_block_time);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount block time required")
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            let res = handle(&mut deps, env.clone(), msg_drand_worker_fee_percentage);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount is required")
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            let res = handle(&mut deps, env.clone(), msg_jackpot_reward_percentage);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount is required")
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            let res = handle(&mut deps, env.clone(), msg_holder_fee_per_percentage);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount is required")
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            let res = handle(&mut deps, env.clone(), msg_prize_per_rank);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Rank is required")
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            let res = handle(&mut deps, env.clone(), msg_amount_to_register);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount is required")
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            let res = handle(&mut deps, env.clone(), msg_claim_every_block);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount is required")
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            let msg_drand_worker_fee_percentage = msg_constructor_amount_out (Proposal::DrandWorkerFeePercentage);
+            let msg_jackpot_reward_percentage = msg_constructor_amount_out (Proposal::JackpotRewardPercentage);
+            let msg_holder_fee_per_percentage = msg_constructor_amount_out (Proposal::HolderFeePercentage);
+
+            let res = handle(&mut deps, env.clone(), msg_drand_worker_fee_percentage);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount between 0 to 100")
+                },
+                _ => panic!("Unexpected error")
+            }
+            let res = handle(&mut deps, env.clone(), msg_jackpot_reward_percentage);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount between 0 to 100")
+                },
+                _ => panic!("Unexpected error")
+            }
+            let res = handle(&mut deps, env.clone(), msg_holder_fee_per_percentage);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Amount between 0 to 100")
+                },
+                _ => panic!("Unexpected error")
+            }
+
+            let msg_prize_per_rank = msg_constructor_prize_len_out (Proposal::PrizePerRank);
+            let res = handle(&mut deps, env.clone(), msg_prize_per_rank);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Ranks need to be in this format [0, 90, 10, 0] numbers between 0 to 100")
+                },
+                _ => panic!("Unexpected error")
+            }
+            let msg_prize_per_rank = msg_constructor_prize_sum_out (Proposal::PrizePerRank);
+            let res = handle(&mut deps, env.clone(), msg_prize_per_rank);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr{msg, backtrace: None, }) => {
+                    assert_eq!(msg, "Numbers total sum need to be equal to 100")
+                },
+                _ => panic!("Unexpected error")
+            }
+        }
+        #[test]
+        fn success (){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[Coin{ denom: "ust".to_string(), amount: Uint128(9_000_000) }]);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal: Proposal::LotteryEveryBlockTime,
+                amount: Option::from(Uint128(22)),
+                prize_per_rank: None
+            };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            assert_eq!(res.log.len(), 4);
+
+            let poll_state = poll_storage(&mut deps.storage).load(&1_u64.to_be_bytes()).unwrap();
+            assert_eq!(poll_state.creator, deps.api.canonical_address(&before_all.default_sender).unwrap());
+        }
+
+
+    }
 
     /*
 
