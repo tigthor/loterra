@@ -1223,7 +1223,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     }
 
     // Reject the proposal
-    if final_vote_weight_in_percentage < 60 && store.yes_voters.len() < store.no_voters.len(){
+    if final_vote_weight_in_percentage < 60 || store.yes_voters.len() <= store.no_voters.len(){
         poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
             let mut poll_data = poll.unwrap();
             // Update the status to rejected
