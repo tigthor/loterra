@@ -1499,9 +1499,27 @@ terra10pyejy66429refv3g35g2t7am0was7ya7kz2a4
 mod tests {
     use super::*;
     use crate::msg::{HandleMsg, InitMsg};
-    use cosmwasm_std::testing::{mock_dependencies, mock_env};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, MockApi, MockStorage};
     use cosmwasm_std::StdError::GenericErr;
     use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128};
+
+    struct BeforeAll {
+        default_length: usize,
+        default_sender: HumanAddr,
+        default_sender_two: HumanAddr,
+        default_sender_owner: HumanAddr,
+    }
+    fn before_all() -> BeforeAll {
+        BeforeAll {
+            default_length: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k").len(),
+            default_sender: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
+            default_sender_two: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q008"),
+            default_sender_owner: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"),
+        }
+    }
+
+
+
 
     fn default_init<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
         const DENOM_STABLE: &str = "ust";
@@ -1534,20 +1552,7 @@ mod tests {
         .unwrap();
     }
 
-    struct BeforeAll {
-        default_length: usize,
-        default_sender: HumanAddr,
-        default_sender_two: HumanAddr,
-        default_sender_owner: HumanAddr,
-    }
-    fn before_all() -> BeforeAll {
-        BeforeAll {
-            default_length: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k").len(),
-            default_sender: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
-            default_sender_two: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q008"),
-            default_sender_owner: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"),
-        }
-    }
+
 
     #[test]
     fn proper_init() {
