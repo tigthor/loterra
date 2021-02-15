@@ -55,6 +55,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
         loterra_contract_address: deps.api.canonical_address(&msg.loterra_contract_address)?,
         safe_lock: false,
+        last_winning_number: "".to_string()
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -313,10 +314,13 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         .human_address(&state.terrand_contract_address.clone())?;
     let res = encode_msg_query(msg, terrand_human)?;
     let res = wrapper_msg_terrand(&deps, res)?;
-
+    let randomness_hash = String::from_utf8(res.randomness.clone().into()).unwrap();
+    state.last_winning_number = randomness_hash.clone();
+    /*println!("{:?}",x);
     let randomness = hex::encode(res.randomness.to_base64());
-    let randomness_hash = randomness;
-
+    println!("{}", randomness);
+    let randomness_hash = randomness;*/
+    println!("{}", randomness_hash);
     let n = randomness_hash
         .char_indices()
         .rev()
@@ -505,6 +509,7 @@ fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
     query: QueryRequest<Empty>,
 ) -> StdResult<LoterraBalanceResponse> {
     let res: LoterraBalanceResponse = deps.querier.query(&query)?;
+
     Ok(res)
 }
 
@@ -1502,6 +1507,7 @@ mod tests {
     use cosmwasm_std::testing::{mock_dependencies, mock_env, MockApi, MockStorage};
     use cosmwasm_std::StdError::GenericErr;
     use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128};
+    use crate::mock_querier::mock_dependencies_custom;
 
     struct BeforeAll {
         default_length: usize,
@@ -1518,10 +1524,8 @@ mod tests {
         }
     }
 
-
-
-
     fn default_init<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
+
         const DENOM_STABLE: &str = "ust";
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
@@ -1551,8 +1555,6 @@ mod tests {
         )
         .unwrap();
     }
-
-
 
     #[test]
     fn proper_init() {
@@ -1958,7 +1960,8 @@ mod tests {
         #[test]
         fn contract_balance_sold_out() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
+            deps.querier.with_token_balances(Uint128(0));
             default_init(&mut deps);
             let res = handle_public_sale(
                 &mut deps,
@@ -1983,13 +1986,8 @@ mod tests {
         #[test]
         fn contract_balance_not_enough() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(900),
-                }],
-            );
+            let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
+            deps.querier.with_token_balances(Uint128(900));
             default_init(&mut deps);
             let res = handle_public_sale(
                 &mut deps,
@@ -2001,6 +1999,7 @@ mod tests {
                     }],
                 ),
             );
+            println!("{:?}", res);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2146,13 +2145,8 @@ mod tests {
         #[test]
         fn success() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(900),
-                }],
-            );
+            let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
+            deps.querier.with_token_balances(Uint128(900));
             default_init(&mut deps);
             let state_before = config(&mut deps.storage).load().unwrap();
             let env = mock_env(
@@ -2167,13 +2161,10 @@ mod tests {
 
             assert_eq!(
                 res.messages[0],
-                CosmosMsg::Bank(BankMsg::Send {
-                    from_address: env.contract.address.clone(),
-                    to_address: before_all.default_sender,
-                    amount: vec![Coin {
-                        denom: "lota".to_string(),
-                        amount: Uint128(100)
-                    }]
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps.api.human_address(&state_after.loterra_contract_address).unwrap(),
+                    msg: Binary::from(r#"{"transfer":{"recipient":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007","amount":"100"}}"#.as_bytes()),
+                    send: vec![]
                 })
             );
             assert!(state_after.token_holder_supply > state_before.token_holder_supply);
@@ -2263,13 +2254,11 @@ mod tests {
         #[test]
         fn multi_contract_call_terrand() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
+            let mut deps = mock_dependencies_custom(before_all.default_length, &[Coin {
+                denom: "ust".to_string(),
+                amount: Uint128(9_000_000),
+            }]);
+
             default_init(&mut deps);
             let state = config(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
@@ -2363,16 +2352,15 @@ mod tests {
         #[test]
         fn only_token_holders_can_claim_rewards() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
+            let mut deps = mock_dependencies_custom(before_all.default_length, &[Coin {
+                denom: "ust".to_string(),
+                amount: Uint128(9_000_000),
+            }]);
+
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_reward(&mut deps, env);
+            println!("{:?}", res);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2387,32 +2375,27 @@ mod tests {
         #[test]
         fn need_1_percent_to_be_able_to_claim() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
+            let mut deps =  mock_dependencies_custom(before_all.default_length, &[Coin {
+                denom: "ust".to_string(),
+                amount: Uint128(9_000_000),
+            }]);
+            deps.querier.with_token_balances(Uint128(1_000));
+
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.holders_rewards = Uint128(1_000_000);
+            state.token_holder_supply= Uint128(1_000_000);
             config(&mut deps.storage).save(&state).unwrap();
-            deps.querier.update_balance(
-                before_all.default_sender.clone(),
-                vec![Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(1_000),
-                }],
-            );
+
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_reward(&mut deps, env);
+            println!("{:?}", res);
             match res {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
                 }) => {
-                    assert_eq!(msg, "You need at least 1% of total shares to claim reward")
+                    assert_eq!(msg, "You need at least 1% of total shares to claim rewards")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2420,29 +2403,37 @@ mod tests {
         #[test]
         fn success() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
+            let mut deps = mock_dependencies_custom(before_all.default_length, &[
+                Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }]);
+            deps.querier.with_token_balances(Uint128(10_000));
+               /* mock_dependencies(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
                 }],
-            );
+            );*/
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.holders_rewards = Uint128(1_000_000);
+            state.holders_rewards = Uint128(9_000_000);
+            state.token_holder_supply= Uint128(1_000_000);
             config(&mut deps.storage).save(&state).unwrap();
-            deps.querier.update_balance(
-                before_all.default_sender.clone(),
-                vec![Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(10_000),
-                }],
-            );
+
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let _res = handle_reward(&mut deps, env.clone());
+            let res = handle_reward(&mut deps, env.clone()).unwrap();
+
+            assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
+                from_address: env.contract.address.clone(),
+                to_address: before_all.default_sender.clone(),
+                amount: vec![Coin { denom: "ust".to_string(), amount: Uint128(90000) }]
+            }));
 
             //Handle claiming multiple times within the time frame
             let res = handle_reward(&mut deps, env.clone());
+            println!("{:?}", res);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2572,6 +2563,7 @@ mod tests {
                     amount: Uint128(0),
                 }],
             );
+
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
             state_before.jackpot_reward = Uint128(1_000_000);
@@ -3579,6 +3571,7 @@ mod tests {
                 contract_migration_address: Option::from(HumanAddr::from("newAddress".to_string())),
             };
             let _res = handle(&mut deps, env, msg).unwrap();
+            println!("{:?}", _res);
         }
         #[test]
         fn do_not_send_funds() {
@@ -3706,13 +3699,13 @@ mod tests {
         #[test]
         fn success_with_passed() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
+            let mut deps = mock_dependencies_custom(before_all.default_length,
+                                                    &[Coin {
+                                                        denom: "ust".to_string(),
+                                                        amount: Uint128(9_000_000),
+                                                    }]);
+
+            deps.querier.with_token_balances(Uint128(200_000));
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
@@ -3722,13 +3715,7 @@ mod tests {
                 poll_id: 1,
                 approve: true,
             };
-            deps.querier.update_balance(
-                before_all.default_sender.clone(),
-                vec![Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(100_000),
-                }],
-            );
+
             let _res = handle(&mut deps, env.clone(), msg);
 
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
@@ -3747,22 +3734,17 @@ mod tests {
                 .unwrap();
             assert_eq!(poll_state.status, PollStatus::Passed);
 
+
+            let env = mock_env(before_all.default_sender_owner.clone(), &[]);
             create_poll_security_migration(&mut deps, env.clone());
-            let _env = mock_env(before_all.default_sender.clone(), &[]);
-            let _msg = HandleMsg::Vote {
+            let msg = HandleMsg::Vote {
                 poll_id: 2,
                 approve: true,
             };
-            deps.querier.update_balance(
-                before_all.default_sender.clone(),
-                vec![Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(100_000),
-                }],
-            );
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
         }
     }
-    mod switch {
+    mod safe_lock {
         use super::*;
         // handle_switch
 
