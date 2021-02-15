@@ -55,7 +55,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
         loterra_contract_address: deps.api.canonical_address(&msg.loterra_contract_address)?,
         safe_lock: false,
-        last_winning_number: "".to_string()
+        last_winning_number: "".to_string(),
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -93,7 +93,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
         HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
         HandleMsg::SafeLock {} => handle_switch(deps, env),
-        HandleMsg::Renounce {} => handle_renounce(deps, env)
+        HandleMsg::Renounce {} => handle_renounce(deps, env),
     }
 }
 
@@ -156,7 +156,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     let state = config(&mut deps.storage).load()?;
     if state.safe_lock {
         return Err(StdError::generic_err(
-            "Contract deactivated for preventing security issue found",
+            "Contract deactivated for update or/and preventing security issue",
         ));
     }
     // Regex to check if the combination is allowed
@@ -267,7 +267,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     if state.safe_lock {
         return Err(StdError::generic_err(
-            "Contract deactivated for preventing security issue found",
+            "Contract deactivated for update or/and preventing security issue",
         ));
     }
 
@@ -518,7 +518,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     let mut state = config(&mut deps.storage).load()?;
     if state.safe_lock {
         return Err(StdError::generic_err(
-            "Contract deactivated for preventing security issue found",
+            "Contract deactivated for update or/and preventing security issue",
         ));
     }
     // Public sale expire after blockTime
@@ -612,7 +612,7 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     let mut state = config(&mut deps.storage).load()?;
     if state.safe_lock {
         return Err(StdError::generic_err(
-            "Contract deactivated for preventing security issue found",
+            "Contract deactivated for update or/and preventing security issue",
         ));
     }
     // convert the sender to canonical address
@@ -660,18 +660,22 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     }
 
     // Insufficient amount in contract
-    if balance_contract.amount.u128() < state.holders_rewards.u128(){
-        return Err(StdError::generic_err("Insufficient balance to allow rewards"));
+    if balance_contract.amount.u128() < state.holders_rewards.u128() {
+        return Err(StdError::generic_err(
+            "Insufficient balance to allow rewards",
+        ));
     }
 
-    let reward_per_token = state.holders_rewards.u128() as f64 / state.token_holder_supply.u128() as f64;
+    let reward_per_token =
+        state.holders_rewards.u128() as f64 / state.token_holder_supply.u128() as f64;
     let reward_float = lottera_balance_sender.balance.u128() as f64 * reward_per_token;
-    let reward = Uint128( reward_float as u128);
+    let reward = Uint128(reward_float as u128);
 
     if reward.u128() <= 0 {
-        return Err(StdError::generic_err(
-            format!("You need at least {}lota to claim this reward", (1.0 / reward_float).ceil())
-        ));
+        return Err(StdError::generic_err(format!(
+            "You need at least {}lota to claim this reward",
+            (1.0 / reward_float).ceil()
+        )));
     }
     // Save the new state
     config(&mut deps.storage).save(&state)?;
@@ -711,7 +715,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     let state = config(&mut deps.storage).load()?;
     if state.safe_lock {
         return Err(StdError::generic_err(
-            "Contract deactivated for preventing security issue found",
+            "Contract deactivated for update or/and preventing security issue",
         ));
     }
     let sender_to_canonical = deps.api.canonical_address(&env.message.sender).unwrap();
@@ -1499,11 +1503,11 @@ terra10pyejy66429refv3g35g2t7am0was7ya7kz2a4
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mock_querier::mock_dependencies_custom;
     use crate::msg::{HandleMsg, InitMsg};
     use cosmwasm_std::testing::{mock_dependencies, mock_env, MockApi, MockStorage};
     use cosmwasm_std::StdError::GenericErr;
     use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128};
-    use crate::mock_querier::mock_dependencies_custom;
 
     struct BeforeAll {
         default_length: usize,
@@ -1521,7 +1525,6 @@ mod tests {
     }
 
     fn default_init<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
-
         const DENOM_STABLE: &str = "ust";
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
@@ -1638,7 +1641,7 @@ mod tests {
                 }) => {
                     assert_eq!(
                         msg,
-                        "Contract deactivated for preventing security issue found"
+                        "Contract deactivated for update or/and preventing security issue"
                     )
                 }
                 _ => panic!("Unexpected error"),
@@ -1947,7 +1950,7 @@ mod tests {
                 }) => {
                     assert_eq!(
                         msg,
-                        "Contract deactivated for preventing security issue found"
+                        "Contract deactivated for update or/and preventing security issue"
                     )
                 }
                 _ => panic!("Unexpected error"),
@@ -2186,7 +2189,7 @@ mod tests {
                 }) => {
                     assert_eq!(
                         msg,
-                        "Contract deactivated for preventing security issue found"
+                        "Contract deactivated for update or/and preventing security issue"
                     )
                 }
                 _ => panic!("Unexpected error"),
@@ -2250,10 +2253,13 @@ mod tests {
         #[test]
         fn multi_contract_call_terrand() {
             let before_all = before_all();
-            let mut deps = mock_dependencies_custom(before_all.default_length, &[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
 
             default_init(&mut deps);
             let state = config(&mut deps.storage).load().unwrap();
@@ -2289,7 +2295,7 @@ mod tests {
                 }) => {
                     assert_eq!(
                         msg,
-                        "Contract deactivated for preventing security issue found"
+                        "Contract deactivated for update or/and preventing security issue"
                     )
                 }
                 _ => panic!("Unexpected error"),
@@ -2348,10 +2354,13 @@ mod tests {
         #[test]
         fn only_token_holders_can_claim_rewards() {
             let before_all = before_all();
-            let mut deps = mock_dependencies_custom(before_all.default_length, &[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
 
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
@@ -2371,16 +2380,19 @@ mod tests {
         #[test]
         fn need_min_amount_holding_to_claim() {
             let before_all = before_all();
-            let mut deps =  mock_dependencies_custom(before_all.default_length, &[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
             deps.querier.with_token_balances(Uint128(1));
 
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.holders_rewards = Uint128(100_000);
-            state.token_holder_supply= Uint128(1_000_000);
+            state.token_holder_supply = Uint128(1_000_000);
             config(&mut deps.storage).save(&state).unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
@@ -2397,36 +2409,70 @@ mod tests {
             }
         }
         #[test]
-        fn success() {
+        fn balance_less_than_reward() {
             let before_all = before_all();
-            let mut deps = mock_dependencies_custom(before_all.default_length, &[
-                Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }]);
-            deps.querier.with_token_balances(Uint128(1_000));
-               /* mock_dependencies(
+            let mut deps = mock_dependencies_custom(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
                 }],
-            );*/
+            );
+            deps.querier.with_token_balances(Uint128(1));
+
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.holders_rewards = Uint128(123_030);
-            state.token_holder_supply= Uint128(7_000_000);
+            state.holders_rewards = Uint128(10_100_000);
+            state.token_holder_supply = Uint128(1_000_000);
             config(&mut deps.storage).save(&state).unwrap();
+
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_reward(&mut deps, env);
+            println!("{:?}", res);
+            match res {
+                Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => {
+                    assert_eq!(msg, "Insufficient balance to allow rewards")
+                }
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
+        fn success() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            deps.querier.with_token_balances(Uint128(1_000));
+
+            default_init(&mut deps);
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+            state_before.holders_rewards = Uint128(123_030);
+            state_before.token_holder_supply = Uint128(7_000_000);
+            config(&mut deps.storage).save(&state_before).unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_reward(&mut deps, env.clone()).unwrap();
 
-            assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
-                from_address: env.contract.address.clone(),
-                to_address: before_all.default_sender.clone(),
-                amount: vec![Coin { denom: "ust".to_string(), amount: Uint128(17) }]
-            }));
-
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Bank(BankMsg::Send {
+                    from_address: env.contract.address.clone(),
+                    to_address: before_all.default_sender.clone(),
+                    amount: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(17)
+                    }]
+                })
+            );
+            let mut state_after = config(&mut deps.storage).load().unwrap();
+            assert_eq!(state_after.holders_rewards, state_before.holders_rewards);
             //Handle claiming multiple times within the time frame
             let res = handle_reward(&mut deps, env.clone());
             println!("{:?}", res);
@@ -2461,7 +2507,7 @@ mod tests {
                 }) => {
                     assert_eq!(
                         msg,
-                        "Contract deactivated for preventing security issue found"
+                        "Contract deactivated for update or/and preventing security issue"
                     )
                 }
                 _ => panic!("Unexpected error"),
@@ -3695,11 +3741,13 @@ mod tests {
         #[test]
         fn success_with_passed() {
             let before_all = before_all();
-            let mut deps = mock_dependencies_custom(before_all.default_length,
-                                                    &[Coin {
-                                                        denom: "ust".to_string(),
-                                                        amount: Uint128(9_000_000),
-                                                    }]);
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
 
             deps.querier.with_token_balances(Uint128(200_000));
             default_init(&mut deps);
@@ -3729,7 +3777,6 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             assert_eq!(poll_state.status, PollStatus::Passed);
-
 
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
             create_poll_security_migration(&mut deps, env.clone());
@@ -3806,7 +3853,10 @@ mod tests {
 
             let res = handle_renounce(&mut deps, env);
             match res {
-                Err(GenericErr {msg, backtrace:None}) => {
+                Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => {
                     assert_eq!(msg, "Contract is locked");
                 }
                 _ => panic!("Unexpected error"),
@@ -3823,8 +3873,16 @@ mod tests {
             let res = handle_renounce(&mut deps, env.clone()).unwrap();
             assert_eq!(res.messages.len(), 0);
             let state = config(&mut deps.storage).load().unwrap();
-            assert_ne!(state.admin, deps.api.canonical_address(&before_all.default_sender_owner).unwrap());
-            assert_eq!(state.admin, deps.api.canonical_address(&env.contract.address).unwrap());
+            assert_ne!(
+                state.admin,
+                deps.api
+                    .canonical_address(&before_all.default_sender_owner)
+                    .unwrap()
+            );
+            assert_eq!(
+                state.admin,
+                deps.api.canonical_address(&env.contract.address).unwrap()
+            );
         }
     }
 }
