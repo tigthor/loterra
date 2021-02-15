@@ -94,6 +94,16 @@
                 }
               ]
             },
+            "contract_migration_address": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "description": {
               "type": "string"
             },
@@ -184,9 +194,36 @@
           }
         }
       }
+    },
+    {
+      "description": "Admin Security owner can switch on off to prevent exploit",
+      "type": "object",
+      "required": [
+        "safe_lock"
+      ],
+      "properties": {
+        "safe_lock": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "description": "Admin renounce and restore contract address to admin for full decentralization",
+      "type": "object",
+      "required": [
+        "renounce"
+      ],
+      "properties": {
+        "renounce": {
+          "type": "object"
+        }
+      }
     }
   ],
   "definitions": {
+    "HumanAddr": {
+      "type": "string"
+    },
     "Proposal": {
       "type": "string",
       "enum": [
@@ -197,6 +234,7 @@
         "JackpotRewardPercentage",
         "ClaimEveryBlock",
         "AmountToRegister",
+        "SecurityMigration",
         "NotExist"
       ]
     },

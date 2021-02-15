@@ -3,34 +3,34 @@
   "title": "ConfigResponse",
   "type": "object",
   "required": [
+    "admin",
     "block_time_play",
     "claim_reward",
     "combination_len",
-    "denom_share",
     "denom_stable",
-    "denom_stable_decimal",
-    "drand_genesis_time",
-    "drand_next_round_security",
-    "drand_period",
     "every_block_time_play",
     "fee_for_drand_worker_in_percentage",
     "holders_max_percentage_reward",
     "holders_rewards",
     "jackpot_percentage_reward",
     "jackpot_reward",
-    "max_description_length",
-    "min_description_length",
+    "last_winning_number",
+    "loterra_contract_address",
     "poll_count",
-    "poll_end_height",
+    "poll_default_end_height",
     "price_per_ticket_to_register",
     "prize_rank_winner_percentage",
     "public_sale_end_block",
+    "safe_lock",
     "terrand_contract_address",
     "token_holder_percentage_fee_reward",
     "token_holder_supply",
     "worker_drand_max_percentage_reward"
   ],
   "properties": {
+    "admin": {
+      "$ref": "#/definitions/CanonicalAddr"
+    },
     "block_time_play": {
       "type": "integer",
       "format": "uint64",
@@ -47,29 +47,8 @@
       "format": "uint8",
       "minimum": 0.0
     },
-    "denom_share": {
-      "type": "string"
-    },
     "denom_stable": {
       "type": "string"
-    },
-    "denom_stable_decimal": {
-      "$ref": "#/definitions/Uint128"
-    },
-    "drand_genesis_time": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "drand_next_round_security": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "drand_period": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
     },
     "every_block_time_play": {
       "type": "integer",
@@ -97,22 +76,18 @@
     "jackpot_reward": {
       "$ref": "#/definitions/Uint128"
     },
-    "max_description_length": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
+    "last_winning_number": {
+      "type": "string"
     },
-    "min_description_length": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
+    "loterra_contract_address": {
+      "$ref": "#/definitions/CanonicalAddr"
     },
     "poll_count": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "poll_end_height": {
+    "poll_default_end_height": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
@@ -133,8 +108,11 @@
       "format": "uint64",
       "minimum": 0.0
     },
+    "safe_lock": {
+      "type": "boolean"
+    },
     "terrand_contract_address": {
-      "$ref": "#/definitions/HumanAddr"
+      "$ref": "#/definitions/CanonicalAddr"
     },
     "token_holder_percentage_fee_reward": {
       "type": "integer",
@@ -157,9 +135,6 @@
     },
     "CanonicalAddr": {
       "$ref": "#/definitions/Binary"
-    },
-    "HumanAddr": {
-      "type": "string"
     },
     "Uint128": {
       "type": "string"
