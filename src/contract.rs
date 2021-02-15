@@ -666,16 +666,13 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
         ));
     }
 
-    let reward_per_token =
-        state.holders_rewards.u128() as f64 / state.token_holder_supply.u128() as f64;
-    let reward_float = lottera_balance_sender.balance.u128() as f64 * reward_per_token;
-    let reward = Uint128(reward_float as u128);
-
+    let reward = lottera_balance_sender
+        .balance
+        .multiply_ratio(state.holders_rewards, state.token_holder_supply);
     if reward.u128() <= 0 {
-        return Err(StdError::generic_err(format!(
-            "You need at least {}lota to claim this reward",
-            (1.0 / reward_float).ceil()
-        )));
+        return Err(StdError::generic_err(
+            "You need more shares of lota to claim this reward",
+        ));
     }
     // Save the new state
     config(&mut deps.storage).save(&state)?;
@@ -2403,7 +2400,7 @@ mod tests {
                     msg,
                     backtrace: None,
                 }) => {
-                    assert_eq!(msg, "You need at least 10lota to claim this reward")
+                    assert_eq!(msg, "You need more shares of lota to claim this reward")
                 }
                 _ => panic!("Unexpected error"),
             }
