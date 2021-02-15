@@ -1,10 +1,12 @@
-use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
+
 use cosmwasm_std::{from_slice, to_binary, Api, CanonicalAddr, Coin, Empty, Extern, HumanAddr, Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, Binary, StdResult};
 use cosmwasm_storage::to_length_prefixed;
 use std::collections::HashMap;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use crate::msg::QueryMsg;
+use cosmwasm_std::testing::{MockStorage, MockApi, MOCK_CONTRACT_ADDR, MockQuerier};
+
 
 pub fn mock_dependencies_custom(
     canonical_length: usize,
@@ -77,7 +79,7 @@ impl Querier for WasmMockQuerier {
 impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
         match &request {
-            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
+            QueryRequest::Wasm(WasmQuery::Smart { contract_addr, .. }) => {
                 if contract_addr == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5loterra"){
                     println!("{:?}", request);
                     let msg_balance = LotteraBalanceResponse{ balance: self.lottery_balance_response.balance};
@@ -94,7 +96,7 @@ impl WasmMockQuerier {
     }
 }
 impl WasmMockQuerier {
-    pub fn new<A: Api>(base: MockQuerier<Empty>, canonical_length: usize, _api: A) -> Self {
+    pub fn new<A: Api>(base: MockQuerier<Empty>, _canonical_length: usize, _api: A) -> Self {
         WasmMockQuerier {
             base,
             terrand_response: TerrandResponse::default(),
