@@ -36,6 +36,7 @@ pub struct State {
     pub terrand_contract_address: CanonicalAddr,
     pub loterra_contract_address: CanonicalAddr,
     pub safe_lock: bool,
+    pub last_winning_number: String,
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {

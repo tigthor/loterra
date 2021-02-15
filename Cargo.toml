@@ -40,4 +40,3 @@ hex = "0.4.2"
 
 [dev-dependencies]
 cosmwasm-schema = { version = "0.10.1" }
-
