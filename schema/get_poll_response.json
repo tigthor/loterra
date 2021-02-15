@@ -26,6 +26,16 @@
       "format": "uint64",
       "minimum": 0.0
     },
+    "migration_address": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/HumanAddr"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "prize_per_rank": {
       "type": "array",
       "items": {

@@ -4,11 +4,10 @@
   "type": "object",
   "required": [
     "block_time_play",
-    "denom_share",
     "denom_stable",
-    "denom_stable_decimal",
     "every_block_time_play",
-    "poll_end_height",
+    "loterra_contract_address",
+    "poll_default_end_height",
     "public_sale_end_block",
     "terrand_contract_address",
     "token_holder_supply"
@@ -19,21 +18,18 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "denom_share": {
-      "type": "string"
-    },
     "denom_stable": {
       "type": "string"
-    },
-    "denom_stable_decimal": {
-      "$ref": "#/definitions/Uint128"
     },
     "every_block_time_play": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
     },
-    "poll_end_height": {
+    "loterra_contract_address": {
+      "$ref": "#/definitions/HumanAddr"
+    },
+    "poll_default_end_height": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0

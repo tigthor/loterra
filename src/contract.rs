@@ -633,9 +633,9 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
         .api
         .human_address(&state.loterra_contract_address.clone())?;
     let res = encode_msg_query(msg, lottera_human)?;
-    let lottera_balance = wrapper_msg_loterra(&deps, res)?;
+    let lottera_balance_sender = wrapper_msg_loterra(&deps, res)?;
 
-    if lottera_balance.balance.is_zero() {
+    if lottera_balance_sender.balance.is_zero() {
         return Err(StdError::generic_err("No rewards to claim"));
     }
 
@@ -660,17 +660,19 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     }
     // Get the percentage of shareholder
     let share_holder_percentage =
-        lottera_balance.balance.u128() as u64 * 100 / state.token_holder_supply.u128() as u64;
+        lottera_balance_sender.balance.u128() as u64 * 100 / state.token_holder_supply.u128() as u64;
     if share_holder_percentage == 0 {
         return Err(StdError::generic_err(
             "You need at least 1% of total shares to claim rewards",
         ));
     }
-
+    println!("{}", share_holder_percentage);
     // Calculate the reward
     let reward = state
         .holders_rewards
         .mul(Decimal::percent(share_holder_percentage));
+
+    println!("rewards: {}", reward);
 
     // Update the holdersReward
     state.holders_rewards = state.holders_rewards.sub(reward).unwrap();
