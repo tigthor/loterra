@@ -86,7 +86,7 @@ impl WasmMockQuerier {
                     return Ok(to_binary(&msg_balance));
                 }
                 else if contract_addr == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand") {
-                    let msg_terrand = TerrandResponse{ randomness: Binary::from("fdff08c1521a1977dc2b0e15ecc7c1cf3da696067784d201fa9a4fa19ebb5e4b".as_bytes()), worker: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand") };
+                    let msg_terrand = TerrandResponse{ randomness: Binary::from("/f8IwVIaGXfcKw4V7MfBzz2mlgZ3hNIB+ppPoZ67Xks=".as_bytes()), worker: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand") };
                     return Ok(to_binary(&msg_terrand));
                 }
                 panic!("DO NOT ENTER HERE")

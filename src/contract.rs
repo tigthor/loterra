@@ -314,13 +314,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         .human_address(&state.terrand_contract_address.clone())?;
     let res = encode_msg_query(msg, terrand_human)?;
     let res = wrapper_msg_terrand(&deps, res)?;
-    let randomness_hash = String::from_utf8(res.randomness.clone().into()).unwrap();
+    let randomness_hash = hex::encode(res.randomness.as_slice());
+
     state.last_winning_number = randomness_hash.clone();
-    /*println!("{:?}",x);
-    let randomness = hex::encode(res.randomness.to_base64());
-    println!("{}", randomness);
-    let randomness_hash = randomness;*/
-    println!("{}", randomness_hash);
+
     let n = randomness_hash
         .char_indices()
         .rev()
