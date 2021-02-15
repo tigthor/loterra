@@ -658,24 +658,21 @@ pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
     if balance_contract.amount.is_zero() {
         return Err(StdError::generic_err("Contract balance is empty"));
     }
-    // Get the percentage of shareholder
-    let share_holder_percentage =
-        lottera_balance_sender.balance.u128() as u64 * 100 / state.token_holder_supply.u128() as u64;
-    if share_holder_percentage == 0 {
+
+    // Insufficient amount in contract
+    if balance_contract.amount.u128() < state.holders_rewards.u128(){
+        return Err(StdError::generic_err("Insufficient balance to allow rewards"));
+    }
+
+    let reward_per_token = state.holders_rewards.u128() as f64 / state.token_holder_supply.u128() as f64;
+    let reward_float = lottera_balance_sender.balance.u128() as f64 * reward_per_token;
+    let reward = Uint128( reward_float as u128);
+
+    if reward.u128() <= 0 {
         return Err(StdError::generic_err(
-            "You need at least 1% of total shares to claim rewards",
+            format!("You need at least {}lota to claim this reward", (1.0 / reward_float).ceil())
         ));
     }
-    println!("{}", share_holder_percentage);
-    // Calculate the reward
-    let reward = state
-        .holders_rewards
-        .mul(Decimal::percent(share_holder_percentage));
-
-    println!("rewards: {}", reward);
-
-    // Update the holdersReward
-    state.holders_rewards = state.holders_rewards.sub(reward).unwrap();
     // Save the new state
     config(&mut deps.storage).save(&state)?;
 
@@ -2372,17 +2369,17 @@ mod tests {
         }
 
         #[test]
-        fn need_1_percent_to_be_able_to_claim() {
+        fn need_min_amount_holding_to_claim() {
             let before_all = before_all();
             let mut deps =  mock_dependencies_custom(before_all.default_length, &[Coin {
                 denom: "ust".to_string(),
                 amount: Uint128(9_000_000),
             }]);
-            deps.querier.with_token_balances(Uint128(1_000));
+            deps.querier.with_token_balances(Uint128(1));
 
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.holders_rewards = Uint128(1_000_000);
+            state.holders_rewards = Uint128(100_000);
             state.token_holder_supply= Uint128(1_000_000);
             config(&mut deps.storage).save(&state).unwrap();
 
@@ -2394,7 +2391,7 @@ mod tests {
                     msg,
                     backtrace: None,
                 }) => {
-                    assert_eq!(msg, "You need at least 1% of total shares to claim rewards")
+                    assert_eq!(msg, "You need at least 10lota to claim this reward")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2407,7 +2404,7 @@ mod tests {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
                 }]);
-            deps.querier.with_token_balances(Uint128(10_000));
+            deps.querier.with_token_balances(Uint128(1_000));
                /* mock_dependencies(
                 before_all.default_length,
                 &[Coin {
@@ -2417,8 +2414,8 @@ mod tests {
             );*/
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.holders_rewards = Uint128(9_000_000);
-            state.token_holder_supply= Uint128(1_000_000);
+            state.holders_rewards = Uint128(123_030);
+            state.token_holder_supply= Uint128(7_000_000);
             config(&mut deps.storage).save(&state).unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
@@ -2427,7 +2424,7 @@ mod tests {
             assert_eq!(res.messages[0], CosmosMsg::Bank(BankMsg::Send {
                 from_address: env.contract.address.clone(),
                 to_address: before_all.default_sender.clone(),
-                amount: vec![Coin { denom: "ust".to_string(), amount: Uint128(90000) }]
+                amount: vec![Coin { denom: "ust".to_string(), amount: Uint128(17) }]
             }));
 
             //Handle claiming multiple times within the time frame
