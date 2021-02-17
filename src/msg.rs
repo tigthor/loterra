@@ -13,7 +13,8 @@ pub struct InitMsg {
     pub poll_default_end_height: u64,
     pub token_holder_supply: Uint128,
     pub terrand_contract_address: HumanAddr,
-    pub loterra_contract_address: HumanAddr,
+    pub loterra_cw20_contract_address: HumanAddr,
+    pub lottera_staking_contract_address: HumanAddr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

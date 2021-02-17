@@ -16,7 +16,7 @@ use crate::state::{
 };
 
 use hex;
-use std::ops::{Mul, Sub};
+use std::ops::{Add, Mul, Sub};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -51,7 +51,12 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         worker_drand_max_percentage_reward: 10,
         price_per_ticket_to_register: Uint128(1_000_000),
         terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
-        loterra_contract_address: deps.api.canonical_address(&msg.loterra_contract_address)?,
+        loterra_cw20_contract_address: deps
+            .api
+            .canonical_address(&msg.loterra_cw20_contract_address)?,
+        lottera_staking_contract_address: deps
+            .api
+            .canonical_address(&msg.lottera_staking_contract_address)?,
         safe_lock: false,
         last_winning_number: "".to_string(),
     };
@@ -334,6 +339,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let fee_for_drand_worker = jackpot.mul(Decimal::percent(
         state.fee_for_drand_worker_in_percentage as u64,
     ));
+    // Double adjust fee to divide by two
+    let fee_for_drand_worker = fee_for_drand_worker.mul(Decimal::percent(
+        state.fee_for_drand_worker_in_percentage as u64,
+    ));
     // Amount token holders can claim of the reward is a fee
     let token_holder_fee_reward = jackpot.mul(Decimal::percent(
         state.token_holder_percentage_fee_reward as u64,
@@ -345,7 +354,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     ));
     // The jackpot after worker fee applied
     let mut jackpot_after = (jackpot - fee_for_drand_worker).unwrap();
-
+    let mut holders_rewards = Uint128::zero();
     if !store.combination.is_empty() {
         let mut count = 0;
         for combination in store.combination {
@@ -360,6 +369,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             if count == winning_combination.len() {
                 // Set the new jackpot after fee
                 jackpot_after = (jackpot - total_fee).unwrap();
+                holders_rewards = holders_rewards.add(token_holder_fee_reward);
 
                 let mut data_winner: Vec<WinnerInfoState> = vec![];
                 for winner_address in combination.addresses {
@@ -446,14 +456,31 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         }
     }
 
-    let msg = BankMsg::Send {
-        from_address: env.contract.address,
+    let msg_fee_worker = BankMsg::Send {
+        from_address: env.contract.address.clone(),
         to_address: res.worker,
         amount: vec![Coin {
             denom: state.denom_stable.clone(),
             amount: fee_for_drand_worker,
         }],
     };
+
+    let mut all_msg = vec![msg_fee_worker.into()];
+
+    if !holders_rewards.is_zero() {
+        let msg_holders_rewards = BankMsg::Send {
+            from_address: env.contract.address,
+            to_address: deps
+                .api
+                .human_address(&state.lottera_staking_contract_address)?,
+            amount: vec![Coin {
+                denom: state.denom_stable.clone(),
+                amount: holders_rewards,
+            }],
+        };
+        all_msg.push(msg_holders_rewards.into());
+    }
+
     // Update the state
     state.jackpot_reward = jackpot_after;
 
@@ -471,7 +498,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
-        messages: vec![msg.into()],
+        messages: all_msg,
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -552,7 +579,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     };
     let lottera_human = deps
         .api
-        .human_address(&state.loterra_contract_address.clone())?;
+        .human_address(&state.loterra_cw20_contract_address.clone())?;
     let res_balance = encode_msg_query(msg_balance, lottera_human)?;
     let lottera_balance = wrapper_msg_loterra(&deps, res_balance)?;
 
@@ -574,7 +601,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     };
     let lottera_human = deps
         .api
-        .human_address(&state.loterra_contract_address.clone())?;
+        .human_address(&state.loterra_cw20_contract_address.clone())?;
     let res_transfer = encode_msg_execute(msg_transfer, lottera_human)?;
 
     state.token_holder_supply += sent;
@@ -1097,7 +1124,7 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
         };
         let lottera_human = deps
             .api
-            .human_address(&state.loterra_contract_address.clone())
+            .human_address(&state.loterra_cw20_contract_address.clone())
             .unwrap();
         let res = encode_msg_query(msg, lottera_human).unwrap();
         let lottera_balance = wrapper_msg_loterra(&deps, res).unwrap();
@@ -1373,7 +1400,8 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
 "poll_default_end_height": 30,
 "token_holder_supply": "1000000",
 "terrand_contract_address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k",
-"loterra_contract_address": "terra1jzxdryg2x8vdcwydhzddk68hrl4kve6yk43u8p"
+"loterra_cw20_contract_address": "terra1jzxdryg2x8vdcwydhzddk68hrl4kve6yk43u8p",
+"lottera_staking_contract_address": "terra1jzxdryg2x8vdcwydhzddk68hrl4kve6yk43u8p"
 }
 {"name":"loterra","symbol":"LOTA","decimals": 6,"initial_balances":[{"address":"terra1np82azjrpfr2ax77s854w4nyh9k63ng7vj26h0","amount":"5000000"}]}
 
@@ -1433,8 +1461,11 @@ mod tests {
             terrand_contract_address: HumanAddr::from(
                 "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand",
             ),
-            loterra_contract_address: HumanAddr::from(
-                "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5loterra",
+            loterra_cw20_contract_address: HumanAddr::from(
+                "terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20",
+            ),
+            lottera_staking_contract_address: HumanAddr::from(
+                "terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking",
             ),
         };
 
@@ -2052,7 +2083,7 @@ mod tests {
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: deps.api.human_address(&state_after.loterra_contract_address).unwrap(),
+                    contract_addr: deps.api.human_address(&state_after.loterra_cw20_contract_address).unwrap(),
                     msg: Binary::from(r#"{"transfer":{"recipient":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007","amount":"100"}}"#.as_bytes()),
                     send: vec![]
                 })
@@ -2156,14 +2187,102 @@ mod tests {
             let state = config(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play + 1000;
-            let res = handle_play(&mut deps, env.clone());
-            println!("{:?}", res);
-            /*match res {
-                Err(GenericErr{msg, backtrace: None, }) => {
-                    assert_eq!(msg, "Do not send funds with play")
-                },
-                _ => panic!("Unexpected error")
-            }*/
+            let res = handle_play(&mut deps, env.clone()).unwrap();
+            assert_eq!(res.messages.len(), 1);
+        }
+
+        #[test]
+        fn success() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+
+            default_init(&mut deps);
+            // register some combination
+            let msg = HandleMsg::Register {
+                combination: "1e3fab".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+            .unwrap();
+
+            let msg = HandleMsg::Register {
+                combination: "39493d".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender_two.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+            .unwrap();
+
+            let state = config(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            env.block.time = state.block_time_play + 1000;
+            let res = handle_play(&mut deps, env.clone()).unwrap();
+            assert_eq!(res.messages.len(), 2);
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Bank(BankMsg::Send {
+                    from_address: env.contract.address.clone(),
+                    to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20"),
+                    amount: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(720)
+                    }]
+                })
+            );
+            assert_eq!(
+                res.messages[1],
+                CosmosMsg::Bank(BankMsg::Send {
+                    from_address: env.contract.address.clone(),
+                    to_address: deps
+                        .api
+                        .human_address(&state.lottera_staking_contract_address)
+                        .unwrap(),
+                    amount: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(720000)
+                    }]
+                })
+            );
+
+            let store = winner_storage(&mut deps.storage)
+                .load(&1_u8.to_be_bytes())
+                .unwrap();
+            assert_ne!(store.winners.len(), 0);
+            assert!(!store.winners[0].claimed);
+            assert_eq!(
+                store.winners[0].address,
+                deps.api
+                    .canonical_address(&before_all.default_sender_two)
+                    .unwrap()
+            );
+            let state_after = config(&mut deps.storage).load().unwrap();
+            println!("{:?}", state_after.jackpot_reward);
+            assert_eq!(state.jackpot_reward, Uint128::zero());
+            assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
+            assert_eq!(state_after.last_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
         }
     }
     mod jackpot {
