@@ -19,8 +19,6 @@ pub struct State {
     pub every_block_time_play: u64,
     pub public_sale_end_block: u64,
     pub denom_stable: String,
-    pub claim_reward: Vec<CanonicalAddr>,
-    pub holders_rewards: Uint128,
     pub token_holder_supply: Uint128,
     pub combination_len: u8,
     pub jackpot_reward: Uint128,
