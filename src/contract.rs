@@ -40,8 +40,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         denom_stable: msg.denom_stable,
         token_holder_supply: msg.token_holder_supply,
         poll_default_end_height: msg.poll_default_end_height,
-        claim_reward: vec![],
-        holders_rewards: Uint128::zero(),
         combination_len: 6,
         jackpot_reward: Uint128::zero(),
         jackpot_percentage_reward: 80,
@@ -72,7 +70,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Register { combination } => handle_register(deps, env, combination),
         HandleMsg::Play {} => handle_play(deps, env),
         HandleMsg::PublicSale {} => handle_public_sale(deps, env),
-        HandleMsg::Reward {} => handle_reward(deps, env),
         HandleMsg::Jackpot {} => handle_jackpot(deps, env),
         HandleMsg::Proposal {
             description,
@@ -273,8 +270,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
-    // reset holders reward
-    state.holders_rewards = Uint128::zero();
+
     // Load combinations
     let store = query_all_combination(&deps).unwrap();
 
@@ -299,7 +295,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // Make the contract callable for everyone every x blocks
     if env.block.time > state.block_time_play {
         // Update the state
-        state.claim_reward = vec![];
         state.block_time_play = env.block.time + state.every_block_time_play;
     } else {
         return Err(StdError::generic_err(format!(
@@ -363,8 +358,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             }
 
             if count == winning_combination.len() {
-                // Set the reward for token holders
-                state.holders_rewards = token_holder_fee_reward;
                 // Set the new jackpot after fee
                 jackpot_after = (jackpot - total_fee).unwrap();
 
@@ -594,105 +587,6 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
             LogAttribute {
                 key: "action".to_string(),
                 value: "public sale".to_string(),
-            },
-            LogAttribute {
-                key: "to".to_string(),
-                value: env.message.sender.to_string(),
-            },
-        ],
-        data: None,
-    })
-}
-
-pub fn handle_reward<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-) -> StdResult<HandleResponse> {
-    // Load the state
-    let mut state = config(&mut deps.storage).load()?;
-    if state.safe_lock {
-        return Err(StdError::generic_err(
-            "Contract deactivated for update or/and preventing security issue",
-        ));
-    }
-    // convert the sender to canonical address
-    let sender = deps.api.canonical_address(&env.message.sender).unwrap();
-    // Ensure the sender not sending funds accidentally
-    if !env.message.sent_funds.is_empty() {
-        return Err(StdError::generic_err("Do not send funds with reward"));
-    }
-    if state.token_holder_supply.is_zero() {
-        return Err(StdError::Unauthorized { backtrace: None });
-    }
-
-    // Ensure sender have some reward tokens
-    let msg = QueryMsg::Balance {
-        address: env.message.sender.clone(),
-    };
-    let lottera_human = deps
-        .api
-        .human_address(&state.loterra_contract_address.clone())?;
-    let res = encode_msg_query(msg, lottera_human)?;
-    let lottera_balance_sender = wrapper_msg_loterra(&deps, res)?;
-
-    if lottera_balance_sender.balance.is_zero() {
-        return Err(StdError::generic_err("No rewards to claim"));
-    }
-
-    // Ensure sender only can claim one time every x blocks
-    if state
-        .claim_reward
-        .iter()
-        .any(|address| deps.api.human_address(address).unwrap() == env.message.sender.clone())
-    {
-        return Err(StdError::generic_err("Already claimed"));
-    }
-    // Add the sender to claimed state
-    state.claim_reward.push(sender.clone());
-
-    // Get the contract balance
-    let balance_contract = deps
-        .querier
-        .query_balance(env.contract.address.clone(), &state.denom_stable)?;
-    // Cancel if no amount in the contract
-    if balance_contract.amount.is_zero() {
-        return Err(StdError::generic_err("Contract balance is empty"));
-    }
-
-    // Insufficient amount in contract
-    if balance_contract.amount.u128() < state.holders_rewards.u128() {
-        return Err(StdError::generic_err(
-            "Insufficient balance to allow rewards",
-        ));
-    }
-
-    let reward = lottera_balance_sender
-        .balance
-        .multiply_ratio(state.holders_rewards, state.token_holder_supply);
-    if reward.u128() <= 0 {
-        return Err(StdError::generic_err(
-            "You need more shares of lota to claim this reward",
-        ));
-    }
-    // Save the new state
-    config(&mut deps.storage).save(&state)?;
-
-    let msg = BankMsg::Send {
-        from_address: env.contract.address,
-        to_address: deps.api.human_address(&sender).unwrap(),
-        amount: vec![Coin {
-            denom: state.denom_stable,
-            amount: reward,
-        }],
-    };
-
-    // Send the claimed tickets
-    Ok(HandleResponse {
-        messages: vec![msg.into()],
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "reward".to_string(),
             },
             LogAttribute {
                 key: "to".to_string(),
@@ -1472,7 +1366,7 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
     Ok(RoundResponse { next_round })
 }
 /*{
-"denom_stable":"uust",
+"denom_stable":"uusd",
 "block_time_play":1610566920,
 "every_block_time_play": 30,
 "public_sale_end_block": 2520000,
@@ -2270,218 +2164,6 @@ mod tests {
                 },
                 _ => panic!("Unexpected error")
             }*/
-        }
-    }
-    mod reward {
-        use super::*;
-
-        #[test]
-        fn security_active() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
-            let mut state = config(&mut deps.storage).load().unwrap();
-            state.safe_lock = true;
-            config(&mut deps.storage).save(&state).unwrap();
-            let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_reward(&mut deps, env);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn do_not_send_funds() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
-            default_init(&mut deps);
-            let env = mock_env(
-                before_all.default_sender.clone(),
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9),
-                }],
-            );
-            let res = handle_reward(&mut deps, env);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with reward")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn token_holder_supply_is_empty() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
-            default_init(&mut deps);
-            let mut state = config(&mut deps.storage).load().unwrap();
-            state.token_holder_supply = Uint128::zero();
-            config(&mut deps.storage).save(&state).unwrap();
-            let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_reward(&mut deps, env);
-            match res {
-                Err(StdError::Unauthorized { .. }) => {}
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn only_token_holders_can_claim_rewards() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
-
-            default_init(&mut deps);
-            let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_reward(&mut deps, env);
-            println!("{:?}", res);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => {
-                    assert_eq!(msg, "No rewards to claim")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-
-        #[test]
-        fn need_min_amount_holding_to_claim() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
-            deps.querier.with_token_balances(Uint128(1));
-
-            default_init(&mut deps);
-            let mut state = config(&mut deps.storage).load().unwrap();
-            state.holders_rewards = Uint128(100_000);
-            state.token_holder_supply = Uint128(1_000_000);
-            config(&mut deps.storage).save(&state).unwrap();
-
-            let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_reward(&mut deps, env);
-            println!("{:?}", res);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => {
-                    assert_eq!(msg, "You need more shares of lota to claim this reward")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn balance_less_than_reward() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
-            deps.querier.with_token_balances(Uint128(1));
-
-            default_init(&mut deps);
-            let mut state = config(&mut deps.storage).load().unwrap();
-            state.holders_rewards = Uint128(10_100_000);
-            state.token_holder_supply = Uint128(1_000_000);
-            config(&mut deps.storage).save(&state).unwrap();
-
-            let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_reward(&mut deps, env);
-            println!("{:?}", res);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Insufficient balance to allow rewards")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn success() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
-            deps.querier.with_token_balances(Uint128(1_000));
-
-            default_init(&mut deps);
-            let mut state_before = config(&mut deps.storage).load().unwrap();
-            state_before.holders_rewards = Uint128(123_030);
-            state_before.token_holder_supply = Uint128(7_000_000);
-            config(&mut deps.storage).save(&state_before).unwrap();
-
-            let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_reward(&mut deps, env.clone()).unwrap();
-
-            assert_eq!(
-                res.messages[0],
-                CosmosMsg::Bank(BankMsg::Send {
-                    from_address: env.contract.address.clone(),
-                    to_address: before_all.default_sender.clone(),
-                    amount: vec![Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(17)
-                    }]
-                })
-            );
-            let mut state_after = config(&mut deps.storage).load().unwrap();
-            assert_eq!(state_after.holders_rewards, state_before.holders_rewards);
-            //Handle claiming multiple times within the time frame
-            let res = handle_reward(&mut deps, env.clone());
-            println!("{:?}", res);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Already claimed")
-                }
-                _ => panic!("Unexpected error"),
-            }
         }
     }
     mod jackpot {

@@ -25,8 +25,6 @@ pub enum HandleMsg {
     Play {},
     /// Public sale buy the token holders with 1:1 ratio
     PublicSale {},
-    /// Claim holder reward
-    Reward {},
     /// Claim jackpot
     Jackpot {},
     /// DAO
