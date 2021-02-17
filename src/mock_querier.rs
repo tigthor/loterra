@@ -75,7 +75,7 @@ impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, .. }) => {
-                if contract_addr == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5loterra")
+                if contract_addr == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20")
                 {
                     println!("{:?}", request);
                     let msg_balance = LotteraBalanceResponse {
@@ -87,9 +87,9 @@ impl WasmMockQuerier {
                 {
                     let msg_terrand = TerrandResponse {
                         randomness: Binary::from(
-                            "/f8IwVIaGXfcKw4V7MfBzz2mlgZ3hNIB+ppPoZ67Xks=".as_bytes(),
+                            "OdRl+j6PHnN84dy12n4Oq1BrGktD73FW4SKPihxfB9I=".as_bytes(),
                         ),
-                        worker: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand"),
+                        worker: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20"),
                     };
                     return Ok(to_binary(&msg_terrand));
                 }

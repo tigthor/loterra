@@ -32,7 +32,8 @@ pub struct State {
     pub poll_default_end_height: u64,
     pub price_per_ticket_to_register: Uint128,
     pub terrand_contract_address: CanonicalAddr,
-    pub loterra_contract_address: CanonicalAddr,
+    pub loterra_cw20_contract_address: CanonicalAddr,
+    pub lottera_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
     pub last_winning_number: String,
 }
