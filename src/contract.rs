@@ -434,7 +434,8 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                         },
                     )?;
                 }
-            } else if count == winning_combination.len() - 4 {
+            }
+            /*else if count == winning_combination.len() - 4 {
                 let mut data_winner: Vec<WinnerInfoState> = vec![];
                 for winner_address in combination.addresses {
                     data_winner.push(WinnerInfoState {
@@ -450,7 +451,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                         },
                     )?;
                 }
-            }
+            }*/
             // Re init the counter for the next players
             count = 0;
         }
