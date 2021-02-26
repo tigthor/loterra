@@ -91,7 +91,6 @@ pub enum Proposal {
     DrandWorkerFeePercentage,
     PrizePerRank,
     JackpotRewardPercentage,
-    ClaimEveryBlock,
     AmountToRegister,
     SecurityMigration,
     // test purpose

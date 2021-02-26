@@ -910,16 +910,6 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             }
         }
         Proposal::PrizePerRank
-    } else if let Proposal::ClaimEveryBlock = proposal {
-        match amount {
-            Some(block_time) => {
-                proposal_amount = block_time;
-            }
-            None => {
-                return Err(StdError::generic_err("Amount is required".to_string()));
-            }
-        }
-        Proposal::ClaimEveryBlock
     } else if let Proposal::AmountToRegister = proposal {
         match amount {
             Some(amount_to_register) => {
@@ -2824,7 +2814,6 @@ mod tests {
             let msg_prize_per_rank = msg_constructor_none(Proposal::PrizePerRank);
             let msg_holder_fee_per_percentage = msg_constructor_none(Proposal::HolderFeePercentage);
             let msg_amount_to_register = msg_constructor_none(Proposal::AmountToRegister);
-            let msg_claim_every_block = msg_constructor_none(Proposal::ClaimEveryBlock);
             let msg_security_migration = msg_constructor_none(Proposal::SecurityMigration);
 
             let res = handle(&mut deps, env.clone(), msg_security_migration);
@@ -2894,17 +2883,6 @@ mod tests {
             }
 
             let res = handle(&mut deps, env.clone(), msg_amount_to_register);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
-                _ => panic!("Unexpected error"),
-            }
-
-            let res = handle(&mut deps, env.clone(), msg_claim_every_block);
             match res {
                 Err(GenericErr {
                     msg,
@@ -3020,12 +2998,6 @@ mod tests {
                 None,
                 None,
             );
-            let msg_claim_every_block = msg_constructor_success(
-                Proposal::ClaimEveryBlock,
-                Option::from(Uint128(22)),
-                None,
-                None,
-            );
             let msg_amount_to_register = msg_constructor_success(
                 Proposal::AmountToRegister,
                 Option::from(Uint128(22)),
@@ -3077,8 +3049,6 @@ mod tests {
             let state = config(&mut deps.storage).load().unwrap();
             assert_eq!(state.poll_count, 1);
 
-            let res = handle(&mut deps, env.clone(), msg_claim_every_block).unwrap();
-            assert_eq!(res.log.len(), 4);
             let res = handle(&mut deps, env.clone(), msg_amount_to_register).unwrap();
             assert_eq!(res.log.len(), 4);
             let res = handle(&mut deps, env.clone(), msg_holder_fee_percentage).unwrap();
