@@ -72,6 +72,8 @@ pub enum QueryMsg {
         recipient: HumanAddr,
         amount: Uint128,
     },
+    /// Send payout to Loterra holders
+    PayoutReward {}
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
