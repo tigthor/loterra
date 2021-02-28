@@ -435,23 +435,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                     )?;
                 }
             }
-            /*else if count == winning_combination.len() - 4 {
-                let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winner_address in combination.addresses {
-                    data_winner.push(WinnerInfoState {
-                        claimed: false,
-                        address: winner_address,
-                    });
-                }
-                if !data_winner.is_empty() {
-                    winner_storage(&mut deps.storage).save(
-                        &5_u8.to_be_bytes(),
-                        &Winner {
-                            winners: data_winner,
-                        },
-                    )?;
-                }
-            }*/
             // Re init the counter for the next players
             count = 0;
         }
