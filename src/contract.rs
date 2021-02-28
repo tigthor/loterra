@@ -259,7 +259,6 @@ fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
     let res: TerrandResponse = deps.querier.query(&query)?;
     Ok(res)
 }
-
 pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -452,17 +451,16 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let mut all_msg = vec![msg_fee_worker.into()];
 
     if !holders_rewards.is_zero() {
-        let msg_holders_rewards = BankMsg::Send {
-            from_address: env.contract.address,
-            to_address: deps
-                .api
-                .human_address(&state.lottera_staking_contract_address)?,
-            amount: vec![Coin {
-                denom: state.denom_stable.clone(),
-                amount: holders_rewards,
-            }],
-        };
-        all_msg.push(msg_holders_rewards.into());
+        let msg_payout = QueryMsg::PayoutReward {};
+        let lottera_human = deps
+            .api
+            .human_address(&state.lottera_staking_contract_address.clone())?;
+        let res_payout = encode_msg_execute(msg_payout, lottera_human, vec![Coin {
+            denom: state.denom_stable.clone(),
+            amount: holders_rewards,
+        }])?;
+
+        all_msg.push(res_payout.into());
     }
 
     // Update the state
@@ -497,11 +495,11 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-fn encode_msg_execute(msg: QueryMsg, address: HumanAddr) -> StdResult<CosmosMsg> {
+fn encode_msg_execute(msg: QueryMsg, address: HumanAddr, coin: Vec<Coin>) -> StdResult<CosmosMsg> {
     Ok(WasmMsg::Execute {
         contract_addr: address,
         msg: to_binary(&msg)?,
-        send: vec![],
+        send: coin,
     }
     .into())
 }
@@ -586,7 +584,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     let lottera_human = deps
         .api
         .human_address(&state.loterra_cw20_contract_address.clone())?;
-    let res_transfer = encode_msg_execute(msg_transfer, lottera_human)?;
+    let res_transfer = encode_msg_execute(msg_transfer, lottera_human, vec![])?;
 
     state.token_holder_supply += sent;
     // Save the new state
@@ -1264,6 +1262,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::GetRandomness { round: _ } => to_binary(&query_terrand_randomness(deps)?)?,
         QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
         QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
+        QueryMsg::PayoutReward {} => to_binary(&query_payout_reward(deps)?)?,
     };
     Ok(response)
 }
@@ -1286,6 +1285,11 @@ fn query_loterra_balance<S: Storage, A: Api, Q: Querier>(
     return Err(StdError::Unauthorized { backtrace: None });
 }
 fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(
+    _deps: &Extern<S, A, Q>,
+) -> StdResult<StdError> {
+    return Err(StdError::Unauthorized { backtrace: None });
+}
+fn query_payout_reward<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
     return Err(StdError::Unauthorized { backtrace: None });
@@ -2221,30 +2225,26 @@ mod tests {
             let mut env = mock_env(before_all.default_sender_owner.clone(), &[]);
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
+            println!("{:?}", res);
             assert_eq!(res.messages.len(), 2);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
                     from_address: env.contract.address.clone(),
-                    to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20"),
+                    to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
                     amount: vec![Coin {
                         denom: "ust".to_string(),
                         amount: Uint128(720)
                     }]
                 })
             );
+
             assert_eq!(
                 res.messages[1],
-                CosmosMsg::Bank(BankMsg::Send {
-                    from_address: env.contract.address.clone(),
-                    to_address: deps
-                        .api
-                        .human_address(&state.lottera_staking_contract_address)
-                        .unwrap(),
-                    amount: vec![Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(720000)
-                    }]
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps.api.human_address(&state.lottera_staking_contract_address).unwrap(),
+                    msg: Binary::from(r#"{"payout_reward":{}}"#.as_bytes()),
+                    send: vec![Coin { denom: "ust".to_string(), amount: Uint128(720000) }]
                 })
             );
 
