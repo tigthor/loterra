@@ -58,7 +58,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             .api
             .canonical_address(&msg.lottera_staking_contract_address)?,
         safe_lock: false,
-        last_winning_number: "".to_string(),
+        latest_winning_number: "".to_string(),
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -315,7 +315,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let res = wrapper_msg_terrand(&deps, res)?;
     let randomness_hash = hex::encode(res.randomness.as_slice());
 
-    state.last_winning_number = randomness_hash.clone();
+    state.latest_winning_number = randomness_hash.clone();
 
     let n = randomness_hash
         .char_indices()
@@ -2263,7 +2263,7 @@ mod tests {
             println!("{:?}", state_after.jackpot_reward);
             assert_eq!(state.jackpot_reward, Uint128::zero());
             assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
-            assert_eq!(state_after.last_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
+            assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
         }
     }
     mod jackpot {
