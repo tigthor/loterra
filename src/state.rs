@@ -35,7 +35,7 @@ pub struct State {
     pub loterra_cw20_contract_address: CanonicalAddr,
     pub lottera_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
-    pub last_winning_number: String,
+    pub latest_winning_number: String,
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
