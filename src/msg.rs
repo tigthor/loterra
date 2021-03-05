@@ -108,6 +108,8 @@ pub struct GetPollResponse {
     pub amount: Uint128,
     pub prize_per_rank: Vec<u8>,
     pub migration_address: Option<HumanAddr>,
+    pub yes_voters: Vec<CanonicalAddr>,
+    pub no_voters: Vec<CanonicalAddr>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
