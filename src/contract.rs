@@ -94,7 +94,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, poll_id, approve),
         HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
         HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
-        HandleMsg::SafeLock {} => handle_switch(deps, env),
+        HandleMsg::SafeLock {} => handle_safe_lock(deps, env),
         HandleMsg::Renounce {} => handle_renounce(deps, env),
     }
 }
@@ -118,7 +118,7 @@ pub fn handle_renounce<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse::default())
 }
 
-pub fn handle_switch<S: Storage, A: Api, Q: Querier>(
+pub fn handle_safe_lock<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
 ) -> StdResult<HandleResponse> {
@@ -3661,7 +3661,7 @@ mod tests {
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender_two, &[]);
 
-            let res = handle_switch(&mut deps, env);
+            let res = handle_safe_lock(&mut deps, env);
             match res {
                 Err(StdError::Unauthorized { .. }) => {}
                 _ => panic!("Unexpected error"),
@@ -3675,12 +3675,12 @@ mod tests {
             let env = mock_env(before_all.default_sender_owner, &[]);
 
             // Switch to Off
-            let res = handle_switch(&mut deps, env.clone()).unwrap();
+            let res = handle_safe_lock(&mut deps, env.clone()).unwrap();
             assert_eq!(res.messages.len(), 0);
             let state = config(&mut deps.storage).load().unwrap();
             assert!(state.safe_lock);
             // Switch to On
-            let res = handle_switch(&mut deps, env).unwrap();
+            let res = handle_safe_lock(&mut deps, env).unwrap();
             println!("{:?}", res);
             let state = config(&mut deps.storage).load().unwrap();
             assert!(!state.safe_lock);
