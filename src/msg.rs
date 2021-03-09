@@ -15,6 +15,7 @@ pub struct InitMsg {
     pub terrand_contract_address: HumanAddr,
     pub loterra_cw20_contract_address: HumanAddr,
     pub lottera_staking_contract_address: HumanAddr,
+    pub dao_funds: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -73,7 +74,7 @@ pub enum QueryMsg {
         amount: Uint128,
     },
     /// Send payout to Loterra holders
-    PayoutReward {}
+    PayoutReward {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

@@ -36,6 +36,7 @@ pub struct State {
     pub lottera_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
     pub latest_winning_number: String,
+    pub dao_funds: Uint128,
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
@@ -93,6 +94,7 @@ pub enum Proposal {
     JackpotRewardPercentage,
     AmountToRegister,
     SecurityMigration,
+    DaoFunding,
     // test purpose
     NotExist,
 }
