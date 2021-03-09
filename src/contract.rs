@@ -59,6 +59,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             .canonical_address(&msg.lottera_staking_contract_address)?,
         safe_lock: false,
         latest_winning_number: "".to_string(),
+        dao_funds: msg.dao_funds,
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -455,10 +456,14 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         let lottera_human = deps
             .api
             .human_address(&state.lottera_staking_contract_address.clone())?;
-        let res_payout = encode_msg_execute(msg_payout, lottera_human, vec![Coin {
-            denom: state.denom_stable.clone(),
-            amount: holders_rewards,
-        }])?;
+        let res_payout = encode_msg_execute(
+            msg_payout,
+            lottera_human,
+            vec![Coin {
+                denom: state.denom_stable.clone(),
+                amount: holders_rewards,
+            }],
+        )?;
 
         all_msg.push(res_payout.into());
     }
@@ -565,15 +570,17 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     let res_balance = encode_msg_query(msg_balance, lottera_human)?;
     let lottera_balance = wrapper_msg_loterra(&deps, res_balance)?;
 
-    if lottera_balance.balance.is_zero() {
+    let adjust_contract_balance = lottera_balance.balance.sub(state.dao_funds)?;
+
+    if adjust_contract_balance.is_zero() {
         return Err(StdError::generic_err("All tokens have been sold"));
     }
 
-    if lottera_balance.balance.u128() < sent.u128() {
+    if adjust_contract_balance.u128() < sent.u128() {
         return Err(StdError::generic_err(format!(
             "you want to buy {} the contract balance only remain {} token on public sale",
             sent.u128(),
-            lottera_balance.balance.u128()
+            adjust_contract_balance.u128()
         )));
     }
 
@@ -713,7 +720,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Not enough funds in the contract"));
     }
     // Ensure there is some reward to send
-    if  jackpot_amount.is_zero() {
+    if jackpot_amount.is_zero() {
         return Err(StdError::generic_err("No jackpot to claim, try next time"));
     }
 
@@ -922,6 +929,30 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             }
         }
         Proposal::SecurityMigration
+    } else if let Proposal::DaoFunding = proposal {
+        match amount {
+            Some(amount) => {
+                if amount.is_zero() {
+                    return Err(StdError::generic_err("Amount be higher than 0".to_string()));
+                }
+                if state.dao_funds.is_zero() {
+                    return Err(StdError::generic_err(
+                        "No more funds to fund project".to_string(),
+                    ));
+                }
+                if state.dao_funds.u128() < amount.u128() {
+                    return Err(StdError::generic_err(format!(
+                        "You need {} we only can fund you up to {}",
+                        amount, state.dao_funds
+                    )));
+                }
+                proposal_amount = amount;
+            }
+            None => {
+                return Err(StdError::generic_err("Amount required".to_string()));
+            }
+        }
+        Proposal::DaoFunding
     } else {
         return Err(StdError::generic_err(
             "Proposal type not founds".to_string(),
@@ -1214,6 +1245,23 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
                 data: None,
             });
         }
+        Proposal::DaoFunding => {
+            let recipient = deps.api.human_address(&store.creator.clone())?;
+            let msg_transfer = QueryMsg::Transfer {
+                recipient,
+                amount: store.amount,
+            };
+            let lottera_human = deps
+                .api
+                .human_address(&state.loterra_cw20_contract_address.clone())?;
+            let res_transfer = encode_msg_execute(msg_transfer, lottera_human, vec![])?;
+            state.dao_funds = state.dao_funds.sub(store.amount)?;
+            return Ok(HandleResponse {
+                messages: vec![res_transfer.into()],
+                log: vec![],
+                data: None,
+            });
+        }
         _ => {
             return Err(StdError::generic_err("Proposal not funds"));
         }
@@ -1365,7 +1413,7 @@ fn query_poll<S: Storage, A: Api, Q: Querier>(
         prize_per_rank: poll.prize_rank,
         migration_address: poll.migration_address,
         yes_voters: poll.yes_voters,
-        no_voters: poll.no_voters
+        no_voters: poll.no_voters,
     })
 }
 
@@ -1434,6 +1482,7 @@ mod tests {
         const PUBLIC_SALE_END_BLOCK: u64 = 1000000000;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
+        const DAO_FUNDS: Uint128 = Uint128(1_050_000);
 
         let init_msg = InitMsg {
             denom_stable: DENOM_STABLE.to_string(),
@@ -1451,6 +1500,7 @@ mod tests {
             lottera_staking_contract_address: HumanAddr::from(
                 "terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking",
             ),
+            dao_funds: DAO_FUNDS,
         };
 
         init(
@@ -1524,7 +1574,12 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             //let r = CanonicalAddr(&"DZuks7zPRv9wp2lJTEKdihcInQc=");
-            let f = deps.api.canonical_address(&HumanAddr::from("terra1umd70qd4jv686wjrsnk92uxgewca3805dxd46p")).unwrap();
+            let f = deps
+                .api
+                .canonical_address(&HumanAddr::from(
+                    "terra1umd70qd4jv686wjrsnk92uxgewca3805dxd46p",
+                ))
+                .unwrap();
             println!("{}", f);
             let mut state = config(&mut deps.storage).load().unwrap();
             state.safe_lock = true;
@@ -2244,9 +2299,15 @@ mod tests {
             assert_eq!(
                 res.messages[1],
                 CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: deps.api.human_address(&state.lottera_staking_contract_address).unwrap(),
+                    contract_addr: deps
+                        .api
+                        .human_address(&state.lottera_staking_contract_address)
+                        .unwrap(),
                     msg: Binary::from(r#"{"payout_reward":{}}"#.as_bytes()),
-                    send: vec![Coin { denom: "ust".to_string(), amount: Uint128(720000) }]
+                    send: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(720000)
+                    }]
                 })
             );
 
@@ -2506,14 +2567,13 @@ mod tests {
             println!("{:?}", res);
             match res {
                 Err(GenericErr {
-                        msg,
-                        backtrace: None,
-                    }) => {
+                    msg,
+                    backtrace: None,
+                }) => {
                     assert_eq!(msg, "No jackpot to claim, try next time")
                 }
                 _ => panic!("Unexpected error"),
             }
-
         }
 
         #[test]
