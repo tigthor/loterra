@@ -3722,6 +3722,14 @@ mod tests {
             println!("{:?}", res);
             assert_eq!(res.log.len(), 3);
             assert_eq!(res.messages.len(), 1);
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps.api.human_address(&state_before.loterra_cw20_contract_address).unwrap(),
+                    msg: Binary::from(r#"{"transfer":{"recipient":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007","amount":"22"}}"#.as_bytes()),
+                    send: vec![]
+                })
+            );
 
             let poll_state = poll_storage(&mut deps.storage)
                 .load(&1_u64.to_be_bytes())
