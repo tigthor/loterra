@@ -350,11 +350,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     ));
     // Total fees if winner of the jackpot
     let total_fee = jackpot.mul(Decimal::percent(
-        (state.fee_for_drand_worker_in_percentage as u64)
-            + (state.token_holder_percentage_fee_reward as u64),
+        state.fee_for_drand_worker_in_percentage.add(state.token_holder_percentage_fee_reward) as u64
     ));
     // The jackpot after worker fee applied
-    let mut jackpot_after = (jackpot - fee_for_drand_worker).unwrap();
+    let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
     let mut holders_rewards = Uint128::zero();
     if !store.combination.is_empty() {
         let mut count = 0;
@@ -369,7 +368,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
             if count == winning_combination.len() {
                 // Set the new jackpot after fee
-                jackpot_after = (jackpot - total_fee).unwrap();
+                jackpot_after = jackpot.sub(total_fee).unwrap();
                 holders_rewards = holders_rewards.add(token_holder_fee_reward);
 
                 let mut data_winner: Vec<WinnerInfoState> = vec![];
