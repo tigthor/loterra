@@ -336,22 +336,21 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let jackpot = balance
         .amount
         .mul(Decimal::percent(state.jackpot_percentage_reward as u64));
+
     // Drand worker fee
     let fee_for_drand_worker = jackpot.mul(Decimal::percent(
         state.fee_for_drand_worker_in_percentage as u64,
-    ));
-    // Double adjust fee to divide by two
-    let fee_for_drand_worker = fee_for_drand_worker.mul(Decimal::percent(
+    )).mul(Decimal::percent(
         state.fee_for_drand_worker_in_percentage as u64,
     ));
+
     // Amount token holders can claim of the reward is a fee
     let token_holder_fee_reward = jackpot.mul(Decimal::percent(
         state.token_holder_percentage_fee_reward as u64,
     ));
     // Total fees if winner of the jackpot
-    let total_fee = jackpot.mul(Decimal::percent(
-        state.fee_for_drand_worker_in_percentage.add(state.token_holder_percentage_fee_reward) as u64
-    ));
+    let total_fee = fee_for_drand_worker.add(token_holder_fee_reward);
+
     // The jackpot after worker fee applied
     let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
     let mut holders_rewards = Uint128::zero();
