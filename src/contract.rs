@@ -60,7 +60,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         safe_lock: false,
         latest_winning_number: "".to_string(),
         dao_funds: msg.dao_funds,
-        lottery_counter: 0
+        lottery_counter: 0,
     };
 
     config(&mut deps.storage).save(&state)?;
