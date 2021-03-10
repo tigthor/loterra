@@ -588,17 +588,17 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     let res_balance = encode_msg_query(msg_balance, lottera_human)?;
     let lottera_balance = wrapper_msg_loterra(&deps, res_balance)?;
 
-    let adjust_contract_balance = lottera_balance.balance.sub(state.dao_funds)?;
+    let adjusted_contract_balance = lottera_balance.balance.sub(state.dao_funds)?;
 
-    if adjust_contract_balance.is_zero() {
+    if adjusted_contract_balance.is_zero() {
         return Err(StdError::generic_err("All tokens have been sold"));
     }
 
-    if adjust_contract_balance.u128() < sent.u128() {
+    if adjusted_contract_balance.u128() < sent.u128() {
         return Err(StdError::generic_err(format!(
             "you want to buy {} the contract balance only remain {} token on public sale",
             sent.u128(),
-            adjust_contract_balance.u128()
+            adjusted_contract_balance.u128()
         )));
     }
 
