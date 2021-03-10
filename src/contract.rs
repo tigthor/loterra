@@ -1191,7 +1191,6 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     // let noWeight = total_weight(&deps, &state, &store.no_voters);
 
     //Get total bonded from staking contract
-    // Ensure sender have some reward tokens
     let msg = QueryMsg::GetAllBonded {};
     let lottera_human = deps
         .api
@@ -1200,7 +1199,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     let res = encode_msg_query(msg, lottera_human).unwrap();
     let lottera_total_bonded = wrapper_msg_loterra_staking_all_bonded(&deps, res).unwrap();
 
-    // Get the amount
+    // Get the vote weight
     let mut final_vote_weight_in_percentage: u128 = 0;
     if !yes_weight.is_zero() {
         let yes_weight_by_hundred = yes_weight.u128() * 100;
