@@ -60,6 +60,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         safe_lock: false,
         latest_winning_number: "".to_string(),
         dao_funds: msg.dao_funds,
+        lottery_counter: 0
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -470,7 +471,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     // Update the state
     state.jackpot_reward = jackpot_after;
-
+    state.lottery_counter += 1;
     // Get all keys in the bucket combination
     let keys = combination_storage(&mut deps.storage)
         .range(None, None, Order::Ascending)
@@ -2320,6 +2321,8 @@ mod tests {
             assert_eq!(state.jackpot_reward, Uint128::zero());
             assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
+            assert_eq!(state_after.lottery_counter, 1);
+            assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
     }
     mod jackpot {

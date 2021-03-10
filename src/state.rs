@@ -37,6 +37,7 @@ pub struct State {
     pub safe_lock: bool,
     pub latest_winning_number: String,
     pub dao_funds: Uint128,
+    pub lottery_counter: u64,
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
