@@ -12,3 +12,17 @@ pub struct TerrandResponse {
 pub struct LoterraBalanceResponse {
     pub balance: Uint128,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GetHolderResponse {
+    pub address: HumanAddr,
+    pub bonded: Uint128,
+    pub un_bonded: Uint128,
+    pub available: Uint128,
+    pub period: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GetAllBondedResponse {
+    pub total_bonded: Uint128,
+}
