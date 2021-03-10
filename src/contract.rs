@@ -8,7 +8,7 @@ use crate::msg::{
     AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
 };
-use crate::query::{LoterraBalanceResponse, TerrandResponse};
+use crate::query::{LoterraBalanceResponse, TerrandResponse, GetHolderResponse, GetAllBondedResponse};
 use crate::state::{
     combination_storage, combination_storage_read, config, config_read, poll_storage,
     poll_storage_read, winner_storage, winner_storage_read, Combination, PollInfoState, PollStatus,
@@ -514,6 +514,23 @@ fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
     query: QueryRequest<Empty>,
 ) -> StdResult<LoterraBalanceResponse> {
     let res: LoterraBalanceResponse = deps.querier.query(&query)?;
+
+    Ok(res)
+}
+
+fn wrapper_msg_loterra_staking<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<GetHolderResponse> {
+    let res: GetHolderResponse = deps.querier.query(&query)?;
+
+    Ok(res)
+}
+fn wrapper_msg_loterra_staking_all_bonded<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<GetAllBondedResponse> {
+    let res: GetAllBondedResponse = deps.querier.query(&query)?;
 
     Ok(res)
 }
@@ -1127,18 +1144,18 @@ fn total_weight<S: Storage, A: Api, Q: Querier>(
         let human_address = deps.api.human_address(&address).unwrap();
 
         // Ensure sender have some reward tokens
-        let msg = QueryMsg::Balance {
+        let msg = QueryMsg::GetHolder {
             address: human_address,
         };
         let lottera_human = deps
             .api
-            .human_address(&state.loterra_cw20_contract_address.clone())
+            .human_address(&state.lottera_staking_contract_address.clone())
             .unwrap();
         let res = encode_msg_query(msg, lottera_human).unwrap();
-        let lottera_balance = wrapper_msg_loterra(&deps, res).unwrap();
+        let lottera_balance = wrapper_msg_loterra_staking(&deps, res).unwrap();
 
-        if !lottera_balance.balance.is_zero() {
-            weight += lottera_balance.balance;
+        if !lottera_balance.bonded.is_zero() {
+            weight += lottera_balance.bonded;
         }
     }
     weight
@@ -1173,11 +1190,21 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     let yes_weight = total_weight(&deps, &state, &store.yes_voters);
     // let noWeight = total_weight(&deps, &state, &store.no_voters);
 
+    //Get total bonded from staking contract
+    // Ensure sender have some reward tokens
+    let msg = QueryMsg::GetAllBonded {};
+    let lottera_human = deps
+        .api
+        .human_address(&state.lottera_staking_contract_address.clone())
+        .unwrap();
+    let res = encode_msg_query(msg, lottera_human).unwrap();
+    let lottera_total_bonded = wrapper_msg_loterra_staking_all_bonded(&deps, res).unwrap();
+
     // Get the amount
     let mut final_vote_weight_in_percentage: u128 = 0;
     if !yes_weight.is_zero() {
         let yes_weight_by_hundred = yes_weight.u128() * 100;
-        final_vote_weight_in_percentage = yes_weight_by_hundred / state.token_holder_supply.u128();
+        final_vote_weight_in_percentage = yes_weight_by_hundred / lottera_total_bonded.total_bonded.u128();
     }
 
     // Reject the proposal
@@ -1304,6 +1331,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
         QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
         QueryMsg::PayoutReward {} => to_binary(&query_payout_reward(deps)?)?,
+        QueryMsg::GetHolder { .. } => to_binary(&query_loterra_staking_holder(deps)?)?,
+        QueryMsg::GetAllBonded {} => to_binary(&query_loterra_staking_total_bonded(deps)?)?
     };
     Ok(response)
 }
@@ -1314,7 +1343,6 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
     let state = config_read(&deps.storage).load()?;
     Ok(state)
 }
-
 fn query_terrand_randomness<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
@@ -1331,6 +1359,16 @@ fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(
     return Err(StdError::Unauthorized { backtrace: None });
 }
 fn query_payout_reward<S: Storage, A: Api, Q: Querier>(
+    _deps: &Extern<S, A, Q>,
+) -> StdResult<StdError> {
+    return Err(StdError::Unauthorized { backtrace: None });
+}
+fn query_loterra_staking_holder<S: Storage, A: Api, Q: Querier>(
+    _deps: &Extern<S, A, Q>,
+) -> StdResult<StdError> {
+    return Err(StdError::Unauthorized { backtrace: None });
+}
+fn query_loterra_staking_total_bonded<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
     return Err(StdError::Unauthorized { backtrace: None });
@@ -3663,13 +3701,12 @@ mod tests {
         #[test]
         fn success_with_reject() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
+            let mut deps = mock_dependencies_custom(before_all.default_length,
+                                                    &[Coin {
+                                                        denom: "ust".to_string(),
+                                                        amount: Uint128(9_000_000),
+                                                    }],);
+            deps.querier.with_token_balances(Uint128(200_000));
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
@@ -3701,6 +3738,7 @@ mod tests {
                 }],
             );
             deps.querier.with_token_balances(Uint128(200_000));
+            deps.querier.with_holder(before_all.default_sender.clone(),Uint128(150_000), Uint128(10_000), Uint128(0), 0);
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll_dao_funding(&mut deps, env.clone());
@@ -3757,8 +3795,8 @@ mod tests {
                     amount: Uint128(9_000_000),
                 }],
             );
-
             deps.querier.with_token_balances(Uint128(200_000));
+            deps.querier.with_holder(before_all.default_sender.clone(),Uint128(150_000), Uint128(10_000), Uint128(0), 0);
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
