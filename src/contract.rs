@@ -1482,7 +1482,7 @@ mod tests {
         const PUBLIC_SALE_END_BLOCK: u64 = 1000000000;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
-        const DAO_FUNDS: Uint128 = Uint128(1_050_000);
+        const DAO_FUNDS: Uint128 = Uint128(10_000);
 
         let init_msg = InitMsg {
             denom_stable: DENOM_STABLE.to_string(),
@@ -1889,6 +1889,7 @@ mod tests {
     }
     mod public_sale {
         use super::*;
+        //handle_public_sale
         #[test]
         fn security_active() {
             let before_all = before_all();
@@ -1924,7 +1925,7 @@ mod tests {
         fn contract_balance_sold_out() {
             let before_all = before_all();
             let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
-            deps.querier.with_token_balances(Uint128(0));
+            deps.querier.with_token_balances(Uint128(10_000));
             default_init(&mut deps);
             let res = handle_public_sale(
                 &mut deps,
@@ -1950,7 +1951,7 @@ mod tests {
         fn contract_balance_not_enough() {
             let before_all = before_all();
             let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
-            deps.querier.with_token_balances(Uint128(900));
+            deps.querier.with_token_balances(Uint128(10_100));
             default_init(&mut deps);
             let res = handle_public_sale(
                 &mut deps,
@@ -1968,7 +1969,7 @@ mod tests {
                     msg,
                     backtrace: None,
                 }) => {
-                    assert_eq!(msg, "you want to buy 1000 the contract balance only remain 900 token on public sale")
+                    assert_eq!(msg, "you want to buy 1000 the contract balance only remain 100 token on public sale")
                 }
                 _ => panic!("Unexpected error"),
             }
@@ -2109,7 +2110,7 @@ mod tests {
         fn success() {
             let before_all = before_all();
             let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
-            deps.querier.with_token_balances(Uint128(900));
+            deps.querier.with_token_balances(Uint128(10_900));
             default_init(&mut deps);
             let state_before = config(&mut deps.storage).load().unwrap();
             let env = mock_env(
