@@ -2360,6 +2360,73 @@ mod tests {
             assert_eq!(state_after.lottery_counter, 1);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
+
+        #[test]
+        fn success_no_big_winner() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+
+            default_init(&mut deps);
+            // register some combination
+            let msg = HandleMsg::Register {
+                combination: "39498d".to_string(),
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender_two.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+                .unwrap();
+
+            let state = config(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            env.block.time = state.block_time_play + 1000;
+            let res = handle_play(&mut deps, env.clone()).unwrap();
+            println!("{:?}", res);
+            assert_eq!(res.messages.len(), 1);
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Bank(BankMsg::Send {
+                    from_address: env.contract.address.clone(),
+                    to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
+                    amount: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(720)
+                    }]
+                })
+            );
+
+            let store = winner_storage(&mut deps.storage)
+                .load(&2_u8.to_be_bytes())
+                .unwrap();
+            assert_ne!(store.winners.len(), 0);
+            assert!(!store.winners[0].claimed);
+            assert_eq!(
+                store.winners[0].address,
+                deps.api
+                    .canonical_address(&before_all.default_sender_two)
+                    .unwrap()
+            );
+            let state_after = config(&mut deps.storage).load().unwrap();
+            println!("{:?}", state_after.jackpot_reward);
+            assert_eq!(state.jackpot_reward, Uint128::zero());
+            assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
+            assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
+            assert_eq!(state_after.lottery_counter, 1);
+            assert_ne!(state_after.lottery_counter, state.lottery_counter);
+        }
     }
     mod jackpot {
         use super::*;
