@@ -1206,7 +1206,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             data: None,
         });
     };
-
+    let mut msgs = vec![];
     // Valid the proposal
     match store.proposal {
         Proposal::LotteryEveryBlockTime => {
@@ -1239,11 +1239,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
                     amount: contract_balance.amount,
                 }],
             };
-            return Ok(HandleResponse {
-                messages: vec![msg.into()],
-                log: vec![],
-                data: None,
-            });
+            msgs.push(msg.into())
         }
         Proposal::DaoFunding => {
             let recipient = deps.api.human_address(&store.creator.clone())?;
@@ -1256,11 +1252,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
                 .human_address(&state.loterra_cw20_contract_address.clone())?;
             let res_transfer = encode_msg_execute(msg_transfer, lottera_human, vec![])?;
             state.dao_funds = state.dao_funds.sub(store.amount)?;
-            return Ok(HandleResponse {
-                messages: vec![res_transfer.into()],
-                log: vec![],
-                data: None,
-            });
+            msgs.push(res_transfer.into())
         }
         _ => {
             return Err(StdError::generic_err("Proposal not funds"));
@@ -1278,7 +1270,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
-        messages: vec![],
+        messages: msgs,
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -2971,6 +2963,18 @@ mod tests {
             let msg_holder_fee_per_percentage = msg_constructor_none(Proposal::HolderFeePercentage);
             let msg_amount_to_register = msg_constructor_none(Proposal::AmountToRegister);
             let msg_security_migration = msg_constructor_none(Proposal::SecurityMigration);
+            let msg_dao_funding = msg_constructor_none(Proposal::DaoFunding);
+
+            let res = handle(&mut deps, env.clone(), msg_dao_funding);
+            match res {
+                Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => {
+                    assert_eq!(msg, "Amount required")
+                }
+                _ => panic!("Unexpected error"),
+            }
 
             let res = handle(&mut deps, env.clone(), msg_security_migration);
             match res {
@@ -3190,6 +3194,12 @@ mod tests {
                 None,
                 Option::from(before_all.default_sender_two.clone()),
             );
+            let msg_dao_funding = msg_constructor_success(
+                Proposal::DaoFunding,
+                Option::from(Uint128(80)),
+                None,
+                None,
+            );
 
             let res = handle(&mut deps, env.clone(), msg_lottery_every_block_time).unwrap();
             assert_eq!(res.log.len(), 4);
@@ -3218,6 +3228,8 @@ mod tests {
             // Only owner init proposal for security migration
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
             let res = handle(&mut deps, env.clone(), msg_security_migration).unwrap();
+            assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_dao_funding).unwrap();
             assert_eq!(res.log.len(), 4);
         }
     }
@@ -3539,6 +3551,19 @@ mod tests {
             let _res = handle(&mut deps, env, msg).unwrap();
             println!("{:?}", _res);
         }
+        fn create_poll_dao_funding<S: Storage, A: Api, Q: Querier>(
+            mut deps: &mut Extern<S, A, Q>,
+            env: Env,
+        ) {
+            let msg = HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal: Proposal::DaoFunding,
+                amount: Option::from(Uint128(22)),
+                prize_per_rank: None,
+                contract_migration_address: None,
+            };
+            let _res = handle(&mut deps, env, msg).unwrap();
+        }
         #[test]
         fn do_not_send_funds() {
             let before_all = before_all();
@@ -3661,6 +3686,55 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             assert_eq!(poll_state.status, PollStatus::Rejected);
+        }
+        #[test]
+        fn success_dao_funding() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            deps.querier.with_token_balances(Uint128(200_000));
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            create_poll_dao_funding(&mut deps, env.clone());
+
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: true,
+            };
+
+            let _res = handle(&mut deps, env.clone(), msg);
+
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let poll_state = poll_storage(&mut deps.storage)
+                .load(&1_u64.to_be_bytes())
+                .unwrap();
+            env.block.height = poll_state.end_height + 1;
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            println!("{:?}", res);
+            assert_eq!(res.log.len(), 3);
+            assert_eq!(res.messages.len(), 1);
+
+            let poll_state = poll_storage(&mut deps.storage)
+                .load(&1_u64.to_be_bytes())
+                .unwrap();
+            assert_eq!(poll_state.status, PollStatus::Passed);
+            //let state = config(&mut deps);
+            let mut state_after = config(&mut deps.storage).load().unwrap();
+            println!("{:?}", state_after.dao_funds);
+            println!("{:?}", state_before.dao_funds);
+            assert_eq!(
+                state_before.dao_funds.sub(poll_state.amount).unwrap(),
+                state_after.dao_funds
+            )
         }
         #[test]
         fn success_with_passed() {
