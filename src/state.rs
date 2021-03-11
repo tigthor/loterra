@@ -96,6 +96,7 @@ pub enum Proposal {
     AmountToRegister,
     SecurityMigration,
     DaoFunding,
+    StakingContractMigration,
     // test purpose
     NotExist,
 }
