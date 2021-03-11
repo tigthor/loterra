@@ -933,9 +933,13 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         match contract_migration_address {
             Some(migration_address) => {
                 let sender = deps.api.canonical_address(&env.message.sender)?;
-                if state.admin != sender {
-                    return Err(StdError::Unauthorized { backtrace: None });
+                let contract_address = deps.api.canonical_address(&env.contract.address)?;
+                if state.admin != contract_address {
+                    if state.admin != sender {
+                        return Err(StdError::Unauthorized { backtrace: None });
+                    }
                 }
+
                 proposal_human_address = Option::from(migration_address);
             }
             None => {
@@ -969,6 +973,25 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             }
         }
         Proposal::DaoFunding
+    }else if let Proposal::StakingContractMigration = proposal {
+        match contract_migration_address {
+            Some(migration_address) => {
+                let sender = deps.api.canonical_address(&env.message.sender)?;
+                let contract_address = deps.api.canonical_address(&env.contract.address)?;
+                if state.admin != contract_address {
+                    if state.admin != sender {
+                        return Err(StdError::Unauthorized { backtrace: None });
+                    }
+                }
+                proposal_human_address = Option::from(migration_address);
+            }
+            None => {
+                return Err(StdError::generic_err(
+                    "Migration address is required".to_string(),
+                ));
+            }
+        }
+        Proposal::StakingContractMigration
     } else {
         return Err(StdError::generic_err(
             "Proposal type not founds".to_string(),
@@ -1278,6 +1301,9 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             let res_transfer = encode_msg_execute(msg_transfer, lottera_human, vec![])?;
             state.dao_funds = state.dao_funds.sub(store.amount)?;
             msgs.push(res_transfer.into())
+        }
+        Proposal::StakingContractMigration => {
+            state.lottera_staking_contract_address = deps.api.canonical_address(&store.migration_address.unwrap())?;
         }
         _ => {
             return Err(StdError::generic_err("Proposal not funds"));
@@ -3074,6 +3100,7 @@ mod tests {
             let msg_amount_to_register = msg_constructor_none(Proposal::AmountToRegister);
             let msg_security_migration = msg_constructor_none(Proposal::SecurityMigration);
             let msg_dao_funding = msg_constructor_none(Proposal::DaoFunding);
+            let msg_staking_contract_migration = msg_constructor_none(Proposal::StakingContractMigration);
 
             let res = handle(&mut deps, env.clone(), msg_dao_funding);
             match res {
@@ -3092,6 +3119,17 @@ mod tests {
                     msg,
                     backtrace: None,
                 }) => {
+                    assert_eq!(msg, "Migration address is required")
+                }
+                _ => panic!("Unexpected error"),
+            }
+
+            let res = handle(&mut deps, env.clone(), msg_staking_contract_migration);
+            match res {
+                Err(GenericErr {
+                        msg,
+                        backtrace: None,
+                    }) => {
                     assert_eq!(msg, "Migration address is required")
                 }
                 _ => panic!("Unexpected error"),
@@ -3311,6 +3349,13 @@ mod tests {
                 None,
             );
 
+            let msg_staking_contract_migration = msg_constructor_success(
+                Proposal::StakingContractMigration,
+                None,
+                None,
+                Option::from(before_all.default_sender_two.clone()),
+            );
+
             let res = handle(&mut deps, env.clone(), msg_lottery_every_block_time).unwrap();
             assert_eq!(res.log.len(), 4);
             let poll_state = poll_storage(&mut deps.storage)
@@ -3335,11 +3380,23 @@ mod tests {
             assert_eq!(res.log.len(), 4);
             let res = handle(&mut deps, env.clone(), msg_drand_fee_worker).unwrap();
             assert_eq!(res.log.len(), 4);
-            // Only owner init proposal for security migration
+            let res = handle(&mut deps, env.clone(), msg_dao_funding).unwrap();
+            assert_eq!(res.log.len(), 4);
+
+            // Admin create proposal migration
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            let res = handle(&mut deps, env.clone(), msg_security_migration.clone()).unwrap();
+            assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_staking_contract_migration.clone()).unwrap();
+            assert_eq!(res.log.len(), 4);
+
+            // Admin renounce so all can create proposal migration
+            let res = handle_renounce(&mut deps, env.clone()).unwrap();
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+
             let res = handle(&mut deps, env.clone(), msg_security_migration).unwrap();
             assert_eq!(res.log.len(), 4);
-            let res = handle(&mut deps, env.clone(), msg_dao_funding).unwrap();
+            let res = handle(&mut deps, env.clone(), msg_staking_contract_migration).unwrap();
             assert_eq!(res.log.len(), 4);
         }
     }
@@ -3674,6 +3731,20 @@ mod tests {
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
+        fn create_poll_statking_contract_migration<S: Storage, A: Api, Q: Querier>(
+            mut deps: &mut Extern<S, A, Q>,
+            env: Env,
+        ) {
+            let msg = HandleMsg::Proposal {
+                description: "This is my first proposal".to_string(),
+                proposal: Proposal::StakingContractMigration,
+                amount: None,
+                prize_per_rank: None,
+                contract_migration_address: Option::from(HumanAddr::from("newAddress".to_string())),
+            };
+            let _res = handle(&mut deps, env, msg).unwrap();
+            println!("{:?}", _res);
+        }
         #[test]
         fn do_not_send_funds() {
             let before_all = before_all();
@@ -3853,6 +3924,52 @@ mod tests {
                 state_before.dao_funds.sub(poll_state.amount).unwrap(),
                 state_after.dao_funds
             )
+        }
+        #[test]
+        fn success_staking_migration() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            deps.querier.with_token_balances(Uint128(200_000));
+            deps.querier.with_holder(before_all.default_sender.clone(),Uint128(150_000), Uint128(10_000), Uint128(0), 0);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            create_poll_statking_contract_migration(&mut deps, env.clone());
+
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: true,
+            };
+
+            let _res = handle(&mut deps, env.clone(), msg);
+
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let poll_state = poll_storage(&mut deps.storage)
+                .load(&1_u64.to_be_bytes())
+                .unwrap();
+            env.block.height = poll_state.end_height + 1;
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            println!("{:?}", res);
+            assert_eq!(res.log.len(), 3);
+            assert_eq!(res.messages.len(), 0);
+
+            let poll_state = poll_storage(&mut deps.storage)
+                .load(&1_u64.to_be_bytes())
+                .unwrap();
+            assert_eq!(poll_state.status, PollStatus::Passed);
+            //let state = config(&mut deps);
+            let mut state_after = config(&mut deps.storage).load().unwrap();
+            assert_ne!(state_after.lottera_staking_contract_address, state_before.lottera_staking_contract_address);
+            assert_eq!(deps.api.human_address(&state_after.lottera_staking_contract_address).unwrap(), HumanAddr::from("newAddress".to_string()));
         }
         #[test]
         fn success_with_passed() {
