@@ -23,7 +23,8 @@ const DRAND_PERIOD: u64 = 30;
 const DRAND_NEXT_ROUND_SECURITY: u64 = 10;
 const MAX_DESCRIPTION_LEN: u64 = 255;
 const MIN_DESCRIPTION_LEN: u64 = 6;
-
+const HOLDERS_MAX_REWARD: u8 = 20;
+const WORKER_MAX_REWARD: u8 = 10;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
@@ -47,8 +48,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         fee_for_drand_worker_in_percentage: 1,
         prize_rank_winner_percentage: vec![84, 10, 5, 1],
         poll_count: 0,
-        holders_max_percentage_reward: 20,
-        worker_drand_max_percentage_reward: 10,
         price_per_ticket_to_register: Uint128(1_000_000),
         terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
         loterra_cw20_contract_address: deps
@@ -829,10 +828,10 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     let proposal_type = if let Proposal::HolderFeePercentage = proposal {
         match amount {
             Some(percentage) => {
-                if percentage.u128() as u8 > state.holders_max_percentage_reward {
+                if percentage.u128() as u8 > HOLDERS_MAX_REWARD {
                     return Err(StdError::generic_err(format!(
                         "Amount between 0 to {}",
-                        state.holders_max_percentage_reward
+                        HOLDERS_MAX_REWARD
                     )));
                 }
                 proposal_amount = percentage;
@@ -846,10 +845,10 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     } else if let Proposal::DrandWorkerFeePercentage = proposal {
         match amount {
             Some(percentage) => {
-                if percentage.u128() as u8 > state.worker_drand_max_percentage_reward {
+                if percentage.u128() as u8 > WORKER_MAX_REWARD {
                     return Err(StdError::generic_err(format!(
                         "Amount between 0 to {}",
-                        state.worker_drand_max_percentage_reward
+                        WORKER_MAX_REWARD
                     )));
                 }
                 proposal_amount = percentage;
@@ -1273,7 +1272,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             state.prize_rank_winner_percentage = store.prize_rank;
         }
         Proposal::HolderFeePercentage => {
-            state.holders_max_percentage_reward = store.amount.u128() as u8
+            state.token_holder_percentage_fee_reward = store.amount.u128() as u8
         }
         Proposal::SecurityMigration => {
             let contract_balance = deps
