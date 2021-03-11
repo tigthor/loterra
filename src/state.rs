@@ -27,8 +27,6 @@ pub struct State {
     pub fee_for_drand_worker_in_percentage: u8,
     pub prize_rank_winner_percentage: Vec<u8>,
     pub poll_count: u64,
-    pub holders_max_percentage_reward: u8,
-    pub worker_drand_max_percentage_reward: u8,
     pub poll_default_end_height: u64,
     pub price_per_ticket_to_register: Uint128,
     pub terrand_contract_address: CanonicalAddr,
