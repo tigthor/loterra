@@ -116,6 +116,7 @@ pub struct GetPollResponse {
     pub migration_address: Option<HumanAddr>,
     pub yes_voters: Vec<CanonicalAddr>,
     pub no_voters: Vec<CanonicalAddr>,
+    pub proposal: Proposal
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

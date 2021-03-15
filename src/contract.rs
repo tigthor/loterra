@@ -1467,6 +1467,7 @@ fn query_poll<S: Storage, A: Api, Q: Querier>(
         migration_address: poll.migration_address,
         yes_voters: poll.yes_voters,
         no_voters: poll.no_voters,
+        proposal: poll.proposal
     })
 }
 
