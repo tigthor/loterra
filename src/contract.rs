@@ -3,7 +3,7 @@ use cosmwasm_std::{
     HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
     StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
-
+use terra_cosmwasm::{TaxCapResponse, TerraQuerier};
 use crate::msg::{
     AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
@@ -1278,12 +1278,15 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             let contract_balance = deps
                 .querier
                 .query_balance(&env.contract.address, &state.denom_stable.clone())?;
+            let querier = TerraQuerier::new(&deps.querier);
+            let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
+            let amount_to_send = contract_balance.amount.sub(tax_cap.cap)?;
             let msg = BankMsg::Send {
                 from_address: env.contract.address,
                 to_address: store.migration_address.unwrap(),
                 amount: vec![Coin {
                     denom: state.denom_stable.to_string(),
-                    amount: contract_balance.amount,
+                    amount: amount_to_send,
                 }],
             };
             msgs.push(msg.into())
