@@ -866,8 +866,8 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     } else if let Proposal::JackpotRewardPercentage = proposal {
         match amount {
             Some(percentage) => {
-                if percentage.u128() as u8 > 99 {
-                    return Err(StdError::generic_err("Amount between 0 to 99".to_string()));
+                if percentage.u128() as u8 > 100 {
+                    return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
                 }
                 proposal_amount = percentage;
             }
@@ -3238,7 +3238,7 @@ mod tests {
                     msg,
                     backtrace: None,
                 }) => {
-                    assert_eq!(msg, "Amount between 0 to 99")
+                    assert_eq!(msg, "Amount between 0 to 100")
                 }
                 _ => panic!("Unexpected error"),
             }
