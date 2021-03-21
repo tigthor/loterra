@@ -1,19 +1,21 @@
+use crate::msg::{
+    AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
+    HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
+};
+use crate::query::{
+    GetAllBondedResponse, GetHolderResponse, LoterraBalanceResponse, TerrandResponse,
+};
+use crate::state::{
+    combination_storage, combination_storage_read, config, config_read, poll_storage,
+    poll_storage_read, winner_storage, winner_storage_read, Combination, PollInfoState, PollStatus,
+    Proposal, State, Winner, WinnerInfoState,
+};
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
     StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
 use terra_cosmwasm::{TaxCapResponse, TerraQuerier};
-use crate::msg::{
-    AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
-    HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
-};
-use crate::query::{LoterraBalanceResponse, TerrandResponse, GetHolderResponse, GetAllBondedResponse};
-use crate::state::{
-    combination_storage, combination_storage_read, config, config_read, poll_storage,
-    poll_storage_read, winner_storage, winner_storage_read, Combination, PollInfoState, PollStatus,
-    Proposal, State, Winner, WinnerInfoState,
-};
 
 use hex;
 use std::ops::{Add, Mul, Sub};
@@ -337,11 +339,13 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         .mul(Decimal::percent(state.jackpot_percentage_reward as u64));
 
     // Drand worker fee
-    let fee_for_drand_worker = jackpot.mul(Decimal::percent(
-        state.fee_for_drand_worker_in_percentage as u64,
-    )).mul(Decimal::percent(
-        state.fee_for_drand_worker_in_percentage as u64,
-    ));
+    let fee_for_drand_worker = jackpot
+        .mul(Decimal::percent(
+            state.fee_for_drand_worker_in_percentage as u64,
+        ))
+        .mul(Decimal::percent(
+            state.fee_for_drand_worker_in_percentage as u64,
+        ));
 
     // Amount token holders can claim of the reward is a fee
     let token_holder_fee_reward = jackpot.mul(Decimal::percent(
@@ -972,7 +976,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             }
         }
         Proposal::DaoFunding
-    }else if let Proposal::StakingContractMigration = proposal {
+    } else if let Proposal::StakingContractMigration = proposal {
         match contract_migration_address {
             Some(migration_address) => {
                 let sender = deps.api.canonical_address(&env.message.sender)?;
@@ -1223,7 +1227,8 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     let mut final_vote_weight_in_percentage: u128 = 0;
     if !yes_weight.is_zero() {
         let yes_weight_by_hundred = yes_weight.u128() * 100;
-        final_vote_weight_in_percentage = yes_weight_by_hundred / lottera_total_bonded.total_bonded.u128();
+        final_vote_weight_in_percentage =
+            yes_weight_by_hundred / lottera_total_bonded.total_bonded.u128();
     }
 
     // Reject the proposal
@@ -1281,7 +1286,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             let querier = TerraQuerier::new(&deps.querier);
             let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
             let amount_to_send = contract_balance.amount.sub(tax_cap.cap)?;
-            println!("jkjk{}",amount_to_send);
+            println!("jkjk{}", amount_to_send);
             let msg = BankMsg::Send {
                 from_address: env.contract.address,
                 to_address: store.migration_address.unwrap(),
@@ -1306,7 +1311,9 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             msgs.push(res_transfer.into())
         }
         Proposal::StakingContractMigration => {
-            state.lottera_staking_contract_address = deps.api.canonical_address(&store.migration_address.unwrap())?;
+            state.lottera_staking_contract_address = deps
+                .api
+                .canonical_address(&store.migration_address.unwrap())?;
         }
         _ => {
             return Err(StdError::generic_err("Proposal not funds"));
@@ -1358,7 +1365,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
         QueryMsg::PayoutReward {} => to_binary(&query_payout_reward(deps)?)?,
         QueryMsg::GetHolder { .. } => to_binary(&query_loterra_staking_holder(deps)?)?,
-        QueryMsg::GetAllBonded {} => to_binary(&query_loterra_staking_total_bonded(deps)?)?
+        QueryMsg::GetAllBonded {} => to_binary(&query_loterra_staking_total_bonded(deps)?)?,
     };
     Ok(response)
 }
@@ -1471,7 +1478,7 @@ fn query_poll<S: Storage, A: Api, Q: Querier>(
         migration_address: poll.migration_address,
         yes_voters: poll.yes_voters,
         no_voters: poll.no_voters,
-        proposal: poll.proposal
+        proposal: poll.proposal,
     })
 }
 
@@ -2420,7 +2427,7 @@ mod tests {
                 ),
                 msg.clone(),
             )
-                .unwrap();
+            .unwrap();
 
             let state = config(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender_owner.clone(), &[]);
@@ -3104,7 +3111,8 @@ mod tests {
             let msg_amount_to_register = msg_constructor_none(Proposal::AmountToRegister);
             let msg_security_migration = msg_constructor_none(Proposal::SecurityMigration);
             let msg_dao_funding = msg_constructor_none(Proposal::DaoFunding);
-            let msg_staking_contract_migration = msg_constructor_none(Proposal::StakingContractMigration);
+            let msg_staking_contract_migration =
+                msg_constructor_none(Proposal::StakingContractMigration);
 
             let res = handle(&mut deps, env.clone(), msg_dao_funding);
             match res {
@@ -3131,9 +3139,9 @@ mod tests {
             let res = handle(&mut deps, env.clone(), msg_staking_contract_migration);
             match res {
                 Err(GenericErr {
-                        msg,
-                        backtrace: None,
-                    }) => {
+                    msg,
+                    backtrace: None,
+                }) => {
                     assert_eq!(msg, "Migration address is required")
                 }
                 _ => panic!("Unexpected error"),
@@ -3391,7 +3399,12 @@ mod tests {
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
             let res = handle(&mut deps, env.clone(), msg_security_migration.clone()).unwrap();
             assert_eq!(res.log.len(), 4);
-            let res = handle(&mut deps, env.clone(), msg_staking_contract_migration.clone()).unwrap();
+            let res = handle(
+                &mut deps,
+                env.clone(),
+                msg_staking_contract_migration.clone(),
+            )
+            .unwrap();
             assert_eq!(res.log.len(), 4);
 
             // Admin renounce so all can create proposal migration
@@ -3845,11 +3858,13 @@ mod tests {
         #[test]
         fn success_with_reject() {
             let before_all = before_all();
-            let mut deps = mock_dependencies_custom(before_all.default_length,
-                                                    &[Coin {
-                                                        denom: "ust".to_string(),
-                                                        amount: Uint128(9_000_000),
-                                                    }],);
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
             deps.querier.with_token_balances(Uint128(200_000));
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
@@ -3882,7 +3897,13 @@ mod tests {
                 }],
             );
             deps.querier.with_token_balances(Uint128(200_000));
-            deps.querier.with_holder(before_all.default_sender.clone(),Uint128(150_000), Uint128(10_000), Uint128(0), 0);
+            deps.querier.with_holder(
+                before_all.default_sender.clone(),
+                Uint128(150_000),
+                Uint128(10_000),
+                Uint128(0),
+                0,
+            );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll_dao_funding(&mut deps, env.clone());
@@ -3940,7 +3961,13 @@ mod tests {
                 }],
             );
             deps.querier.with_token_balances(Uint128(200_000));
-            deps.querier.with_holder(before_all.default_sender.clone(),Uint128(150_000), Uint128(10_000), Uint128(0), 0);
+            deps.querier.with_holder(
+                before_all.default_sender.clone(),
+                Uint128(150_000),
+                Uint128(10_000),
+                Uint128(0),
+                0,
+            );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
             create_poll_statking_contract_migration(&mut deps, env.clone());
@@ -3972,8 +3999,16 @@ mod tests {
             assert_eq!(poll_state.status, PollStatus::Passed);
             //let state = config(&mut deps);
             let mut state_after = config(&mut deps.storage).load().unwrap();
-            assert_ne!(state_after.lottera_staking_contract_address, state_before.lottera_staking_contract_address);
-            assert_eq!(deps.api.human_address(&state_after.lottera_staking_contract_address).unwrap(), HumanAddr::from("newAddress".to_string()));
+            assert_ne!(
+                state_after.lottera_staking_contract_address,
+                state_before.lottera_staking_contract_address
+            );
+            assert_eq!(
+                deps.api
+                    .human_address(&state_after.lottera_staking_contract_address)
+                    .unwrap(),
+                HumanAddr::from("newAddress".to_string())
+            );
         }
         #[test]
         fn success_security_migration() {
@@ -3986,7 +4021,13 @@ mod tests {
                 }],
             );
             deps.querier.with_token_balances(Uint128(200_000));
-            deps.querier.with_holder(before_all.default_sender.clone(),Uint128(150_000), Uint128(10_000), Uint128(0), 0);
+            deps.querier.with_holder(
+                before_all.default_sender.clone(),
+                Uint128(150_000),
+                Uint128(10_000),
+                Uint128(0),
+                0,
+            );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
             create_poll_security_migration(&mut deps, env.clone());
@@ -4009,7 +4050,6 @@ mod tests {
             let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
-
         }
         #[test]
         fn success_with_passed() {
@@ -4022,7 +4062,13 @@ mod tests {
                 }],
             );
             deps.querier.with_token_balances(Uint128(200_000));
-            deps.querier.with_holder(before_all.default_sender.clone(),Uint128(150_000), Uint128(10_000), Uint128(0), 0);
+            deps.querier.with_holder(
+                before_all.default_sender.clone(),
+                Uint128(150_000),
+                Uint128(10_000),
+                Uint128(0),
+                0,
+            );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
