@@ -4,11 +4,11 @@ use cosmwasm_std::{
     from_slice, to_binary, Api, Binary, CanonicalAddr, Coin, Empty, Extern, HumanAddr, Querier,
     QuerierResult, QueryRequest, StdResult, SystemError, Uint128, WasmQuery,
 };
-use terra_cosmwasm::{TaxCapResponse};
 use cosmwasm_storage::to_length_prefixed;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use terra_cosmwasm::TaxCapResponse;
 
 pub fn mock_dependencies_custom(
     canonical_length: usize,
@@ -32,7 +32,7 @@ pub struct WasmMockQuerier {
     base: MockQuerier<Empty>,
     terrand_response: TerrandResponse,
     lottery_balance_response: LotteraBalanceResponse,
-    holder_response: GetHolderResponse
+    holder_response: GetHolderResponse,
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -77,17 +77,22 @@ pub struct GetHolderResponse {
 }
 
 impl GetHolderResponse {
-    pub fn new(address: HumanAddr, bonded: Uint128, un_bonded: Uint128, available: Uint128, period: u64) -> Self {
+    pub fn new(
+        address: HumanAddr,
+        bonded: Uint128,
+        un_bonded: Uint128,
+        available: Uint128,
+        period: u64,
+    ) -> Self {
         GetHolderResponse {
             address,
             bonded,
             un_bonded,
             available,
-            period
+            period,
         }
     }
 }
-
 
 impl Querier for WasmMockQuerier {
     fn raw_query(&self, bin_request: &[u8]) -> QuerierResult {
@@ -126,10 +131,9 @@ impl WasmMockQuerier {
                         worker: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
                     };
                     return Ok(to_binary(&msg_terrand));
-                }else if contract_addr
+                } else if contract_addr
                     == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking")
                 {
-
                     if msg == &Binary::from(r#"{"get_all_bonded":{}}"#.as_bytes()){
                         let msg_balance = GetAllBondedResponse {
                             total_bonded: self.lottery_balance_response.balance.clone(),
@@ -146,13 +150,11 @@ impl WasmMockQuerier {
                         };
                         return Ok(to_binary(&msg_balance));
                     }
-
-
                 }
                 panic!("DO NOT ENTER HERE")
             }
-            QueryRequest::Custom(e) => {
-                let x = TaxCapResponse{ cap: Uint128(1)};
+            QueryRequest::Custom(_e) => {
+                let x = TaxCapResponse { cap: Uint128(1) };
                 return Ok(to_binary(&x));
             }
             _ => self.base.handle_query(request),
@@ -175,7 +177,14 @@ impl WasmMockQuerier {
     }
 
     // configure the mint whitelist mock querier
-    pub fn with_holder(&mut self, address: HumanAddr, bonded: Uint128, un_bonded: Uint128, available: Uint128, period: u64 ) {
+    pub fn with_holder(
+        &mut self,
+        address: HumanAddr,
+        bonded: Uint128,
+        un_bonded: Uint128,
+        available: Uint128,
+        period: u64,
+    ) {
         self.holder_response = GetHolderResponse::new(address, bonded, un_bonded, available, period)
     }
 }
