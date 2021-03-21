@@ -4,6 +4,7 @@ use cosmwasm_std::{
     from_slice, to_binary, Api, Binary, CanonicalAddr, Coin, Empty, Extern, HumanAddr, Querier,
     QuerierResult, QueryRequest, StdResult, SystemError, Uint128, WasmQuery,
 };
+use terra_cosmwasm::{TaxCapResponse};
 use cosmwasm_storage::to_length_prefixed;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -105,6 +106,7 @@ impl Querier for WasmMockQuerier {
 }
 impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
+        println!("iii{:?}", request);
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
                 if contract_addr == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20")
@@ -149,7 +151,10 @@ impl WasmMockQuerier {
                 }
                 panic!("DO NOT ENTER HERE")
             }
-
+            QueryRequest::Custom(e) => {
+                let x = TaxCapResponse{ cap: Uint128(1)};
+                return Ok(to_binary(&x));
+            }
             _ => self.base.handle_query(request),
         }
     }

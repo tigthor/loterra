@@ -1281,6 +1281,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             let querier = TerraQuerier::new(&deps.querier);
             let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
             let amount_to_send = contract_balance.amount.sub(tax_cap.cap)?;
+            println!("jkjk{}",amount_to_send);
             let msg = BankMsg::Send {
                 from_address: env.contract.address,
                 to_address: store.migration_address.unwrap(),
@@ -3975,6 +3976,42 @@ mod tests {
             assert_eq!(deps.api.human_address(&state_after.lottera_staking_contract_address).unwrap(), HumanAddr::from("newAddress".to_string()));
         }
         #[test]
+        fn success_security_migration() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            deps.querier.with_token_balances(Uint128(200_000));
+            deps.querier.with_holder(before_all.default_sender.clone(),Uint128(150_000), Uint128(10_000), Uint128(0), 0);
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            create_poll_security_migration(&mut deps, env.clone());
+
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: true,
+            };
+
+            let _res = handle(&mut deps, env.clone(), msg);
+
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let poll_state = poll_storage(&mut deps.storage)
+                .load(&1_u64.to_be_bytes())
+                .unwrap();
+            env.block.height = poll_state.end_height + 1;
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let res = handle(&mut deps, env.clone(), msg);
+            println!("{:?}", res);
+
+        }
+        #[test]
         fn success_with_passed() {
             let before_all = before_all();
             let mut deps = mock_dependencies_custom(
@@ -4021,6 +4058,7 @@ mod tests {
                 approve: true,
             };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
+            println!("{:?}", res);
         }
     }
     mod safe_lock {
