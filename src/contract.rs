@@ -1286,7 +1286,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             let querier = TerraQuerier::new(&deps.querier);
             let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
             let amount_to_send = contract_balance.amount.sub(tax_cap.cap)?;
-            println!("jkjk{}", amount_to_send);
+
             let msg = BankMsg::Send {
                 from_address: env.contract.address,
                 to_address: store.migration_address.unwrap(),
