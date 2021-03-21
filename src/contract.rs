@@ -441,19 +441,23 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             count = 0;
         }
     }
+    let querier = TerraQuerier::new(&deps.querier);
+    let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
+    let amount_to_send = fee_for_drand_worker.sub(tax_cap.cap)?;
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
         to_address: res.worker,
         amount: vec![Coin {
             denom: state.denom_stable.clone(),
-            amount: fee_for_drand_worker,
+            amount: amount_to_send,
         }],
     };
 
     let mut all_msg = vec![msg_fee_worker.into()];
 
     if !holders_rewards.is_zero() {
+        let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
         let msg_payout = QueryMsg::PayoutReward {};
         let lottera_human = deps
             .api
@@ -463,7 +467,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             lottera_human,
             vec![Coin {
                 denom: state.denom_stable.clone(),
-                amount: holders_rewards,
+                amount: amount_to_send,
             }],
         )?;
 
@@ -2358,7 +2362,7 @@ mod tests {
                     to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
                     amount: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(720)
+                        amount: Uint128(719)
                     }]
                 })
             );
@@ -2373,7 +2377,7 @@ mod tests {
                     msg: Binary::from(r#"{"payout_reward":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(720000)
+                        amount: Uint128(719999)
                     }]
                 })
             );
@@ -2442,7 +2446,7 @@ mod tests {
                     to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
                     amount: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(720)
+                        amount: Uint128(719)
                     }]
                 })
             );
