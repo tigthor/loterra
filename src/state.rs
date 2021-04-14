@@ -11,6 +11,7 @@ pub static CONFIG_KEY: &[u8] = b"config";
 const COMBINATION_KEY: &[u8] = b"combination";
 const WINNER_KEY: &[u8] = b"winner";
 const POLL_KEY: &[u8] = b"poll";
+const USER_KEY: &[u8] = b"user";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -100,14 +101,20 @@ pub enum Proposal {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PollVoters {
+    pub voter: CanonicalAddr,
+    pub vote: bool,
+    pub weight: Uint128
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PollInfoState {
     pub creator: CanonicalAddr,
     pub status: PollStatus,
     pub end_height: u64,
     pub start_height: u64,
     pub description: String,
-    pub yes_voters: Vec<CanonicalAddr>,
-    pub no_voters: Vec<CanonicalAddr>,
+    pub voters: Vec<PollVoters>,
     pub amount: Uint128,
     pub prize_rank: Vec<u8>,
     pub proposal: Proposal,
@@ -119,5 +126,18 @@ pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState> {
 }
 
 pub fn poll_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoState> {
+    bucket_read(POLL_KEY, storage)
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct userInfoState {
+    pub voted: Vec<u64>
+}
+
+pub fn user_storage<T: Storage>(storage: &mut T) -> Bucket<T, userInfoState> {
+    bucket(POLL_KEY, storage)
+}
+
+pub fn user_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoState> {
     bucket_read(POLL_KEY, storage)
 }

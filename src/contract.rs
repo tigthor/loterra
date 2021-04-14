@@ -5,11 +5,7 @@ use crate::msg::{
 use crate::query::{
     GetAllBondedResponse, GetHolderResponse, LoterraBalanceResponse, TerrandResponse,
 };
-use crate::state::{
-    combination_storage, combination_storage_read, config, config_read, poll_storage,
-    poll_storage_read, winner_storage, winner_storage_read, Combination, PollInfoState, PollStatus,
-    Proposal, State, Winner, WinnerInfoState,
-};
+use crate::state::{combination_storage, combination_storage_read, config, config_read, poll_storage, poll_storage_read, winner_storage, winner_storage_read, Combination, PollInfoState, PollStatus, Proposal, State, Winner, WinnerInfoState, PollVoters, user_storage, userInfoState};
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
@@ -1013,8 +1009,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         end_height: env.block.height + state.poll_default_end_height,
         start_height: env.block.height,
         description,
-        yes_voters: vec![],
-        no_voters: vec![],
+        voters: vec![],
         amount: proposal_amount,
         prize_rank: proposal_prize_rank,
         proposal: proposal_type,
@@ -1051,12 +1046,39 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+fn user_total_weight<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    state: &State,
+    address: &CanonicalAddr,
+) -> Uint128 {
+    let mut weight = Uint128::zero();
+    let human_address = deps.api.human_address(&address).unwrap();
+
+    // Ensure sender have some reward tokens
+    let msg = QueryMsg::GetHolder {
+        address: human_address,
+    };
+    let lottera_human = deps
+        .api
+        .human_address(&state.lottera_staking_contract_address.clone())
+        .unwrap();
+    let res = encode_msg_query(msg, lottera_human).unwrap();
+    let lottera_balance = wrapper_msg_loterra_staking(&deps, res).unwrap();
+
+    if !lottera_balance.bonded.is_zero() {
+        weight += lottera_balance.bonded;
+    }
+
+    weight
+}
+
 pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     poll_id: u64,
     approve: bool,
 ) -> StdResult<HandleResponse> {
+    let state = config(&mut deps.storage).load()?;
     let store = poll_storage(&mut deps.storage).load(&poll_id.to_be_bytes())?;
     let sender = deps.api.canonical_address(&env.message.sender).unwrap();
 
@@ -1073,26 +1095,34 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Proposal is deactivated"));
     }
     // Ensure the voter can't vote more times
-    if store.yes_voters.contains(&sender) || store.no_voters.contains(&sender) {
-        return Err(StdError::generic_err("Already voted"));
+    match user_storage(&mut deps.storage).may_load(&sender.as_slice())? {
+        Some(user) => {
+            if user.voted.contains(&poll_id){
+                return Err(StdError::generic_err("Already voted"));
+            }
+            user_storage(&mut deps.storage).update::<_>(&sender.as_slice(), |user| {
+                let mut user_data = user.unwrap();
+                user_data.voted.push(poll_id);
+                Ok(user_data)
+            })?;
+        },
+        None => {
+            user_storage(&mut deps.storage).save(&sender.as_slice(), &userInfoState{ voted: vec![poll_id] })?;
+        }
     }
 
-    match approve {
-        true => {
-            poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-                let mut poll_data = poll.unwrap();
-                poll_data.yes_voters.push(sender.clone());
-                Ok(poll_data)
-            })?;
-        }
-        false => {
-            poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-                let mut poll_data = poll.unwrap();
-                poll_data.no_voters.push(sender.clone());
-                Ok(poll_data)
-            })?;
-        }
-    }
+    // Get the weight
+    let weight = user_total_weight(&deps, &state, &sender);
+
+    poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
+        let mut poll_data = poll.unwrap();
+        poll_data.voters.push(PollVoters{
+            voter: sender,
+            vote: approve,
+            weight
+        });
+        Ok(poll_data)
+    })?;
 
     Ok(HandleResponse {
         messages: vec![],
