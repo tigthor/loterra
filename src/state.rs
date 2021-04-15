@@ -32,7 +32,7 @@ pub struct State {
     pub price_per_ticket_to_register: Uint128,
     pub terrand_contract_address: CanonicalAddr,
     pub loterra_cw20_contract_address: CanonicalAddr,
-    pub lottera_staking_contract_address: CanonicalAddr,
+    pub loterra_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
     pub latest_winning_number: String,
     pub dao_funds: Uint128,
@@ -114,7 +114,10 @@ pub struct PollInfoState {
     pub end_height: u64,
     pub start_height: u64,
     pub description: String,
-    pub voters: Vec<PollVoters>,
+    pub weight_yes_vote: Uint128,
+    pub weight_no_vote: Uint128,
+    pub yes_vote: u64,
+    pub no_vote: u64,
     pub amount: Uint128,
     pub prize_rank: Vec<u8>,
     pub proposal: Proposal,
@@ -130,11 +133,11 @@ pub fn poll_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoS
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct userInfoState {
+pub struct UserInfoState {
     pub voted: Vec<u64>
 }
 
-pub fn user_storage<T: Storage>(storage: &mut T) -> Bucket<T, userInfoState> {
+pub fn user_storage<T: Storage>(storage: &mut T) -> Bucket<T, UserInfoState> {
     bucket(POLL_KEY, storage)
 }
 

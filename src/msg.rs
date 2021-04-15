@@ -114,8 +114,10 @@ pub struct GetPollResponse {
     pub amount: Uint128,
     pub prize_per_rank: Vec<u8>,
     pub migration_address: Option<HumanAddr>,
-    pub yes_voters: Vec<CanonicalAddr>,
-    pub no_voters: Vec<CanonicalAddr>,
+    pub weight_yes_vote: Uint128,
+    pub weight_no_vote: Uint128,
+    pub yes_vote: u64,
+    pub no_vote: u64,
     pub proposal: Proposal,
 }
 

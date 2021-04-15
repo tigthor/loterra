@@ -113,6 +113,7 @@ impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
+                println!("{:?} {}", request, msg);
                 if contract_addr == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20")
                 {
                     println!("{:?}", request);
@@ -140,6 +141,16 @@ impl WasmMockQuerier {
                         return Ok(to_binary(&msg_balance));
                     }
                     else if msg == &Binary::from(r#"{"get_holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#.as_bytes()){
+                        let msg_balance = GetHolderResponse {
+                            address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
+                            bonded: self.holder_response.bonded,
+                            un_bonded: self.holder_response.un_bonded,
+                            available: self.holder_response.available,
+                            period: self.holder_response.period
+                        };
+                        return Ok(to_binary(&msg_balance));
+                    }
+                    else if msg == &Binary::from(r#"{"get_holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#.as_bytes()){
                         let msg_balance = GetHolderResponse {
                             address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
                             bonded: self.holder_response.bonded,
