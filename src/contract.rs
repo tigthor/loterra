@@ -1121,12 +1121,12 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     if weight.is_zero(){
         return Err(StdError::generic_err("Only stakers can vote"));
     }
-
+    let voice = 1;
     match approve{
         true => {
             poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
                 let mut poll_data = poll.unwrap();
-                poll_data.yes_vote = poll_data.yes_vote.add(1);
+                poll_data.yes_vote = poll_data.yes_vote.add(voice);
                 poll_data.weight_yes_vote = poll_data.weight_yes_vote.add(weight);
                 Ok(poll_data)
             })?;
@@ -1134,7 +1134,7 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
         false => {
             poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
                 let mut poll_data = poll.unwrap();
-                poll_data.no_vote = poll_data.yes_vote.add(1);
+                poll_data.no_vote = poll_data.yes_vote.add(voice);
                 poll_data.weight_no_vote = poll_data.weight_no_vote.add(weight);
                 Ok(poll_data)
             })?;
@@ -1253,7 +1253,9 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     }
 
     // Reject the proposal
-    if final_vote_weight_in_percentage < 60 || store.yes_vote <= store.no_vote {
+    // Based on the recommendation of security audit
+    // We recommend to not reject votes based on the number of votes, but rather by the stake of the voters.
+    if final_vote_weight_in_percentage < 60 /*|| store.yes_vote <= store.no_vote*/ {
         poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
             let mut poll_data = poll.unwrap();
             // Update the status to rejected
