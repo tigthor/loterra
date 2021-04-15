@@ -5,7 +5,11 @@ use crate::msg::{
 use crate::query::{
     GetAllBondedResponse, GetHolderResponse, LoterraBalanceResponse, TerrandResponse,
 };
-use crate::state::{combination_storage, combination_storage_read, config, config_read, poll_storage, poll_storage_read, winner_storage, winner_storage_read, Combination, PollInfoState, PollStatus, Proposal, State, Winner, WinnerInfoState, PollVoters, user_storage, UserInfoState};
+use crate::state::{
+    combination_storage, combination_storage_read, config, config_read, poll_storage,
+    poll_storage_read, user_storage, winner_storage, winner_storage_read, Combination,
+    PollInfoState, PollStatus, PollVoters, Proposal, State, UserInfoState, Winner, WinnerInfoState,
+};
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
@@ -1100,7 +1104,7 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     // Ensure the voter can't vote more times
     match user_storage(&mut deps.storage).may_load(&sender.as_slice())? {
         Some(user) => {
-            if user.voted.contains(&poll_id){
+            if user.voted.contains(&poll_id) {
                 return Err(StdError::generic_err("Already voted"));
             }
             user_storage(&mut deps.storage).update::<_>(&sender.as_slice(), |user| {
@@ -1108,9 +1112,14 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
                 user_data.voted.push(poll_id);
                 Ok(user_data)
             })?;
-        },
+        }
         None => {
-            user_storage(&mut deps.storage).save(&sender.as_slice(), &UserInfoState { voted: vec![poll_id] })?;
+            user_storage(&mut deps.storage).save(
+                &sender.as_slice(),
+                &UserInfoState {
+                    voted: vec![poll_id],
+                },
+            )?;
         }
     }
 
@@ -1118,11 +1127,11 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     let weight = user_total_weight(&deps, &state, &sender);
 
     // Only stakers can vote
-    if weight.is_zero(){
+    if weight.is_zero() {
         return Err(StdError::generic_err("Only stakers can vote"));
     }
     let voice = 1;
-    match approve{
+    match approve {
         true => {
             poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
                 let mut poll_data = poll.unwrap();
@@ -1246,7 +1255,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
 
     // Get the vote weight
     let mut final_vote_weight_in_percentage: u128 = 0;
-    if !store.weight_yes_vote.is_zero(){
+    if !store.weight_yes_vote.is_zero() {
         let yes_weight_by_hundred = store.weight_yes_vote.u128() * 100;
         final_vote_weight_in_percentage =
             yes_weight_by_hundred / loterra_total_bonded.total_bonded.u128();
@@ -1255,7 +1264,9 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     // Reject the proposal
     // Based on the recommendation of security audit
     // We recommend to not reject votes based on the number of votes, but rather by the stake of the voters.
-    if final_vote_weight_in_percentage < 60 /*|| store.yes_vote <= store.no_vote*/ {
+    if final_vote_weight_in_percentage < 60
+    /*|| store.yes_vote <= store.no_vote*/
+    {
         poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
             let mut poll_data = poll.unwrap();
             // Update the status to rejected
@@ -3598,14 +3609,13 @@ mod tests {
             let res = handle(&mut deps, env.clone(), msg.clone());
             match res {
                 Err(GenericErr {
-                        msg,
-                        backtrace: None,
-                    }) => {
+                    msg,
+                    backtrace: None,
+                }) => {
                     assert_eq!(msg, "Only stakers can vote")
                 }
                 _ => panic!("Unexpected error"),
             }
-
         }
         #[test]
         fn success() {
@@ -3642,9 +3652,16 @@ mod tests {
             assert_eq!(poll_state.yes_vote, 0);
             assert_eq!(poll_state.weight_yes_vote, Uint128::zero());
             assert_eq!(poll_state.weight_no_vote, Uint128(150_000));
-            let sender_to_canonical = deps.api.canonical_address(&before_all.default_sender).unwrap();
-            let user_state = user_storage(&mut deps.storage).load(sender_to_canonical.as_slice()).unwrap();
+
+            let sender_to_canonical = deps
+                .api
+                .canonical_address(&before_all.default_sender)
+                .unwrap();
+            let user_state = user_storage(&mut deps.storage)
+                .load(sender_to_canonical.as_slice())
+                .unwrap();
             assert!(user_state.voted.contains(&1_u64));
+
             // Try to vote multiple times
             let res = handle(&mut deps, env.clone(), msg);
             match res {

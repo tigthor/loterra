@@ -104,7 +104,7 @@ pub enum Proposal {
 pub struct PollVoters {
     pub voter: CanonicalAddr,
     pub vote: bool,
-    pub weight: Uint128
+    pub weight: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -134,7 +134,7 @@ pub fn poll_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoS
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct UserInfoState {
-    pub voted: Vec<u64>
+    pub voted: Vec<u64>,
 }
 
 pub fn user_storage<T: Storage>(storage: &mut T) -> Bucket<T, UserInfoState> {
