@@ -3639,7 +3639,12 @@ mod tests {
                 .unwrap();
             assert_eq!(res.log.len(), 3);
             assert_eq!(poll_state.no_vote, 1);
-
+            assert_eq!(poll_state.yes_vote, 0);
+            assert_eq!(poll_state.weight_yes_vote, Uint128::zero());
+            assert_eq!(poll_state.weight_no_vote, Uint128(150_000));
+            let sender_to_canonical = deps.api.canonical_address(&before_all.default_sender).unwrap();
+            let user_state = user_storage(&mut deps.storage).load(sender_to_canonical.as_slice()).unwrap();
+            assert!(user_state.voted.contains(&1_u64));
             // Try to vote multiple times
             let res = handle(&mut deps, env.clone(), msg);
             match res {
