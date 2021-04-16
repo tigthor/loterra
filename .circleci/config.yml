@@ -16,18 +16,24 @@ jobs:
           name: Add wasm32 target
           command: rustup target add wasm32-unknown-unknown
       - run:
+          name: Add fmt and clippy
+          command: rustup component add rustfmt clippy
+      - run:
           name: Unit tests
           env: RUST_BACKTRACE=1
           command: cargo unit-test --locked
       - run:
-          name: Build
-          command: cargo wasm --locked
-      - run:
           name: Format source code
-          command: cargo fmt
+          command: cargo fmt -- --check
+      - run:
+          name: Lint
+          command: cargo clippy -- -D warnings
       - run:
           name: Build and run schema generator
           command: cargo schema --locked
+      - run:
+          name: Build
+          command: cargo wasm --locked
       - run:
           name: Ensure checked-in source code and schemas are up-to-date
           command: |

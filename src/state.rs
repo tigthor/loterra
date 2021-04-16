@@ -138,9 +138,9 @@ pub struct UserInfoState {
 }
 
 pub fn user_storage<T: Storage>(storage: &mut T) -> Bucket<T, UserInfoState> {
-    bucket(POLL_KEY, storage)
+    bucket(USER_KEY, storage)
 }
 
 pub fn user_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoState> {
-    bucket_read(POLL_KEY, storage)
+    bucket_read(USER_KEY, storage)
 }
