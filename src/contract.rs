@@ -15,8 +15,8 @@ use cosmwasm_std::{
     HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
     StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
-use terra_cosmwasm::{TaxCapResponse, TerraQuerier};
 use std::ops::{Add, Mul, Sub};
+use terra_cosmwasm::{TaxCapResponse, TerraQuerier};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -309,9 +309,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     }
 
     let msg = QueryMsg::GetRandomness { round: next_round };
-    let terrand_human = deps
-        .api
-        .human_address(&state.terrand_contract_address)?;
+    let terrand_human = deps.api.human_address(&state.terrand_contract_address)?;
     let res = encode_msg_query(msg, terrand_human)?;
     let res = wrapper_msg_terrand(&deps, res)?;
     let randomness_hash = hex::encode(res.randomness.as_slice());
@@ -1222,7 +1220,9 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     let final_vote_weight_in_percentage = if !yes_weight.is_zero() {
         let yes_weight_by_hundred = yes_weight.u128() * 100;
         yes_weight_by_hundred / lottera_total_bonded.total_bonded.u128()
-    } else { 0 };
+    } else {
+        0
+    };
 
     // Reject the proposal
     if final_vote_weight_in_percentage < 60 || store.yes_voters.len() <= store.no_voters.len() {
@@ -1406,11 +1406,9 @@ fn query_all_combination<S: Storage, A: Api, Q: Querier>(
     let combinations = combination_storage_read(&deps.storage)
         .range(None, None, Order::Descending)
         .flat_map(|item| {
-            item.map(|(k, combination)| {
-                CombinationInfo {
-                    key: String::from_utf8(k).unwrap(),
-                    addresses: combination.addresses,
-                }
+            item.map(|(k, combination)| CombinationInfo {
+                key: String::from_utf8(k).unwrap(),
+                addresses: combination.addresses,
             })
         })
         .collect();
@@ -1432,11 +1430,9 @@ fn query_all_winner<S: Storage, A: Api, Q: Querier>(
     let winners = winner_storage_read(&deps.storage)
         .range(None, None, Order::Descending)
         .flat_map(|item| {
-            item.map(|(k, winner)| {
-                WinnerInfo {
-                    rank: u8::from_be_bytes(vector_as_u8_1_array(k)),
-                    winners: winner.winners,
-                }
+            item.map(|(k, winner)| WinnerInfo {
+                rank: u8::from_be_bytes(vector_as_u8_1_array(k)),
+                winners: winner.winners,
             })
         })
         .collect();
