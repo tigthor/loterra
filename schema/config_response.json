@@ -14,7 +14,7 @@
     "jackpot_reward",
     "latest_winning_number",
     "loterra_cw20_contract_address",
-    "lottera_staking_contract_address",
+    "loterra_staking_contract_address",
     "lottery_counter",
     "poll_count",
     "poll_default_end_height",
@@ -70,7 +70,7 @@
     "loterra_cw20_contract_address": {
       "$ref": "#/definitions/CanonicalAddr"
     },
-    "lottera_staking_contract_address": {
+    "loterra_staking_contract_address": {
       "$ref": "#/definitions/CanonicalAddr"
     },
     "lottery_counter": {

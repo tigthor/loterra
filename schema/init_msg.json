@@ -8,7 +8,7 @@
     "denom_stable",
     "every_block_time_play",
     "loterra_cw20_contract_address",
-    "lottera_staking_contract_address",
+    "loterra_staking_contract_address",
     "poll_default_end_height",
     "public_sale_end_block",
     "terrand_contract_address",
@@ -34,7 +34,7 @@
     "loterra_cw20_contract_address": {
       "$ref": "#/definitions/HumanAddr"
     },
-    "lottera_staking_contract_address": {
+    "loterra_staking_contract_address": {
       "$ref": "#/definitions/HumanAddr"
     },
     "poll_default_end_height": {
