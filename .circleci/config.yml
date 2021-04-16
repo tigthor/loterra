@@ -23,9 +23,6 @@ jobs:
           env: RUST_BACKTRACE=1
           command: cargo unit-test --locked
       - run:
-          name: Build
-          command: cargo wasm --locked
-      - run:
           name: Format source code
           command: cargo fmt -- --check
       - run:
@@ -35,8 +32,8 @@ jobs:
           name: Build and run schema generator
           command: cargo schema --locked
       - run:
-          name: Build and run schema generator
-          command: cargo schema --locked
+          name: Build
+          command: cargo wasm --locked
       - run:
           name: Ensure checked-in source code and schemas are up-to-date
           command: |
