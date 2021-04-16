@@ -3509,9 +3509,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Only stakers can vote")
-                }
+                }) => assert_eq!(msg, "Only stakers can vote"),
                 _ => panic!("Unexpected error"),
             }
         }
