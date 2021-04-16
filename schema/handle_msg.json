@@ -47,18 +47,6 @@
       }
     },
     {
-      "description": "Claim holder reward",
-      "type": "object",
-      "required": [
-        "reward"
-      ],
-      "properties": {
-        "reward": {
-          "type": "object"
-        }
-      }
-    },
-    {
       "description": "Claim jackpot",
       "type": "object",
       "required": [
@@ -232,9 +220,10 @@
         "DrandWorkerFeePercentage",
         "PrizePerRank",
         "JackpotRewardPercentage",
-        "ClaimEveryBlock",
         "AmountToRegister",
         "SecurityMigration",
+        "DaoFunding",
+        "StakingContractMigration",
         "NotExist"
       ]
     },

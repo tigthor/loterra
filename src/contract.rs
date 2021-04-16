@@ -15,10 +15,8 @@ use cosmwasm_std::{
     HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
     StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
-use terra_cosmwasm::{TaxCapResponse, TerraQuerier};
-
-use hex;
 use std::ops::{Add, Mul, Sub};
+use terra_cosmwasm::{TaxCapResponse, TerraQuerier};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -176,7 +174,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         0 => Err(StdError::generic_err(format!(
             "you need to send {}{} in order to register",
             state.price_per_ticket_to_register.clone(),
-            state.denom_stable.clone()
+            state.denom_stable
         ))),
         1 => {
             if env.message.sent_funds[0].denom == state.denom_stable {
@@ -191,7 +189,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         }
         _ => Err(StdError::generic_err(format!(
             "Only send {} to register",
-            state.denom_stable.clone()
+            state.denom_stable
         ))),
     }?;
 
@@ -199,7 +197,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err(format!(
             "you need to send {}{} in order to register",
             state.price_per_ticket_to_register.clone(),
-            state.denom_stable.clone()
+            state.denom_stable
         )));
     }
     // Handle the player is not sending too much or too less
@@ -207,7 +205,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err(format!(
             "send {}{}",
             state.price_per_ticket_to_register.clone(),
-            state.denom_stable.clone()
+            state.denom_stable
         )));
     }
 
@@ -311,9 +309,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     }
 
     let msg = QueryMsg::GetRandomness { round: next_round };
-    let terrand_human = deps
-        .api
-        .human_address(&state.terrand_contract_address.clone())?;
+    let terrand_human = deps.api.human_address(&state.terrand_contract_address)?;
     let res = encode_msg_query(msg, terrand_human)?;
     let res = wrapper_msg_terrand(&deps, res)?;
     let randomness_hash = hex::encode(res.randomness.as_slice());
@@ -461,7 +457,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         let msg_payout = QueryMsg::PayoutReward {};
         let lottera_human = deps
             .api
-            .human_address(&state.lottera_staking_contract_address.clone())?;
+            .human_address(&state.lottera_staking_contract_address)?;
         let res_payout = encode_msg_execute(
             msg_payout,
             lottera_human,
@@ -471,7 +467,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             }],
         )?;
 
-        all_msg.push(res_payout.into());
+        all_msg.push(res_payout);
     }
 
     // Update the state
@@ -559,7 +555,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     let sent = match env.message.sent_funds.len() {
         0 => Err(StdError::generic_err(format!(
             "Send some {} to participate at public sale",
-            state.denom_stable.clone()
+            state.denom_stable
         ))),
         1 => {
             if env.message.sent_funds[0].denom == state.denom_stable {
@@ -567,20 +563,20 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
             } else {
                 Err(StdError::generic_err(format!(
                     "Only {} is accepted",
-                    state.denom_stable.clone()
+                    state.denom_stable
                 )))
             }
         }
         _ => Err(StdError::generic_err(format!(
             "Send only {}, no extra denom",
-            state.denom_stable.clone()
+            state.denom_stable
         ))),
     }?;
 
     if sent.is_zero() {
         return Err(StdError::generic_err(format!(
             "Send some {} to participate at public sale",
-            state.denom_stable.clone()
+            state.denom_stable
         )));
     };
     // Get the contract balance prepare the tx
@@ -589,7 +585,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     };
     let lottera_human = deps
         .api
-        .human_address(&state.loterra_cw20_contract_address.clone())?;
+        .human_address(&state.loterra_cw20_contract_address)?;
     let res_balance = encode_msg_query(msg_balance, lottera_human)?;
     let lottera_balance = wrapper_msg_loterra(&deps, res_balance)?;
 
@@ -613,7 +609,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     };
     let lottera_human = deps
         .api
-        .human_address(&state.loterra_cw20_contract_address.clone())?;
+        .human_address(&state.loterra_cw20_contract_address)?;
     let res_transfer = encode_msg_execute(msg_transfer, lottera_human, vec![])?;
 
     state.token_holder_supply += sent;
@@ -621,7 +617,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
-        messages: vec![res_transfer.into()],
+        messages: vec![res_transfer],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -749,7 +745,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
 
     // Build the amount transaction
     let amount_to_send: Vec<Coin> = vec![Coin {
-        denom: state.denom_stable.clone(),
+        denom: state.denom_stable,
         amount: jackpot_amount,
     }];
 
@@ -766,7 +762,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     for position in win_prize_position {
         winner_storage(&mut deps.storage).update::<_>(&position.to_be_bytes(), |winners| {
             let mut winners_data = winners.unwrap();
-            for index in 0..winners_data.winners.clone().len() {
+            for index in 0..winners_data.winners.len() {
                 if winners_data.winners[index].address == sender_to_canonical {
                     winners_data.winners[index].claimed = true;
                 }
@@ -941,10 +937,8 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             Some(migration_address) => {
                 let sender = deps.api.canonical_address(&env.message.sender)?;
                 let contract_address = deps.api.canonical_address(&env.contract.address)?;
-                if state.admin != contract_address {
-                    if state.admin != sender {
-                        return Err(StdError::Unauthorized { backtrace: None });
-                    }
+                if state.admin != contract_address && state.admin != sender {
+                    return Err(StdError::Unauthorized { backtrace: None });
                 }
 
                 proposal_human_address = Option::from(migration_address);
@@ -985,10 +979,8 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             Some(migration_address) => {
                 let sender = deps.api.canonical_address(&env.message.sender)?;
                 let contract_address = deps.api.canonical_address(&env.contract.address)?;
-                if state.admin != contract_address {
-                    if state.admin != sender {
-                        return Err(StdError::Unauthorized { backtrace: None });
-                    }
+                if state.admin != contract_address && state.admin != sender {
+                    return Err(StdError::Unauthorized { backtrace: None });
                 }
                 proposal_human_address = Option::from(migration_address);
             }
@@ -1077,21 +1069,18 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Already voted"));
     }
 
-    match approve {
-        true => {
-            poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-                let mut poll_data = poll.unwrap();
-                poll_data.yes_voters.push(sender.clone());
-                Ok(poll_data)
-            })?;
-        }
-        false => {
-            poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-                let mut poll_data = poll.unwrap();
-                poll_data.no_voters.push(sender.clone());
-                Ok(poll_data)
-            })?;
-        }
+    if approve {
+        poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
+            let mut poll_data = poll.unwrap();
+            poll_data.yes_voters.push(sender.clone());
+            Ok(poll_data)
+        })?;
+    } else {
+        poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
+            let mut poll_data = poll.unwrap();
+            poll_data.no_voters.push(sender.clone());
+            Ok(poll_data)
+        })?;
     }
 
     Ok(HandleResponse {
@@ -1119,7 +1108,7 @@ pub fn handle_reject_proposal<S: Storage, A: Api, Q: Querier>(
     env: Env,
     poll_id: u64,
 ) -> StdResult<HandleResponse> {
-    let store = poll_storage_read(&mut deps.storage).load(&poll_id.to_be_bytes())?;
+    let store = poll_storage_read(&deps.storage).load(&poll_id.to_be_bytes())?;
     let sender = deps.api.canonical_address(&env.message.sender).unwrap();
 
     // Ensure the sender not sending funds accidentally
@@ -1196,7 +1185,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<HandleResponse> {
     // Load storage
     let mut state = config(&mut deps.storage).load().unwrap();
-    let store = poll_storage_read(&mut deps.storage)
+    let store = poll_storage_read(&deps.storage)
         .load(&poll_id.to_be_bytes())
         .unwrap();
 
@@ -1222,18 +1211,18 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     let msg = QueryMsg::GetAllBonded {};
     let lottera_human = deps
         .api
-        .human_address(&state.lottera_staking_contract_address.clone())
+        .human_address(&state.lottera_staking_contract_address)
         .unwrap();
     let res = encode_msg_query(msg, lottera_human).unwrap();
     let lottera_total_bonded = wrapper_msg_loterra_staking_all_bonded(&deps, res).unwrap();
 
     // Get the vote weight
-    let mut final_vote_weight_in_percentage: u128 = 0;
-    if !yes_weight.is_zero() {
+    let final_vote_weight_in_percentage = if !yes_weight.is_zero() {
         let yes_weight_by_hundred = yes_weight.u128() * 100;
-        final_vote_weight_in_percentage =
-            yes_weight_by_hundred / lottera_total_bonded.total_bonded.u128();
-    }
+        yes_weight_by_hundred / lottera_total_bonded.total_bonded.u128()
+    } else {
+        0
+    };
 
     // Reject the proposal
     if final_vote_weight_in_percentage < 60 || store.yes_voters.len() <= store.no_voters.len() {
@@ -1286,7 +1275,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
         Proposal::SecurityMigration => {
             let contract_balance = deps
                 .querier
-                .query_balance(&env.contract.address, &state.denom_stable.clone())?;
+                .query_balance(&env.contract.address, &state.denom_stable)?;
             let querier = TerraQuerier::new(&deps.querier);
             let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
             let amount_to_send = contract_balance.amount.sub(tax_cap.cap)?;
@@ -1302,17 +1291,17 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             msgs.push(msg.into())
         }
         Proposal::DaoFunding => {
-            let recipient = deps.api.human_address(&store.creator.clone())?;
+            let recipient = deps.api.human_address(&store.creator)?;
             let msg_transfer = QueryMsg::Transfer {
                 recipient,
                 amount: store.amount,
             };
             let lottera_human = deps
                 .api
-                .human_address(&state.loterra_cw20_contract_address.clone())?;
+                .human_address(&state.loterra_cw20_contract_address)?;
             let res_transfer = encode_msg_execute(msg_transfer, lottera_human, vec![])?;
             state.dao_funds = state.dao_funds.sub(store.amount)?;
-            msgs.push(res_transfer.into())
+            msgs.push(res_transfer)
         }
         Proposal::StakingContractMigration => {
             state.lottera_staking_contract_address = deps
@@ -1383,32 +1372,32 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
 fn query_terrand_randomness<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
-    return Err(StdError::Unauthorized { backtrace: None });
+    Err(StdError::Unauthorized { backtrace: None })
 }
 fn query_loterra_balance<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
-    return Err(StdError::Unauthorized { backtrace: None });
+    Err(StdError::Unauthorized { backtrace: None })
 }
 fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
-    return Err(StdError::Unauthorized { backtrace: None });
+    Err(StdError::Unauthorized { backtrace: None })
 }
 fn query_payout_reward<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
-    return Err(StdError::Unauthorized { backtrace: None });
+    Err(StdError::Unauthorized { backtrace: None })
 }
 fn query_loterra_staking_holder<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
-    return Err(StdError::Unauthorized { backtrace: None });
+    Err(StdError::Unauthorized { backtrace: None })
 }
 fn query_loterra_staking_total_bonded<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
-    return Err(StdError::Unauthorized { backtrace: None });
+    Err(StdError::Unauthorized { backtrace: None })
 }
 
 fn query_all_combination<S: Storage, A: Api, Q: Querier>(
@@ -1417,11 +1406,9 @@ fn query_all_combination<S: Storage, A: Api, Q: Querier>(
     let combinations = combination_storage_read(&deps.storage)
         .range(None, None, Order::Descending)
         .flat_map(|item| {
-            item.and_then(|(k, combination)| {
-                Ok(CombinationInfo {
-                    key: String::from_utf8(k).unwrap(),
-                    addresses: combination.addresses,
-                })
+            item.map(|(k, combination)| CombinationInfo {
+                key: String::from_utf8(k).unwrap(),
+                addresses: combination.addresses,
             })
         })
         .collect();
@@ -1443,11 +1430,9 @@ fn query_all_winner<S: Storage, A: Api, Q: Querier>(
     let winners = winner_storage_read(&deps.storage)
         .range(None, None, Order::Descending)
         .flat_map(|item| {
-            item.and_then(|(k, winner)| {
-                Ok(WinnerInfo {
-                    rank: u8::from_be_bytes(vector_as_u8_1_array(k)),
-                    winners: winner.winners,
-                })
+            item.map(|(k, winner)| WinnerInfo {
+                rank: u8::from_be_bytes(vector_as_u8_1_array(k)),
+                winners: winner.winners,
             })
         })
         .collect();
@@ -1671,12 +1656,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Contract deactivated for update or/and preventing security issue"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1768,9 +1751,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "you need to send 1000000ust in order to register")
-                }
+                }) => assert_eq!(msg, "you need to send 1000000ust in order to register"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1804,9 +1785,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Only send ust to register")
-                }
+                }) => assert_eq!(msg, "Only send ust to register"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1834,9 +1813,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "To register you need to send 1000000ust")
-                }
+                }) => assert_eq!(msg, "To register you need to send 1000000ust"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1863,12 +1840,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Not authorized use combination of [a-f] and [0-9] with length 6"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Not authorized use combination of [a-f] and [0-9] with length 6"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1896,9 +1871,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "send 1000000ust")
-                }
+                }) => assert_eq!(msg, "send 1000000ust"),
                 _ => panic!("Unexpected error"),
             }
             // Fail sending more than required (1_000_000)
@@ -1917,9 +1890,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "send 1000000ust")
-                }
+                }) => assert_eq!(msg, "send 1000000ust"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1946,12 +1917,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Lottery is about to start wait until the end before register"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Lottery is about to start wait until the end before register"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1981,12 +1950,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Contract deactivated for update or/and preventing security issue"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2010,9 +1977,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "All tokens have been sold")
-                }
+                }) => assert_eq!(msg, "All tokens have been sold"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2068,9 +2033,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Only ust is accepted")
-                }
+                }) => assert_eq!(msg, "Only ust is accepted"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2106,9 +2069,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Send only ust, no extra denom")
-                }
+                }) => assert_eq!(msg, "Send only ust, no extra denom"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2138,9 +2099,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Send some ust to participate at public sale")
-                }
+                }) => assert_eq!(msg, "Send some ust to participate at public sale"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2169,9 +2128,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Public sale is ended")
-                }
+                }) => assert_eq!(msg, "Public sale is ended"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2220,12 +2177,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Contract deactivated for update or/and preventing security issue"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2278,9 +2233,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with play")
-                }
+                }) => assert_eq!(msg, "Do not send funds with play"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2490,12 +2443,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Contract deactivated for update or/and preventing security issue"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2523,9 +2474,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with jackpot")
-                }
+                }) => assert_eq!(msg, "Do not send funds with jackpot"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2546,9 +2495,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "No jackpot reward")
-                }
+                }) => assert_eq!(msg, "No jackpot reward"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2575,9 +2522,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "No winners")
-                }
+                }) => assert_eq!(msg, "No winners"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2627,9 +2572,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Empty contract balance")
-                }
+                }) => assert_eq!(msg, "Empty contract balance"),
                 _ => panic!("Unexpected error"),
             }
             let store = winner_storage(&mut deps.storage)
@@ -2713,9 +2656,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "No jackpot to claim, try next time")
-                }
+                }) => assert_eq!(msg, "No jackpot to claim, try next time"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2804,9 +2745,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Already claimed")
-                }
+                }) => assert_eq!(msg, "Already claimed"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -2913,9 +2852,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Already claimed")
-                }
+                }) => assert_eq!(msg, "Already claimed"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -2973,9 +2910,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Description min length 6")
-                }
+                }) => assert_eq!(msg, "Description min length 6"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3008,9 +2943,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Description max length 255")
-                }
+                }) => assert_eq!(msg, "Description max length 255"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3045,9 +2978,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with proposal")
-                }
+                }) => assert_eq!(msg, "Do not send funds with proposal"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3123,9 +3054,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount required")
-                }
+                }) => assert_eq!(msg, "Amount required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3134,9 +3063,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Migration address is required")
-                }
+                }) => assert_eq!(msg, "Migration address is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3145,9 +3072,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Migration address is required")
-                }
+                }) => assert_eq!(msg, "Migration address is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3156,9 +3081,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount block time required")
-                }
+                }) => assert_eq!(msg, "Amount block time required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3167,9 +3090,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
+                }) => assert_eq!(msg, "Amount is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3178,9 +3099,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
+                }) => assert_eq!(msg, "Amount is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3189,9 +3108,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
+                }) => assert_eq!(msg, "Amount is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3200,9 +3117,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Rank is required")
-                }
+                }) => assert_eq!(msg, "Rank is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3211,9 +3126,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
+                }) => assert_eq!(msg, "Amount is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3230,9 +3143,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount between 0 to 10")
-                }
+                }) => assert_eq!(msg, "Amount between 0 to 10"),
                 _ => panic!("Unexpected error"),
             }
             let res = handle(&mut deps, env.clone(), msg_jackpot_reward_percentage);
@@ -3241,9 +3152,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount between 0 to 100")
-                }
+                }) => assert_eq!(msg, "Amount between 0 to 100"),
                 _ => panic!("Unexpected error"),
             }
             let res = handle(&mut deps, env.clone(), msg_holder_fee_per_percentage);
@@ -3252,9 +3161,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount between 0 to 20")
-                }
+                }) => assert_eq!(msg, "Amount between 0 to 20"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3265,12 +3172,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Ranks need to be in this format [0, 90, 10, 0] numbers between 0 to 100"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Ranks need to be in this format [0, 90, 10, 0] numbers between 0 to 100"
+                ),
                 _ => panic!("Unexpected error"),
             }
             let msg_prize_per_rank = msg_constructor_prize_sum_out(Proposal::PrizePerRank);
@@ -3280,9 +3185,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Numbers total sum need to be equal to 100")
-                }
+                }) => assert_eq!(msg, "Numbers total sum need to be equal to 100"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3465,9 +3368,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with vote")
-                }
+                }) => assert_eq!(msg, "Do not send funds with vote"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3506,9 +3407,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Proposal is deactivated")
-                }
+                }) => assert_eq!(msg, "Proposal is deactivated"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3542,9 +3441,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Proposal expired")
-                }
+                }) => assert_eq!(msg, "Proposal expired"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3580,9 +3477,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Already voted")
-                }
+                }) => assert_eq!(msg, "Already voted"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3627,9 +3522,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with reject proposal")
-                }
+                }) => assert_eq!(msg, "Do not send funds with reject proposal"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3659,9 +3552,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Proposal expired")
-                }
+                }) => assert_eq!(msg, "Proposal expired"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3794,9 +3685,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with present proposal")
-                }
+                }) => assert_eq!(msg, "Do not send funds with present proposal"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3853,9 +3742,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Proposal still in progress")
-                }
+                }) => assert_eq!(msg, "Proposal still in progress"),
                 _ => panic!("Unexpected error"),
             }
         }
