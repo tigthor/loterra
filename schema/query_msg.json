@@ -95,7 +95,7 @@
       }
     },
     {
-      "description": "Query Loterra smart contract to get the balance",
+      "description": "Not used to be called directly Query Loterra smart contract to get the balance",
       "type": "object",
       "required": [
         "balance"
@@ -111,6 +111,38 @@
               "$ref": "#/definitions/HumanAddr"
             }
           }
+        }
+      }
+    },
+    {
+      "description": "Get specific holder, address and balance from loterra staking contract",
+      "type": "object",
+      "required": [
+        "get_holder"
+      ],
+      "properties": {
+        "get_holder": {
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "properties": {
+            "address": {
+              "$ref": "#/definitions/HumanAddr"
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Get all bonded tokens from loterra staking contract",
+      "type": "object",
+      "required": [
+        "get_all_bonded"
+      ],
+      "properties": {
+        "get_all_bonded": {
+          "type": "object"
         }
       }
     },
@@ -135,6 +167,18 @@
               "$ref": "#/definitions/HumanAddr"
             }
           }
+        }
+      }
+    },
+    {
+      "description": "Send payout to Loterra holders",
+      "type": "object",
+      "required": [
+        "payout_reward"
+      ],
+      "properties": {
+        "payout_reward": {
+          "type": "object"
         }
       }
     }

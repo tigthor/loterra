@@ -2,7 +2,7 @@ use crate::state::{PollStatus, Proposal, State, WinnerInfoState};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Binary, CanonicalAddr, HumanAddr, Uint128};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -14,7 +14,7 @@ pub struct InitMsg {
     pub token_holder_supply: Uint128,
     pub terrand_contract_address: HumanAddr,
     pub loterra_cw20_contract_address: HumanAddr,
-    pub lottera_staking_contract_address: HumanAddr,
+    pub loterra_staking_contract_address: HumanAddr,
     pub dao_funds: Uint128,
 }
 
