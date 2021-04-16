@@ -7,9 +7,12 @@
     "creator",
     "description",
     "end_height",
+    "no_voters",
     "prize_per_rank",
+    "proposal",
     "start_height",
-    "status"
+    "status",
+    "yes_voters"
   ],
   "properties": {
     "amount": {
@@ -36,6 +39,12 @@
         }
       ]
     },
+    "no_voters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/CanonicalAddr"
+      }
+    },
     "prize_per_rank": {
       "type": "array",
       "items": {
@@ -44,6 +53,9 @@
         "minimum": 0.0
       }
     },
+    "proposal": {
+      "$ref": "#/definitions/Proposal"
+    },
     "start_height": {
       "type": "integer",
       "format": "uint64",
@@ -51,9 +63,22 @@
     },
     "status": {
       "$ref": "#/definitions/PollStatus"
+    },
+    "yes_voters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/CanonicalAddr"
+      }
     }
   },
   "definitions": {
+    "Binary": {
+      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
+      "type": "string"
+    },
+    "CanonicalAddr": {
+      "$ref": "#/definitions/Binary"
+    },
     "HumanAddr": {
       "type": "string"
     },
@@ -64,6 +89,21 @@
         "Passed",
         "Rejected",
         "RejectedByCreator"
+      ]
+    },
+    "Proposal": {
+      "type": "string",
+      "enum": [
+        "LotteryEveryBlockTime",
+        "HolderFeePercentage",
+        "DrandWorkerFeePercentage",
+        "PrizePerRank",
+        "JackpotRewardPercentage",
+        "AmountToRegister",
+        "SecurityMigration",
+        "DaoFunding",
+        "StakingContractMigration",
+        "NotExist"
       ]
     },
     "Uint128": {

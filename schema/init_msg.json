@@ -4,9 +4,11 @@
   "type": "object",
   "required": [
     "block_time_play",
+    "dao_funds",
     "denom_stable",
     "every_block_time_play",
-    "loterra_contract_address",
+    "loterra_cw20_contract_address",
+    "lottera_staking_contract_address",
     "poll_default_end_height",
     "public_sale_end_block",
     "terrand_contract_address",
@@ -18,6 +20,9 @@
       "format": "uint64",
       "minimum": 0.0
     },
+    "dao_funds": {
+      "$ref": "#/definitions/Uint128"
+    },
     "denom_stable": {
       "type": "string"
     },
@@ -26,7 +31,10 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "loterra_contract_address": {
+    "loterra_cw20_contract_address": {
+      "$ref": "#/definitions/HumanAddr"
+    },
+    "lottera_staking_contract_address": {
       "$ref": "#/definitions/HumanAddr"
     },
     "poll_default_end_height": {
