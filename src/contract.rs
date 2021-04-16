@@ -1671,12 +1671,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Contract deactivated for update or/and preventing security issue"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1768,9 +1766,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "you need to send 1000000ust in order to register")
-                }
+                }) => assert_eq!(msg, "you need to send 1000000ust in order to register"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1804,9 +1800,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Only send ust to register")
-                }
+                }) => assert_eq!(msg, "Only send ust to register"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1834,9 +1828,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "To register you need to send 1000000ust")
-                }
+                }) => assert_eq!(msg, "To register you need to send 1000000ust"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1863,12 +1855,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Not authorized use combination of [a-f] and [0-9] with length 6"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Not authorized use combination of [a-f] and [0-9] with length 6"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1896,9 +1886,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "send 1000000ust")
-                }
+                }) => assert_eq!(msg, "send 1000000ust"),
                 _ => panic!("Unexpected error"),
             }
             // Fail sending more than required (1_000_000)
@@ -1917,9 +1905,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "send 1000000ust")
-                }
+                }) => assert_eq!(msg, "send 1000000ust"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1946,12 +1932,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Lottery is about to start wait until the end before register"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Lottery is about to start wait until the end before register"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1981,12 +1965,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Contract deactivated for update or/and preventing security issue"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2010,9 +1992,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "All tokens have been sold")
-                }
+                }) => assert_eq!(msg, "All tokens have been sold"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2068,9 +2048,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Only ust is accepted")
-                }
+                }) => assert_eq!(msg, "Only ust is accepted"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2106,9 +2084,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Send only ust, no extra denom")
-                }
+                }) => assert_eq!(msg, "Send only ust, no extra denom"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2138,9 +2114,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Send some ust to participate at public sale")
-                }
+                }) => assert_eq!(msg, "Send some ust to participate at public sale"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2169,9 +2143,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Public sale is ended")
-                }
+                }) => assert_eq!(msg, "Public sale is ended"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2220,12 +2192,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Contract deactivated for update or/and preventing security issue"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2278,9 +2248,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with play")
-                }
+                }) => assert_eq!(msg, "Do not send funds with play"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2490,12 +2458,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Contract deactivated for update or/and preventing security issue"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Contract deactivated for update or/and preventing security issue"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2523,9 +2489,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with jackpot")
-                }
+                }) => assert_eq!(msg, "Do not send funds with jackpot"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2546,9 +2510,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "No jackpot reward")
-                }
+                }) => assert_eq!(msg, "No jackpot reward"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2575,9 +2537,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "No winners")
-                }
+                }) => assert_eq!(msg, "No winners"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2627,9 +2587,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Empty contract balance")
-                }
+                }) => assert_eq!(msg, "Empty contract balance"),
                 _ => panic!("Unexpected error"),
             }
             let store = winner_storage(&mut deps.storage)
@@ -2713,9 +2671,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "No jackpot to claim, try next time")
-                }
+                }) => assert_eq!(msg, "No jackpot to claim, try next time"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2804,9 +2760,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Already claimed")
-                }
+                }) => assert_eq!(msg, "Already claimed"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -2913,9 +2867,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Already claimed")
-                }
+                }) => assert_eq!(msg, "Already claimed"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -2973,9 +2925,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Description min length 6")
-                }
+                }) => assert_eq!(msg, "Description min length 6"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3008,9 +2958,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Description max length 255")
-                }
+                }) => assert_eq!(msg, "Description max length 255"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3045,9 +2993,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with proposal")
-                }
+                }) => assert_eq!(msg, "Do not send funds with proposal"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3123,9 +3069,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount required")
-                }
+                }) => assert_eq!(msg, "Amount required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3134,9 +3078,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Migration address is required")
-                }
+                }) => assert_eq!(msg, "Migration address is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3145,9 +3087,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Migration address is required")
-                }
+                }) => assert_eq!(msg, "Migration address is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3156,9 +3096,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount block time required")
-                }
+                }) => assert_eq!(msg, "Amount block time required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3167,9 +3105,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
+                }) => assert_eq!(msg, "Amount is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3178,9 +3114,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
+                }) => assert_eq!(msg, "Amount is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3189,9 +3123,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
+                }) => assert_eq!(msg, "Amount is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3200,9 +3132,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Rank is required")
-                }
+                }) => assert_eq!(msg, "Rank is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3211,9 +3141,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount is required")
-                }
+                }) => assert_eq!(msg, "Amount is required"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3230,9 +3158,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount between 0 to 10")
-                }
+                }) => assert_eq!(msg, "Amount between 0 to 10"),
                 _ => panic!("Unexpected error"),
             }
             let res = handle(&mut deps, env.clone(), msg_jackpot_reward_percentage);
@@ -3241,9 +3167,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount between 0 to 100")
-                }
+                }) => assert_eq!(msg, "Amount between 0 to 100"),
                 _ => panic!("Unexpected error"),
             }
             let res = handle(&mut deps, env.clone(), msg_holder_fee_per_percentage);
@@ -3252,9 +3176,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Amount between 0 to 20")
-                }
+                }) => assert_eq!(msg, "Amount between 0 to 20"),
                 _ => panic!("Unexpected error"),
             }
 
@@ -3265,12 +3187,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(
-                        msg,
-                        "Ranks need to be in this format [0, 90, 10, 0] numbers between 0 to 100"
-                    )
-                }
+                }) => assert_eq!(
+                    msg,
+                    "Ranks need to be in this format [0, 90, 10, 0] numbers between 0 to 100"
+                ),
                 _ => panic!("Unexpected error"),
             }
             let msg_prize_per_rank = msg_constructor_prize_sum_out(Proposal::PrizePerRank);
@@ -3280,9 +3200,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Numbers total sum need to be equal to 100")
-                }
+                }) => assert_eq!(msg, "Numbers total sum need to be equal to 100"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3465,9 +3383,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with vote")
-                }
+                }) => assert_eq!(msg, "Do not send funds with vote"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3506,9 +3422,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Proposal is deactivated")
-                }
+                }) => assert_eq!(msg, "Proposal is deactivated"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3542,9 +3456,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Proposal expired")
-                }
+                }) => assert_eq!(msg, "Proposal expired"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3580,9 +3492,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Already voted")
-                }
+                }) => assert_eq!(msg, "Already voted"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3627,9 +3537,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with reject proposal")
-                }
+                }) => assert_eq!(msg, "Do not send funds with reject proposal"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3659,9 +3567,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Proposal expired")
-                }
+                }) => assert_eq!(msg, "Proposal expired"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3794,9 +3700,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Do not send funds with present proposal")
-                }
+                }) => assert_eq!(msg, "Do not send funds with present proposal"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -3853,9 +3757,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => {
-                    assert_eq!(msg, "Proposal still in progress")
-                }
+                }) => assert_eq!(msg, "Proposal still in progress"),
                 _ => panic!("Unexpected error"),
             }
         }
