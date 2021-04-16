@@ -5,17 +5,17 @@
   "required": [
     "admin",
     "block_time_play",
-    "claim_reward",
     "combination_len",
+    "dao_funds",
     "denom_stable",
     "every_block_time_play",
     "fee_for_drand_worker_in_percentage",
-    "holders_max_percentage_reward",
-    "holders_rewards",
     "jackpot_percentage_reward",
     "jackpot_reward",
-    "last_winning_number",
-    "loterra_contract_address",
+    "latest_winning_number",
+    "loterra_cw20_contract_address",
+    "lottera_staking_contract_address",
+    "lottery_counter",
     "poll_count",
     "poll_default_end_height",
     "price_per_ticket_to_register",
@@ -24,8 +24,7 @@
     "safe_lock",
     "terrand_contract_address",
     "token_holder_percentage_fee_reward",
-    "token_holder_supply",
-    "worker_drand_max_percentage_reward"
+    "token_holder_supply"
   ],
   "properties": {
     "admin": {
@@ -36,16 +35,13 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "claim_reward": {
-      "type": "array",
-      "items": {
-        "$ref": "#/definitions/CanonicalAddr"
-      }
-    },
     "combination_len": {
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
+    },
+    "dao_funds": {
+      "$ref": "#/definitions/Uint128"
     },
     "denom_stable": {
       "type": "string"
@@ -60,14 +56,6 @@
       "format": "uint8",
       "minimum": 0.0
     },
-    "holders_max_percentage_reward": {
-      "type": "integer",
-      "format": "uint8",
-      "minimum": 0.0
-    },
-    "holders_rewards": {
-      "$ref": "#/definitions/Uint128"
-    },
     "jackpot_percentage_reward": {
       "type": "integer",
       "format": "uint8",
@@ -76,11 +64,19 @@
     "jackpot_reward": {
       "$ref": "#/definitions/Uint128"
     },
-    "last_winning_number": {
+    "latest_winning_number": {
       "type": "string"
     },
-    "loterra_contract_address": {
+    "loterra_cw20_contract_address": {
       "$ref": "#/definitions/CanonicalAddr"
+    },
+    "lottera_staking_contract_address": {
+      "$ref": "#/definitions/CanonicalAddr"
+    },
+    "lottery_counter": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "poll_count": {
       "type": "integer",
@@ -121,11 +117,6 @@
     },
     "token_holder_supply": {
       "$ref": "#/definitions/Uint128"
-    },
-    "worker_drand_max_percentage_reward": {
-      "type": "integer",
-      "format": "uint8",
-      "minimum": 0.0
     }
   },
   "definitions": {
