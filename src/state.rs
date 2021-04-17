@@ -11,7 +11,7 @@ pub static CONFIG_KEY: &[u8] = b"config";
 const COMBINATION_KEY: &[u8] = b"combination";
 const WINNER_KEY: &[u8] = b"winner";
 const POLL_KEY: &[u8] = b"poll";
-const USER_KEY: &[u8] = b"user";
+const VOTE_KEY: &[u8] = b"user";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -137,10 +137,11 @@ pub struct UserInfoState {
     pub voted: Vec<u64>,
 }
 
-pub fn user_storage<T: Storage>(storage: &mut T) -> Bucket<T, UserInfoState> {
-    bucket(USER_KEY, storage)
+// poll vote storage index = VOTE_KEY:poll_id:address -> bool
+pub fn poll_vote_storage<T: Storage>(storage: &mut T, poll_id: u64) -> Bucket<T, bool> {
+    Bucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
 }
 
-pub fn user_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, UserInfoState> {
-    bucket_read(USER_KEY, storage)
+pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> ReadonlyBucket<T, bool> {
+    ReadonlyBucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
 }

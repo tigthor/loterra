@@ -1,13 +1,9 @@
-use crate::msg::QueryMsg;
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_slice, to_binary, Api, Binary, CanonicalAddr, Coin, Empty, Extern, HumanAddr, Querier,
-    QuerierResult, QueryRequest, StdResult, SystemError, Uint128, WasmQuery,
+    from_slice, to_binary, Api, Binary, Coin, Empty, Extern, HumanAddr, Querier, QuerierResult,
+    QueryRequest, SystemError, Uint128, WasmQuery,
 };
-use cosmwasm_storage::to_length_prefixed;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::Serialize;
 use terra_cosmwasm::TaxCapResponse;
 
 pub fn mock_dependencies_custom(

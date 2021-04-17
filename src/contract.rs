@@ -7,8 +7,8 @@ use crate::query::{
 };
 use crate::state::{
     combination_storage, combination_storage_read, config, config_read, poll_storage,
-    poll_storage_read, user_storage, winner_storage, winner_storage_read, Combination,
-    PollInfoState, PollStatus, Proposal, State, UserInfoState, Winner, WinnerInfoState,
+    poll_storage_read, poll_vote_storage, winner_storage, winner_storage_read, Combination,
+    PollInfoState, PollStatus, Proposal, State, Winner, WinnerInfoState,
 };
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
@@ -1078,43 +1078,32 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     poll_id: u64,
     approve: bool,
 ) -> StdResult<HandleResponse> {
-    let state = config(&mut deps.storage).load()?;
-    let store = poll_storage(&mut deps.storage).load(&poll_id.to_be_bytes())?;
-    let sender = deps.api.canonical_address(&env.message.sender).unwrap();
-
     // Ensure the sender not sending funds accidentally
     if !env.message.sent_funds.is_empty() {
         return Err(StdError::generic_err("Do not send funds with vote"));
     }
+
+    let sender = deps.api.canonical_address(&env.message.sender)?;
+    let state = config(&mut deps.storage).load()?;
+    let mut poll_info = poll_storage_read(&deps.storage).load(&poll_id.to_be_bytes())?;
+
     // Ensure the poll is still valid
-    if env.block.height > store.end_height {
+    if env.block.height > poll_info.end_height {
         return Err(StdError::generic_err("Proposal expired"));
     }
     // Ensure the poll is still valid
-    if store.status != PollStatus::InProgress {
+    if poll_info.status != PollStatus::InProgress {
         return Err(StdError::generic_err("Proposal is deactivated"));
     }
-    // Ensure the voter can't vote more times
-    match user_storage(&mut deps.storage).may_load(&sender.as_slice())? {
-        Some(user) => {
-            if user.voted.contains(&poll_id) {
-                return Err(StdError::generic_err("Already voted"));
-            }
-            user_storage(&mut deps.storage).update::<_>(&sender.as_slice(), |user| {
-                let mut user_data = user.unwrap();
-                user_data.voted.push(poll_id);
-                Ok(user_data)
-            })?;
-        }
-        None => {
-            user_storage(&mut deps.storage).save(
-                &sender.as_slice(),
-                &UserInfoState {
-                    voted: vec![poll_id],
-                },
-            )?;
-        }
-    }
+
+    // if user voted fail, else store the vote
+    poll_vote_storage(&mut deps.storage, poll_id).update(
+        &sender.as_slice(),
+        |exists| match exists {
+            None => Ok(approve),
+            Some(_) => Err(StdError::generic_err("Already voted")),
+        },
+    )?;
 
     // Get the sender weight
     let weight = user_total_weight(&deps, &state, &sender);
@@ -1123,22 +1112,18 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     if weight.is_zero() {
         return Err(StdError::generic_err("Only stakers can vote"));
     }
+
+    // save weight
     let voice = 1;
     if approve {
-        poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-            let mut poll_data = poll.unwrap();
-            poll_data.yes_vote = poll_data.yes_vote.add(voice);
-            poll_data.weight_yes_vote = poll_data.weight_yes_vote.add(weight);
-            Ok(poll_data)
-        })?;
+        poll_info.yes_vote += voice;
+        poll_info.weight_yes_vote = poll_info.weight_yes_vote.add(weight);
     } else {
-        poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-            let mut poll_data = poll.unwrap();
-            poll_data.no_vote = poll_data.yes_vote.add(voice);
-            poll_data.weight_no_vote = poll_data.weight_no_vote.add(weight);
-            Ok(poll_data)
-        })?;
+        poll_info.no_vote += voice;
+        poll_info.weight_no_vote = poll_info.weight_no_vote.add(weight);
     }
+    // overwrite poll info
+    poll_storage(&mut deps.storage).save(&poll_id.to_be_bytes(), &poll_info)?;
 
     Ok(HandleResponse {
         messages: vec![],
@@ -1543,7 +1528,7 @@ mod tests {
     use super::*;
     use crate::mock_querier::mock_dependencies_custom;
     use crate::msg::{HandleMsg, InitMsg};
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, MockApi, MockStorage};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env};
     use cosmwasm_std::StdError::GenericErr;
     use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128};
 
@@ -2306,7 +2291,7 @@ mod tests {
             let msg = HandleMsg::Register {
                 combination: "1e3fab".to_string(),
             };
-            let res = handle(
+            handle(
                 &mut deps,
                 mock_env(
                     before_all.default_sender.clone(),
@@ -2322,7 +2307,7 @@ mod tests {
             let msg = HandleMsg::Register {
                 combination: "39493d".to_string(),
             };
-            let res = handle(
+            handle(
                 &mut deps,
                 mock_env(
                     before_all.default_sender_two.clone(),
@@ -2406,7 +2391,7 @@ mod tests {
             let msg = HandleMsg::Register {
                 combination: "39498d".to_string(),
             };
-            let res = handle(
+            handle(
                 &mut deps,
                 mock_env(
                     before_all.default_sender_two.clone(),
@@ -3348,7 +3333,7 @@ mod tests {
             assert_eq!(res.log.len(), 4);
 
             // Admin renounce so all can create proposal migration
-            let res = handle_renounce(&mut deps, env.clone()).unwrap();
+            handle_renounce(&mut deps, env.clone()).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
 
             let res = handle(&mut deps, env.clone(), msg_security_migration).unwrap();
@@ -3535,13 +3520,12 @@ mod tests {
             create_poll(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
-                poll_id: 1,
-                approve: false,
-            };
+            let poll_id: u64 = 1;
+            let approve = false;
+            let msg = HandleMsg::Vote { poll_id, approve };
             let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
             let poll_state = poll_storage(&mut deps.storage)
-                .load(&1_u64.to_be_bytes())
+                .load(&poll_id.to_be_bytes())
                 .unwrap();
             assert_eq!(res.log.len(), 3);
             assert_eq!(poll_state.no_vote, 1);
@@ -3553,10 +3537,10 @@ mod tests {
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-            let user_state = user_storage(&mut deps.storage)
+            let vote_state = poll_vote_storage(&mut deps.storage, poll_id)
                 .load(sender_to_canonical.as_slice())
                 .unwrap();
-            assert!(user_state.voted.contains(&1_u64));
+            assert_eq!(vote_state, approve);
 
             // Try to vote multiple times
             let res = handle(&mut deps, env.clone(), msg);
@@ -3899,7 +3883,7 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
-            let mut state_before = config(&mut deps.storage).load().unwrap();
+            let state_before = config(&mut deps.storage).load().unwrap();
 
             let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
@@ -3920,7 +3904,7 @@ mod tests {
                 .unwrap();
             assert_eq!(poll_state.status, PollStatus::Passed);
             //let state = config(&mut deps);
-            let mut state_after = config(&mut deps.storage).load().unwrap();
+            let state_after = config(&mut deps.storage).load().unwrap();
             println!("{:?}", state_after.dao_funds);
             println!("{:?}", state_before.dao_funds);
             assert_eq!(
@@ -3963,7 +3947,7 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
-            let mut state_before = config(&mut deps.storage).load().unwrap();
+            let state_before = config(&mut deps.storage).load().unwrap();
 
             let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
@@ -3976,7 +3960,7 @@ mod tests {
                 .unwrap();
             assert_eq!(poll_state.status, PollStatus::Passed);
             //let state = config(&mut deps);
-            let mut state_after = config(&mut deps.storage).load().unwrap();
+            let state_after = config(&mut deps.storage).load().unwrap();
             assert_ne!(
                 state_after.loterra_staking_contract_address,
                 state_before.loterra_staking_contract_address
@@ -4023,7 +4007,7 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
-            let mut state_before = config(&mut deps.storage).load().unwrap();
+            config(&mut deps.storage).load().unwrap();
 
             let msg = HandleMsg::PresentProposal { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
