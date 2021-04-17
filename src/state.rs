@@ -141,6 +141,6 @@ pub fn user_storage<T: Storage>(storage: &mut T) -> Bucket<T, UserInfoState> {
     bucket(USER_KEY, storage)
 }
 
-pub fn user_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoState> {
+pub fn user_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, UserInfoState> {
     bucket_read(USER_KEY, storage)
 }
