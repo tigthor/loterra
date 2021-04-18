@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, Storage, Uint128};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, Storage, Uint128, StdResult};
 use cosmwasm_storage::{
     bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
     Singleton,
@@ -49,6 +49,11 @@ pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State> {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
 pub struct Combination {
     pub addresses: Vec<CanonicalAddr>,
+}
+
+// index = COMBINATION_KEY | lottery_id | combination | address -> true
+pub fn save_combination<T: Storage>(storage: &mut T, lottery_id: u64, combination: String, address: CanonicalAddr) -> StdResult<()> {
+    Bucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes(), &combination.as_bytes()], storage).save(address.as_slice(), &true)
 }
 
 pub fn combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, Combination> {
@@ -144,4 +149,34 @@ pub fn poll_vote_storage<T: Storage>(storage: &mut T, poll_id: u64) -> Bucket<T,
 
 pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> ReadonlyBucket<T, bool> {
     ReadonlyBucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mock_querier::mock_dependencies_custom;
+    use crate::msg::{HandleMsg, InitMsg};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env};
+    use cosmwasm_std::StdError::GenericErr;
+    use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128};
+
+    mod combination {
+        use super::*;
+        use cosmwasm_std::Order;
+
+        #[test]
+        fn test_save_combination() {
+            let mut deps = mock_dependencies(20, &[]);
+            let lottery_id = 1u64;
+            save_combination(&mut deps.storage, lottery_id, "AB".to_string(), CanonicalAddr::from(vec![1u8])).unwrap();
+            save_combination(&mut deps.storage, lottery_id, "AB".to_string(), CanonicalAddr::from(vec![2u8])).unwrap();
+            save_combination(&mut deps.storage, lottery_id, "AB".to_string(), CanonicalAddr::from(vec![3u8])).unwrap();
+
+            let res: StdResult<Vec<(Vec<u8>, bool)>> = ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes(), "AB".as_bytes()], &deps.storage)
+                .range(None, None, Order::Ascending)
+                .collect();
+            assert_eq!(res.unwrap(), vec![(vec![1u8], true), (vec![2u8], true), (vec![3u8], true)]);
+
+        }
+    }
 }
