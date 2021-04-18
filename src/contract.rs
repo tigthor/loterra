@@ -528,14 +528,6 @@ fn wrapper_msg_loterra_staking<S: Storage, A: Api, Q: Querier>(
 
     Ok(res)
 }
-fn wrapper_msg_loterra_staking_all_bonded<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<GetAllBondedResponse> {
-    let res: GetAllBondedResponse = deps.querier.query(&query)?;
-
-    Ok(res)
-}
 
 pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -1219,19 +1211,14 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Proposal still in progress"));
     }
 
-    //Get total bonded from staking contract
-    let msg = QueryMsg::GetAllBonded {};
-    let loterra_human = deps
-        .api
-        .human_address(&state.loterra_staking_contract_address)
-        .unwrap();
-    let res = encode_msg_query(msg, loterra_human).unwrap();
-    let loterra_total_bonded = wrapper_msg_loterra_staking_all_bonded(&deps, res).unwrap();
-
-    // Get the vote weight
-    let final_vote_weight_in_percentage = if !store.weight_yes_vote.is_zero() {
-        let yes_weight_by_hundred = store.weight_yes_vote.u128() * 100;
-        yes_weight_by_hundred / loterra_total_bonded.total_bonded.u128()
+    let total_vote_weight = store.weight_yes_vote.add(store.weight_no_vote);
+    let total_yes_weight_percentage = if !store.weight_yes_vote.is_zero() {
+        store.weight_yes_vote.u128() * 100 / total_vote_weight.u128()
+    } else {
+        0
+    };
+    let total_no_weight_percentage = if !store.weight_no_vote.is_zero() {
+        store.weight_no_vote.u128() * 100 / total_vote_weight.u128()
     } else {
         0
     };
@@ -1239,9 +1226,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     // Reject the proposal
     // Based on the recommendation of security audit
     // We recommend to not reject votes based on the number of votes, but rather by the stake of the voters.
-    if final_vote_weight_in_percentage < 60
-    /*|| store.yes_vote <= store.no_vote*/
-    {
+    if total_yes_weight_percentage < 50 || total_no_weight_percentage > 33 {
         poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
             let mut poll_data = poll.unwrap();
             // Update the status to rejected
@@ -1266,7 +1251,8 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             ],
             data: None,
         });
-    };
+    }
+
     let mut msgs = vec![];
     // Valid the proposal
     match store.proposal {
