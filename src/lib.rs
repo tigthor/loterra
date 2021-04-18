@@ -1,4 +1,5 @@
 pub mod contract;
+mod helpers;
 #[cfg(test)]
 mod mock_querier;
 pub mod msg;

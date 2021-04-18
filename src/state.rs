@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, Storage, Uint128, StdResult};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, Order, StdResult, Storage, Uint128};
 use cosmwasm_storage::{
     bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
     Singleton,
@@ -51,35 +51,85 @@ pub struct Combination {
     pub addresses: Vec<CanonicalAddr>,
 }
 
-// index = COMBINATION_KEY | lottery_id | combination | address -> true
-pub fn save_combination<T: Storage>(storage: &mut T, lottery_id: u64, combination: String, address: CanonicalAddr) -> StdResult<()> {
-    Bucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes(), &combination.as_bytes()], storage).save(address.as_slice(), &true)
+// index = COMBINATION_KEY | lottery_id | combination -> address
+// TODO maybe implement index COMBINATION_KEY | lottery_id | combination | address -> true ?
+pub fn combination_bucket<T: Storage>(
+    storage: &mut T,
+    lottery_id: u64,
+) -> Bucket<T, Vec<CanonicalAddr>> {
+    Bucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
 }
 
-pub fn combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, Combination> {
-    bucket(COMBINATION_KEY, storage)
-}
-
-pub fn combination_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Combination> {
-    bucket_read(COMBINATION_KEY, storage)
+// index = COMBINATION_KEY | lottery_id | combination -> address
+pub fn combination_bucket_read<T: Storage>(
+    storage: &T,
+    lottery_id: u64,
+) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
+    ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct WinnerInfoState {
+pub struct WinnerRewardClaims {
     pub claimed: bool,
-    pub address: CanonicalAddr,
-}
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct Winner {
-    pub winners: Vec<WinnerInfoState>,
+    pub ranks: Vec<u8>,
 }
 
-pub fn winner_storage<T: Storage>(storage: &mut T) -> Bucket<T, Winner> {
-    bucket(WINNER_KEY, storage)
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct RewardClaim {
+    pub rank: u8,
+    pub claimed: bool,
 }
 
-pub fn winner_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Winner> {
-    bucket_read(WINNER_KEY, storage)
+// if an address won a lottery in this round, saved by rank
+// index address -> winner claim
+pub fn winner_storage<T: Storage>(
+    storage: &mut T,
+    lottery_id: u64,
+) -> Bucket<T, WinnerRewardClaims> {
+    Bucket::multilevel(&[WINNER_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+// save winner
+pub fn save_winner<T: Storage>(
+    storage: &mut T,
+    lottery_id: u64,
+    addr: CanonicalAddr,
+    rank: u8,
+) -> StdResult<WinnerRewardClaims> {
+    winner_storage(storage, lottery_id).update(addr.as_slice(), |exists| match exists {
+        None => Ok(WinnerRewardClaims {
+            claimed: false,
+            ranks: vec![rank],
+        }),
+        Some(claims) => {
+            let mut ranks = claims.ranks;
+            ranks.push(rank);
+            Ok(WinnerRewardClaims {
+                claimed: false,
+                ranks,
+            })
+        }
+    })
+}
+
+pub fn winner_storage_read<T: Storage>(
+    storage: &T,
+    lottery_id: u64,
+) -> ReadonlyBucket<T, WinnerRewardClaims> {
+    ReadonlyBucket::multilevel(&[WINNER_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+pub fn all_winners<T: Storage>(
+    storage: &T,
+    lottery_id: u64,
+) -> StdResult<Vec<(CanonicalAddr, WinnerRewardClaims)>> {
+    winner_storage_read(storage, lottery_id)
+        .range(None, None, Order::Ascending)
+        .map(|item| {
+            let (addr, claim) = item?;
+            Ok((CanonicalAddr::from(addr), claim))
+        })
+        .collect()
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -153,8 +203,6 @@ pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> Readonly
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::mock_querier::mock_dependencies_custom;
     use crate::msg::{HandleMsg, InitMsg};
     use cosmwasm_std::testing::{mock_dependencies, mock_env};
     use cosmwasm_std::StdError::GenericErr;
@@ -163,7 +211,9 @@ mod tests {
     mod combination {
         use super::*;
         use cosmwasm_std::Order;
+        use cosmwasm_storage::to_length_prefixed_nested;
 
+        /*
         #[test]
         fn test_save_combination() {
             let mut deps = mock_dependencies(20, &[]);
@@ -176,7 +226,25 @@ mod tests {
                 .range(None, None, Order::Ascending)
                 .collect();
             assert_eq!(res.unwrap(), vec![(vec![1u8], true), (vec![2u8], true), (vec![3u8], true)]);
-
         }
+
+        #[test]
+        fn test_combination_matches() {
+            let mut deps = mock_dependencies(20, &[]);
+            let lottery_id = 1u64;
+            // winning combination AB11CC
+            // second comb AB13CC
+            // third comb  ABCC1C
+            save_combination(&mut deps.storage, lottery_id, "AB11CC".to_string(), CanonicalAddr::from(vec![1u8])).unwrap();
+            save_combination(&mut deps.storage, lottery_id, "AB1".to_string(), CanonicalAddr::from(vec![2u8])).unwrap();
+            save_combination(&mut deps.storage, lottery_id, "AB2".to_string(), CanonicalAddr::from(vec![3u8])).unwrap();
+            save_combination(&mut deps.storage, lottery_id, "ABC".to_string(), CanonicalAddr::from(vec![3u8])).unwrap();
+            save_combination(&mut deps.storage, lottery_id, "ABCCC".to_string(), CanonicalAddr::from(vec![3u8])).unwrap();
+
+            let matches = combination_matches(&deps.storage, lottery_id, "AB".to_string()).unwrap();
+            println!("{:?}", matches)
+        }
+
+         */
     }
 }
