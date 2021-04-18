@@ -2,9 +2,7 @@ use crate::msg::{
     AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
 };
-use crate::query::{
-    GetAllBondedResponse, GetHolderResponse, LoterraBalanceResponse, TerrandResponse,
-};
+use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
 use crate::state::{
     combination_storage, combination_storage_read, config, config_read, poll_storage,
     poll_storage_read, poll_vote_storage, winner_storage, winner_storage_read, Combination,
