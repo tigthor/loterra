@@ -1,13 +1,9 @@
-use crate::msg::QueryMsg;
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_slice, to_binary, Api, Binary, CanonicalAddr, Coin, Empty, Extern, HumanAddr, Querier,
-    QuerierResult, QueryRequest, StdResult, SystemError, Uint128, WasmQuery,
+    from_slice, to_binary, Api, Binary, Coin, Empty, Extern, HumanAddr, Querier, QuerierResult,
+    QueryRequest, SystemError, Uint128, WasmQuery,
 };
-use cosmwasm_storage::to_length_prefixed;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::Serialize;
 use terra_cosmwasm::TaxCapResponse;
 
 pub fn mock_dependencies_custom(
@@ -113,6 +109,7 @@ impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
+                println!("{:?} {}", request, msg);
                 if contract_addr == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20")
                 {
                     println!("{:?}", request);
@@ -140,6 +137,16 @@ impl WasmMockQuerier {
                         return Ok(to_binary(&msg_balance));
                     }
                     else if msg == &Binary::from(r#"{"get_holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#.as_bytes()){
+                        let msg_balance = GetHolderResponse {
+                            address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
+                            bonded: self.holder_response.bonded,
+                            un_bonded: self.holder_response.un_bonded,
+                            available: self.holder_response.available,
+                            period: self.holder_response.period
+                        };
+                        return Ok(to_binary(&msg_balance));
+                    }
+                    else if msg == &Binary::from(r#"{"get_holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#.as_bytes()){
                         let msg_balance = GetHolderResponse {
                             address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
                             bonded: self.holder_response.bonded,
