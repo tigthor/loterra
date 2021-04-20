@@ -165,7 +165,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     }
 
     // Check if the lottery is about to play and cancel new ticket to enter until play
-    if env.block.time >= state.block_time_play {
+    if env.block.time > state.block_time_play {
         return Err(StdError::generic_err(
             "Lottery is about to start wait until the end before register",
         ));
@@ -596,7 +596,8 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
 
     let canonical_addr = deps.api.canonical_address(&env.message.sender)?;
     // Load winner
-    let may_claim = winner_storage_read(&deps.storage, state.lottery_counter)
+    let last_lottery_counter_round = state.lottery_counter - 1;
+    let may_claim = winner_storage_read(&deps.storage, last_lottery_counter_round)
         .may_load(canonical_addr.as_slice())?;
 
     if may_claim.is_none() {
@@ -624,14 +625,14 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     }
 
     // TODO: maybe save winner count somewhere?
-    let winners = all_winners(&deps.storage, state.lottery_counter)?.len();
+    let winners = all_winners(&deps.storage, last_lottery_counter_round)?.len();
 
     let total_prize = rewards.clone().ranks.into_iter().fold(0u128, |acc, rank| {
         let prize = state
             .jackpot_reward
             .mul(Decimal::percent(
                 // TODO claim.rank checked anywhere? this can cause panic
-                state.prize_rank_winner_percentage[rank as usize - 1] as u64,
+                state.prize_rank_winner_percentage[rank as usize - 1] as u64
             ))
             .u128()
             / winners as u128;
@@ -640,7 +641,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
 
     // update the winner to claimed true
     rewards.claimed = true;
-    winner_storage(&mut deps.storage, state.lottery_counter)
+    winner_storage(&mut deps.storage, last_lottery_counter_round)
         .save(canonical_addr.as_slice(), &rewards)?;
 
     // Build the amount transaction
