@@ -6,10 +6,12 @@ use cosmwasm_storage::{
     bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
     Singleton,
 };
+use std::ops::Add;
 
 pub static CONFIG_KEY: &[u8] = b"config";
 const COMBINATION_KEY: &[u8] = b"combination";
 const WINNER_KEY: &[u8] = b"winner";
+const WINNER_RANK_KEY: &[u8] = b"rank";
 const POLL_KEY: &[u8] = b"poll";
 const VOTE_KEY: &[u8] = b"user";
 
@@ -89,13 +91,20 @@ pub fn winner_storage<T: Storage>(
     Bucket::multilevel(&[WINNER_KEY, &lottery_id.to_be_bytes()], storage)
 }
 
+pub fn winner_storage_read<T: Storage>(
+    storage: &T,
+    lottery_id: u64,
+) -> ReadonlyBucket<T, WinnerRewardClaims> {
+    ReadonlyBucket::multilevel(&[WINNER_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
 // save winner
 pub fn save_winner<T: Storage>(
     storage: &mut T,
     lottery_id: u64,
     addr: CanonicalAddr,
     rank: u8,
-) -> StdResult<WinnerRewardClaims> {
+) -> StdResult<()> {
     winner_storage(storage, lottery_id).update(addr.as_slice(), |exists| match exists {
         None => Ok(WinnerRewardClaims {
             claimed: false,
@@ -109,14 +118,13 @@ pub fn save_winner<T: Storage>(
                 ranks,
             })
         }
-    })
-}
-
-pub fn winner_storage_read<T: Storage>(
-    storage: &T,
-    lottery_id: u64,
-) -> ReadonlyBucket<T, WinnerRewardClaims> {
-    ReadonlyBucket::multilevel(&[WINNER_KEY, &lottery_id.to_be_bytes()], storage)
+    })?;
+    winner_count_by_rank(storage, lottery_id)
+        .update(&rank.to_be_bytes(), |exists| match exists {
+            None => Ok(Uint128(1)),
+            Some(r) => Ok(r.add(Uint128(1))),
+        })
+        .map(|_| ())
 }
 
 pub fn all_winners<T: Storage>(
@@ -130,6 +138,19 @@ pub fn all_winners<T: Storage>(
             Ok((CanonicalAddr::from(addr), claim))
         })
         .collect()
+}
+
+// index: lottery_id | rank -> count
+pub fn winner_count_by_rank_read<T: Storage>(
+    storage: &T,
+    lottery_id: u64,
+) -> ReadonlyBucket<T, Uint128> {
+    ReadonlyBucket::multilevel(&[WINNER_RANK_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+// index: lottery_id | rank -> count
+pub fn winner_count_by_rank<T: Storage>(storage: &mut T, lottery_id: u64) -> Bucket<T, Uint128> {
+    Bucket::multilevel(&[WINNER_RANK_KEY, &lottery_id.to_be_bytes()], storage)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -199,52 +220,4 @@ pub fn poll_vote_storage<T: Storage>(storage: &mut T, poll_id: u64) -> Bucket<T,
 
 pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> ReadonlyBucket<T, bool> {
     ReadonlyBucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::msg::{HandleMsg, InitMsg};
-    use cosmwasm_std::testing::{mock_dependencies, mock_env};
-    use cosmwasm_std::StdError::GenericErr;
-    use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128};
-
-    mod combination {
-        use super::*;
-        use cosmwasm_std::Order;
-        use cosmwasm_storage::to_length_prefixed_nested;
-
-        /*
-        #[test]
-        fn test_save_combination() {
-            let mut deps = mock_dependencies(20, &[]);
-            let lottery_id = 1u64;
-            save_combination(&mut deps.storage, lottery_id, "AB".to_string(), CanonicalAddr::from(vec![1u8])).unwrap();
-            save_combination(&mut deps.storage, lottery_id, "AB".to_string(), CanonicalAddr::from(vec![2u8])).unwrap();
-            save_combination(&mut deps.storage, lottery_id, "AB".to_string(), CanonicalAddr::from(vec![3u8])).unwrap();
-
-            let res: StdResult<Vec<(Vec<u8>, bool)>> = ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes(), "AB".as_bytes()], &deps.storage)
-                .range(None, None, Order::Ascending)
-                .collect();
-            assert_eq!(res.unwrap(), vec![(vec![1u8], true), (vec![2u8], true), (vec![3u8], true)]);
-        }
-
-        #[test]
-        fn test_combination_matches() {
-            let mut deps = mock_dependencies(20, &[]);
-            let lottery_id = 1u64;
-            // winning combination AB11CC
-            // second comb AB13CC
-            // third comb  ABCC1C
-            save_combination(&mut deps.storage, lottery_id, "AB11CC".to_string(), CanonicalAddr::from(vec![1u8])).unwrap();
-            save_combination(&mut deps.storage, lottery_id, "AB1".to_string(), CanonicalAddr::from(vec![2u8])).unwrap();
-            save_combination(&mut deps.storage, lottery_id, "AB2".to_string(), CanonicalAddr::from(vec![3u8])).unwrap();
-            save_combination(&mut deps.storage, lottery_id, "ABC".to_string(), CanonicalAddr::from(vec![3u8])).unwrap();
-            save_combination(&mut deps.storage, lottery_id, "ABCCC".to_string(), CanonicalAddr::from(vec![3u8])).unwrap();
-
-            let matches = combination_matches(&deps.storage, lottery_id, "AB".to_string()).unwrap();
-            println!("{:?}", matches)
-        }
-
-         */
-    }
 }
