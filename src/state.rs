@@ -11,6 +11,7 @@ pub static CONFIG_KEY: &[u8] = b"config";
 const COMBINATION_KEY: &[u8] = b"combination";
 const WINNER_KEY: &[u8] = b"winner";
 const POLL_KEY: &[u8] = b"poll";
+const VOTE_KEY: &[u8] = b"user";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -31,7 +32,7 @@ pub struct State {
     pub price_per_ticket_to_register: Uint128,
     pub terrand_contract_address: CanonicalAddr,
     pub loterra_cw20_contract_address: CanonicalAddr,
-    pub lottera_staking_contract_address: CanonicalAddr,
+    pub loterra_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
     pub latest_winning_number: String,
     pub dao_funds: Uint128,
@@ -100,14 +101,23 @@ pub enum Proposal {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PollVoters {
+    pub voter: CanonicalAddr,
+    pub vote: bool,
+    pub weight: Uint128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct PollInfoState {
     pub creator: CanonicalAddr,
     pub status: PollStatus,
     pub end_height: u64,
     pub start_height: u64,
     pub description: String,
-    pub yes_voters: Vec<CanonicalAddr>,
-    pub no_voters: Vec<CanonicalAddr>,
+    pub weight_yes_vote: Uint128,
+    pub weight_no_vote: Uint128,
+    pub yes_vote: u64,
+    pub no_vote: u64,
     pub amount: Uint128,
     pub prize_rank: Vec<u8>,
     pub proposal: Proposal,
@@ -120,4 +130,18 @@ pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState> {
 
 pub fn poll_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoState> {
     bucket_read(POLL_KEY, storage)
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct UserInfoState {
+    pub voted: Vec<u64>,
+}
+
+// poll vote storage index = VOTE_KEY:poll_id:address -> bool
+pub fn poll_vote_storage<T: Storage>(storage: &mut T, poll_id: u64) -> Bucket<T, bool> {
+    Bucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
+}
+
+pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> ReadonlyBucket<T, bool> {
+    ReadonlyBucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
 }

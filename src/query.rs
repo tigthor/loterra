@@ -21,8 +21,3 @@ pub struct GetHolderResponse {
     pub available: Uint128,
     pub period: u64,
 }
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct GetAllBondedResponse {
-    pub total_bonded: Uint128,
-}
