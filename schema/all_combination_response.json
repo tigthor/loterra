@@ -14,30 +14,26 @@
     }
   },
   "definitions": {
-    "Binary": {
-      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
-      "type": "string"
-    },
-    "CanonicalAddr": {
-      "$ref": "#/definitions/Binary"
-    },
     "CombinationInfo": {
       "type": "object",
       "required": [
         "addresses",
-        "key"
+        "combination"
       ],
       "properties": {
         "addresses": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/CanonicalAddr"
+            "$ref": "#/definitions/HumanAddr"
           }
         },
-        "key": {
+        "combination": {
           "type": "string"
         }
       }
+    },
+    "HumanAddr": {
+      "type": "string"
     }
   }
 }

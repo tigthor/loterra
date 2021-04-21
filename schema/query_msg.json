@@ -22,7 +22,17 @@
       ],
       "properties": {
         "combination": {
-          "type": "object"
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
         }
       }
     },
@@ -34,7 +44,17 @@
       ],
       "properties": {
         "winner": {
-          "type": "object"
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
         }
       }
     },

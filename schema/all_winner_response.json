@@ -3,56 +3,52 @@
   "title": "AllWinnerResponse",
   "type": "object",
   "required": [
-    "winner"
+    "winners"
   ],
   "properties": {
-    "winner": {
+    "winners": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/WinnerInfo"
+        "$ref": "#/definitions/WinnerResponse"
       }
     }
   },
   "definitions": {
-    "Binary": {
-      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
+    "HumanAddr": {
       "type": "string"
     },
-    "CanonicalAddr": {
-      "$ref": "#/definitions/Binary"
-    },
-    "WinnerInfo": {
-      "type": "object",
-      "required": [
-        "rank",
-        "winners"
-      ],
-      "properties": {
-        "rank": {
-          "type": "integer",
-          "format": "uint8",
-          "minimum": 0.0
-        },
-        "winners": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/WinnerInfoState"
-          }
-        }
-      }
-    },
-    "WinnerInfoState": {
+    "WinnerResponse": {
       "type": "object",
       "required": [
         "address",
-        "claimed"
+        "claims"
       ],
       "properties": {
         "address": {
-          "$ref": "#/definitions/CanonicalAddr"
+          "$ref": "#/definitions/HumanAddr"
         },
+        "claims": {
+          "$ref": "#/definitions/WinnerRewardClaims"
+        }
+      }
+    },
+    "WinnerRewardClaims": {
+      "type": "object",
+      "required": [
+        "claimed",
+        "ranks"
+      ],
+      "properties": {
         "claimed": {
           "type": "boolean"
+        },
+        "ranks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
         }
       }
     }
