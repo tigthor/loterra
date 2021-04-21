@@ -832,6 +832,11 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     } else if let Proposal::DaoFunding = proposal {
         match amount {
             Some(amount) => {
+                let sender = deps.api.canonical_address(&env.message.sender)?;
+                let contract_address = deps.api.canonical_address(&env.contract.address)?;
+                if state.admin != contract_address && state.admin != sender {
+                    return Err(StdError::Unauthorized { backtrace: None });
+                }
                 if amount.is_zero() {
                     return Err(StdError::generic_err("Amount be higher than 0".to_string()));
                 }
@@ -3064,8 +3069,6 @@ mod tests {
             assert_eq!(res.log.len(), 4);
             let res = handle(&mut deps, env.clone(), msg_drand_fee_worker).unwrap();
             assert_eq!(res.log.len(), 4);
-            let res = handle(&mut deps, env.clone(), msg_dao_funding).unwrap();
-            assert_eq!(res.log.len(), 4);
 
             // Admin create proposal migration
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
@@ -3078,6 +3081,8 @@ mod tests {
             )
             .unwrap();
             assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_dao_funding.clone()).unwrap();
+            assert_eq!(res.log.len(), 4);
 
             // Admin renounce so all can create proposal migration
             handle_renounce(&mut deps, env.clone()).unwrap();
@@ -3086,6 +3091,8 @@ mod tests {
             let res = handle(&mut deps, env.clone(), msg_security_migration).unwrap();
             assert_eq!(res.log.len(), 4);
             let res = handle(&mut deps, env.clone(), msg_staking_contract_migration).unwrap();
+            assert_eq!(res.log.len(), 4);
+            let res = handle(&mut deps, env.clone(), msg_dao_funding).unwrap();
             assert_eq!(res.log.len(), 4);
         }
     }
@@ -3613,7 +3620,12 @@ mod tests {
                 Uint128(0),
                 0,
             );
+
             default_init(&mut deps);
+            // with admin renounce
+            let env = mock_env(before_all.default_sender_owner, &[]);
+            let res = handle_renounce(&mut deps, env);
+
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll_dao_funding(&mut deps, env.clone());
 
