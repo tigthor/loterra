@@ -1,12 +1,13 @@
+use crate::helpers::count_match;
 use crate::msg::{
-    AllCombinationResponse, AllWinnerResponse, CombinationInfo, ConfigResponse, GetPollResponse,
-    HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerInfo,
+    AllCombinationResponse, AllWinnersResponse, CombinationInfo, ConfigResponse, GetPollResponse,
+    HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
 use crate::state::{
-    combination_storage, combination_storage_read, config, config_read, poll_storage,
-    poll_storage_read, poll_vote_storage, winner_storage, winner_storage_read, Combination,
-    PollInfoState, PollStatus, Proposal, State, Winner, WinnerInfoState,
+    all_winners, combination_bucket, combination_bucket_read, config, config_read, poll_storage,
+    poll_storage_read, poll_vote_storage, save_winner, winner_count_by_rank_read, winner_storage,
+    winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
@@ -57,7 +58,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         safe_lock: false,
         latest_winning_number: "".to_string(),
         dao_funds: msg.dao_funds,
-        lottery_counter: 0,
+        lottery_counter: 1,
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -160,6 +161,14 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             "Contract deactivated for update or/and preventing security issue",
         ));
     }
+
+    // Check if the lottery is about to play and cancel new ticket to enter until play
+    if env.block.time > state.block_time_play {
+        return Err(StdError::generic_err(
+            "Lottery is about to start wait until the end before register",
+        ));
+    }
+
     // Regex to check if the combination is allowed
     if !is_lower_hex(&combination, state.combination_len) {
         return Err(StdError::generic_err(format!(
@@ -167,6 +176,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             state.combination_len
         )));
     }
+
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
         0 => Err(StdError::generic_err(format!(
@@ -207,32 +217,19 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    // Check if the lottery is about to play and cancel new ticket to enter until play
-    if env.block.time >= state.block_time_play {
-        return Err(StdError::generic_err(
-            "Lottery is about to start wait until the end before register",
-        ));
-    }
-
-    // Save combination and addresses to the bucket
-    match combination_storage(&mut deps.storage).may_load(&combination.as_bytes())? {
-        Some(c) => {
-            let mut combination_in_storage = c;
-            combination_in_storage
-                .addresses
-                .push(deps.api.canonical_address(&env.message.sender)?);
-            combination_storage(&mut deps.storage)
-                .save(&combination.as_bytes(), &combination_in_storage)?;
-        }
-        None => {
-            combination_storage(&mut deps.storage).save(
-                &combination.as_bytes(),
-                &Combination {
-                    addresses: vec![deps.api.canonical_address(&env.message.sender)?],
-                },
-            )?;
-        }
-    };
+    // save combination
+    let addr = deps.api.canonical_address(&env.message.sender)?;
+    combination_bucket(&mut deps.storage, state.lottery_counter).update(
+        combination.as_bytes(),
+        |exists| match exists {
+            Some(addrs) => {
+                let mut modified = addrs;
+                modified.push(addr);
+                Ok(modified)
+            }
+            None => Ok(vec![addr]),
+        },
+    )?;
 
     Ok(HandleResponse {
         messages: vec![],
@@ -258,10 +255,16 @@ fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
     let res: TerrandResponse = deps.querier.query(&query)?;
     Ok(res)
 }
+
 pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
 ) -> StdResult<HandleResponse> {
+    // Ensure the sender not sending funds accidentally
+    if !env.message.sent_funds.is_empty() {
+        return Err(StdError::generic_err("Do not send funds with play"));
+    }
+
     // Load the state
     let mut state = config(&mut deps.storage).load()?;
 
@@ -269,30 +272,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err(
             "Contract deactivated for update or/and preventing security issue",
         ));
-    }
-
-    let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
-    let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
-
-    // Load combinations
-    let store = query_all_combination(&deps).unwrap();
-
-    /*
-        Empty previous winner
-    */
-    // Get all keys in the bucket winner
-    let keys = winner_storage(&mut deps.storage)
-        .range(None, None, Order::Ascending)
-        .flat_map(|item| item.map(|(key, _)| key))
-        .collect::<Vec<Vec<u8>>>();
-    // Empty winner for the next play
-    for x in keys {
-        winner_storage(&mut deps.storage).remove(x.as_ref())
-    }
-
-    // Ensure the sender not sending funds accidentally
-    if !env.message.sent_funds.is_empty() {
-        return Err(StdError::generic_err("Do not send funds with play"));
     }
 
     // Make the contract callable for everyone every x blocks
@@ -305,6 +284,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             state.block_time_play
         )));
     }
+
+    // calculate next round randomness
+    let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
+    let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     let msg = QueryMsg::GetRandomness { round: next_round };
     let terrand_human = deps.api.human_address(&state.terrand_contract_address)?;
@@ -351,90 +334,53 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // The jackpot after worker fee applied
     let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
     let mut holders_rewards = Uint128::zero();
-    if !store.combination.is_empty() {
-        let mut count = 0;
-        for combination in store.combination {
-            for x in 0..winning_combination.len() {
-                if combination.key.chars().nth(x).unwrap()
-                    == winning_combination.chars().nth(x).unwrap()
-                {
-                    count += 1;
-                }
-            }
 
-            if count == winning_combination.len() {
-                // Set the new jackpot after new fee calculation
-                jackpot_after = jackpot.sub(total_fee).unwrap();
-                holders_rewards = holders_rewards.add(token_holder_fee_reward);
+    let winners: Vec<(usize, Vec<CanonicalAddr>)> =
+        combination_bucket_read(&deps.storage, state.lottery_counter)
+            .range(None, None, Order::Ascending)
+            .filter_map(|res| {
+                let (comb_raw, addrs) = res.ok()?;
+                let comb = String::from_utf8(comb_raw).ok()?;
+                let match_count = count_match(comb.as_str(), winning_combination);
+                if match_count < winning_combination.len() - 3 {
+                    return None;
+                }
 
-                let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winner_address in combination.addresses {
-                    data_winner.push(WinnerInfoState {
-                        claimed: false,
-                        address: winner_address,
-                    });
+                Some((match_count, addrs))
+            })
+            .collect();
+
+    // rank winners
+    let winners_ranked: Vec<(u8, Vec<CanonicalAddr>)> = winners
+        .into_iter()
+        .filter_map(|(match_count, addrs)| {
+            let rank = match match_count {
+                count if count == winning_combination.len() => {
+                    // Set the new jackpot after new fee calculation
+                    jackpot_after = jackpot.sub(total_fee).unwrap();
+                    holders_rewards = holders_rewards.add(token_holder_fee_reward);
+                    1
                 }
-                if !data_winner.is_empty() {
-                    winner_storage(&mut deps.storage).save(
-                        &1_u8.to_be_bytes(),
-                        &Winner {
-                            winners: data_winner,
-                        },
-                    )?;
-                }
-            } else if count == winning_combination.len() - 1 {
-                let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winner_address in combination.addresses {
-                    data_winner.push(WinnerInfoState {
-                        claimed: false,
-                        address: winner_address,
-                    });
-                }
-                if !data_winner.is_empty() {
-                    winner_storage(&mut deps.storage).save(
-                        &2_u8.to_be_bytes(),
-                        &Winner {
-                            winners: data_winner,
-                        },
-                    )?;
-                }
-            } else if count == winning_combination.len() - 2 {
-                let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winner_address in combination.addresses {
-                    data_winner.push(WinnerInfoState {
-                        claimed: false,
-                        address: winner_address,
-                    });
-                }
-                if !data_winner.is_empty() {
-                    winner_storage(&mut deps.storage).save(
-                        &3_u8.to_be_bytes(),
-                        &Winner {
-                            winners: data_winner,
-                        },
-                    )?;
-                }
-            } else if count == winning_combination.len() - 3 {
-                let mut data_winner: Vec<WinnerInfoState> = vec![];
-                for winner_address in combination.addresses {
-                    data_winner.push(WinnerInfoState {
-                        claimed: false,
-                        address: winner_address,
-                    });
-                }
-                if !data_winner.is_empty() {
-                    winner_storage(&mut deps.storage).save(
-                        &4_u8.to_be_bytes(),
-                        &Winner {
-                            winners: data_winner,
-                        },
-                    )?;
-                }
+                count if count == winning_combination.len() - 1 => 2,
+                count if count == winning_combination.len() - 2 => 3,
+                count if count == winning_combination.len() - 3 => 4,
+                _ => 0,
+            } as u8;
+
+            if rank == 0 {
+                return None;
             }
-            // Re init the counter for the next players
-            count = 0;
+            Some((rank, addrs))
+        })
+        .collect();
+
+    // save winners by rank
+    for (rank, winners) in winners_ranked {
+        for addr in winners {
+            save_winner(&mut deps.storage, state.lottery_counter, addr, rank)?;
         }
     }
+
     let querier = TerraQuerier::new(&deps.querier);
     let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
     let amount_to_send = fee_for_drand_worker.sub(tax_cap.cap)?;
@@ -472,15 +418,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // Update the state
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
-    // Get all keys in the bucket combination
-    let keys = combination_storage(&mut deps.storage)
-        .range(None, None, Order::Ascending)
-        .flat_map(|item| item.map(|(key, _)| key))
-        .collect::<Vec<Vec<u8>>>();
-    // Empty combination for the next play
-    for x in keys {
-        combination_storage(&mut deps.storage).remove(x.as_ref())
-    }
 
     // Save the new state
     config(&mut deps.storage).save(&state)?;
@@ -628,92 +565,23 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
 ) -> StdResult<HandleResponse> {
+    // Ensure the sender is not sending funds
+    if !env.message.sent_funds.is_empty() {
+        return Err(StdError::generic_err("Do not send funds with jackpot"));
+    }
+
     // Load state
     let state = config(&mut deps.storage).load()?;
+
     if state.safe_lock {
         return Err(StdError::generic_err(
             "Contract deactivated for update or/and preventing security issue",
         ));
     }
-    let sender_to_canonical = deps.api.canonical_address(&env.message.sender).unwrap();
-    // Load winners
-    let store = query_all_winner(&deps).unwrap();
-    // Ensure the sender is not sending funds
-    if !env.message.sent_funds.is_empty() {
-        return Err(StdError::generic_err("Do not send funds with jackpot"));
-    }
+
     // Ensure there is jackpot reward to claim
     if state.jackpot_reward.is_zero() {
         return Err(StdError::generic_err("No jackpot reward"));
-    }
-    // Ensure there is some winner
-    if store.winner.is_empty() {
-        return Err(StdError::generic_err("No winners"));
-    }
-
-    let mut jackpot_amount: Uint128 = Uint128(0);
-    let mut win_prize_position: Vec<u8> = vec![];
-    for winner in store.winner.clone() {
-        for winner_info in winner.winners.clone() {
-            if winner_info.address == deps.api.canonical_address(&env.message.sender).unwrap() {
-                if winner_info.claimed {
-                    return Err(StdError::generic_err("Already claimed"));
-                }
-
-                match winner.rank {
-                    1 => {
-                        // Prizes first rank
-                        let prize = state
-                            .jackpot_reward
-                            .mul(Decimal::percent(
-                                state.prize_rank_winner_percentage[0] as u64,
-                            ))
-                            .u128()
-                            / winner.winners.clone().len() as u128;
-                        jackpot_amount += Uint128(prize);
-                        win_prize_position.push(1);
-                    }
-                    2 => {
-                        // Prizes second rank
-                        let prize = state
-                            .jackpot_reward
-                            .mul(Decimal::percent(
-                                state.prize_rank_winner_percentage[1] as u64,
-                            ))
-                            .u128()
-                            / winner.winners.clone().len() as u128;
-                        jackpot_amount += Uint128(prize);
-
-                        win_prize_position.push(2);
-                    }
-                    3 => {
-                        // Prizes third rank
-                        let prize = state
-                            .jackpot_reward
-                            .mul(Decimal::percent(
-                                state.prize_rank_winner_percentage[2] as u64,
-                            ))
-                            .u128()
-                            / winner.winners.clone().len() as u128;
-                        jackpot_amount += Uint128(prize);
-                        win_prize_position.push(3);
-                    }
-                    4 => {
-                        // Prizes four rank
-                        let prize = state
-                            .jackpot_reward
-                            .mul(Decimal::percent(
-                                state.prize_rank_winner_percentage[3] as u64,
-                            ))
-                            .u128()
-                            / winner.winners.clone().len() as u128;
-                        jackpot_amount += Uint128(prize);
-                        win_prize_position.push(4);
-                    }
-                    _ => (),
-                }
-            }
-        }
     }
 
     // Get the contract balance
@@ -725,19 +593,52 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     if balance.amount.is_zero() {
         return Err(StdError::generic_err("Empty contract balance"));
     }
+
+    let canonical_addr = deps.api.canonical_address(&env.message.sender)?;
+    // Load winner
+    let last_lottery_counter_round = state.lottery_counter - 1;
+    let may_claim = winner_storage_read(&deps.storage, last_lottery_counter_round)
+        .may_load(canonical_addr.as_slice())?;
+
+    if may_claim.is_none() {
+        return Err(StdError::generic_err("Address is not a winner"));
+    }
+
+    let mut rewards = may_claim.unwrap();
+
+    if rewards.claimed {
+        return Err(StdError::generic_err("Already claimed"));
+    }
+
     // Ensure the contract have sufficient balance to handle the transaction
-    if balance.amount < jackpot_amount {
+    if balance.amount < state.jackpot_reward {
         return Err(StdError::generic_err("Not enough funds in the contract"));
     }
-    // Ensure there is some reward to send
-    if jackpot_amount.is_zero() {
-        return Err(StdError::generic_err("No jackpot to claim, try next time"));
+
+    let mut total_prize: u128 = 0;
+    for rank in rewards.clone().ranks {
+        let rank_count = winner_count_by_rank_read(&deps.storage, last_lottery_counter_round)
+            .load(&rank.to_be_bytes())?;
+        let prize = state
+            .jackpot_reward
+            .mul(Decimal::percent(
+                // TODO claim.rank checked anywhere? this can cause panic
+                state.prize_rank_winner_percentage[rank as usize - 1] as u64,
+            ))
+            .u128()
+            / rank_count.u128() as u128;
+        total_prize += prize
     }
+
+    // update the winner to claimed true
+    rewards.claimed = true;
+    winner_storage(&mut deps.storage, last_lottery_counter_round)
+        .save(canonical_addr.as_slice(), &rewards)?;
 
     // Build the amount transaction
     let amount_to_send: Vec<Coin> = vec![Coin {
         denom: state.denom_stable,
-        amount: jackpot_amount,
+        amount: Uint128::from(total_prize),
     }];
 
     let msg = BankMsg::Send {
@@ -749,26 +650,13 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         amount: amount_to_send,
     };
 
-    // update the winner to claimed true
-    for position in win_prize_position {
-        winner_storage(&mut deps.storage).update::<_>(&position.to_be_bytes(), |winners| {
-            let mut winners_data = winners.unwrap();
-            for index in 0..winners_data.winners.len() {
-                if winners_data.winners[index].address == sender_to_canonical {
-                    winners_data.winners[index].claimed = true;
-                }
-            }
-            Ok(winners_data)
-        })?;
-    }
-
     // Send the jackpot
     Ok(HandleResponse {
         messages: vec![msg.into()],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
-                value: "jackpot reward".to_string(),
+                value: "handle_jackpot".to_string(),
             },
             LogAttribute {
                 key: "to".to_string(),
@@ -1349,8 +1237,10 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
-        QueryMsg::Combination {} => to_binary(&query_all_combination(deps)?)?,
-        QueryMsg::Winner {} => to_binary(&query_all_winner(deps)?)?,
+        QueryMsg::Combination { lottery_id } => {
+            to_binary(&query_all_combination(deps, lottery_id)?)?
+        }
+        QueryMsg::Winner { lottery_id } => to_binary(&query_all_winner(deps, lottery_id)?)?,
         QueryMsg::GetPoll { poll_id } => to_binary(&query_poll(deps, poll_id)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
         QueryMsg::GetRandomness { round: _ } => to_binary(&query_terrand_randomness(deps)?)?,
@@ -1402,41 +1292,46 @@ fn query_loterra_staking_total_bonded<S: Storage, A: Api, Q: Querier>(
 
 fn query_all_combination<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
+    lottery_id: u64,
 ) -> StdResult<AllCombinationResponse> {
-    let combinations = combination_storage_read(&deps.storage)
-        .range(None, None, Order::Descending)
-        .flat_map(|item| {
-            item.map(|(k, combination)| CombinationInfo {
-                key: String::from_utf8(k).unwrap(),
-                addresses: combination.addresses,
+    let combinations: StdResult<Vec<CombinationInfo>> =
+        combination_bucket_read(&deps.storage, lottery_id)
+            .range(None, None, Order::Descending)
+            .map(|item| {
+                let (comb, cann_addrs) = item?;
+                let addrs: StdResult<Vec<HumanAddr>> = cann_addrs
+                    .iter()
+                    .map(|c| deps.api.human_address(c))
+                    .collect();
+                // TODO the safety of unwrap
+                let key = String::from_utf8(comb).unwrap();
+                Ok(CombinationInfo {
+                    combination: key,
+                    addresses: addrs?,
+                })
+            })
+            .collect();
+    Ok(AllCombinationResponse {
+        combination: combinations?,
+    })
+}
+
+fn query_all_winner<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    lottery_id: u64,
+) -> StdResult<AllWinnersResponse> {
+    let winners = all_winners(&deps.storage, lottery_id)?;
+    let res: StdResult<Vec<WinnerResponse>> = winners
+        .into_iter()
+        .map(|(can_addr, claims)| {
+            Ok(WinnerResponse {
+                address: deps.api.human_address(&can_addr)?,
+                claims,
             })
         })
         .collect();
 
-    Ok(AllCombinationResponse {
-        combination: combinations,
-    })
-}
-fn vector_as_u8_1_array(vector: Vec<u8>) -> [u8; 1] {
-    let mut arr = [0u8; 1];
-    for (place, element) in arr.iter_mut().zip(vector.iter()) {
-        *place = *element;
-    }
-    arr
-}
-fn query_all_winner<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-) -> StdResult<AllWinnerResponse> {
-    let winners = winner_storage_read(&deps.storage)
-        .range(None, None, Order::Descending)
-        .flat_map(|item| {
-            item.map(|(k, winner)| WinnerInfo {
-                rank: u8::from_be_bytes(vector_as_u8_1_array(k)),
-                winners: winner.winners,
-            })
-        })
-        .collect();
-    Ok(AllWinnerResponse { winner: winners })
+    Ok(AllWinnersResponse { winners: res? })
 }
 
 fn query_poll<S: Storage, A: Api, Q: Querier>(
@@ -1602,24 +1497,10 @@ mod tests {
             .api
             .canonical_address(&HumanAddr::from("address2".to_string()))
             .unwrap();
-        let _x = winner_storage(&mut deps.storage)
-            .save(
-                &2_u8.to_be_bytes(),
-                &Winner {
-                    winners: vec![
-                        WinnerInfoState {
-                            claimed: false,
-                            address: winner_address,
-                        },
-                        WinnerInfoState {
-                            claimed: true,
-                            address: winner_address2,
-                        },
-                    ],
-                },
-            )
-            .unwrap();
-        let res = query_all_winner(&deps).unwrap();
+        save_winner(&mut deps.storage, 1u64, winner_address, 2).unwrap();
+        save_winner(&mut deps.storage, 1u64, winner_address2, 2).unwrap();
+
+        let res = query_all_winner(&deps, 1u64).unwrap();
         println!("{:?}", res);
     }
     mod register {
@@ -1697,15 +1578,15 @@ mod tests {
                 }
             );
             // Check combination added with success
-            let store = combination_storage(&mut deps.storage)
+            let store = combination_bucket(&mut deps.storage, 1u64)
                 .load(&"1e3fab".as_bytes())
                 .unwrap();
-            assert_eq!(1, store.addresses.len());
+            assert_eq!(1, store.len());
             let player1 = deps
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-            assert!(store.addresses.contains(&player1));
+            assert!(store.contains(&player1));
             //New player
             let _res = handle(
                 &mut deps,
@@ -1719,16 +1600,16 @@ mod tests {
                 msg.clone(),
             )
             .unwrap();
-            let store = combination_storage(&mut deps.storage)
+            let store = combination_bucket_read(&mut deps.storage, 1u64)
                 .load(&"1e3fab".as_bytes())
                 .unwrap();
             let player2 = deps
                 .api
                 .canonical_address(&before_all.default_sender_two)
                 .unwrap();
-            assert_eq!(2, store.addresses.len());
-            assert!(store.addresses.contains(&player1));
-            assert!(store.addresses.contains(&player2));
+            assert_eq!(2, store.len());
+            assert!(store.contains(&player1));
+            assert!(store.contains(&player2));
         }
         #[test]
         fn register_fail_if_sender_sent_empty_funds() {
@@ -2337,17 +2218,7 @@ mod tests {
                 })
             );
 
-            let store = winner_storage(&mut deps.storage)
-                .load(&1_u8.to_be_bytes())
-                .unwrap();
-            assert_ne!(store.winners.len(), 0);
-            assert!(!store.winners[0].claimed);
-            assert_eq!(
-                store.winners[0].address,
-                deps.api
-                    .canonical_address(&before_all.default_sender_two)
-                    .unwrap()
-            );
+            // TODO add winner checks
             let state_after = config(&mut deps.storage).load().unwrap();
             println!("{:?}", state_after.jackpot_reward);
             assert_eq!(state.jackpot_reward, Uint128::zero());
@@ -2355,7 +2226,7 @@ mod tests {
             // 720720 total fees
             assert_eq!(state_after.jackpot_reward, Uint128(6_479_280));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
-            assert_eq!(state_after.lottery_counter, 1);
+            assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
 
@@ -2406,17 +2277,7 @@ mod tests {
                 })
             );
 
-            let store = winner_storage(&mut deps.storage)
-                .load(&2_u8.to_be_bytes())
-                .unwrap();
-            assert_ne!(store.winners.len(), 0);
-            assert!(!store.winners[0].claimed);
-            assert_eq!(
-                store.winners[0].address,
-                deps.api
-                    .canonical_address(&before_all.default_sender_two)
-                    .unwrap()
-            );
+            // TODO add winner check
             let state_after = config(&mut deps.storage).load().unwrap();
             println!("{:?}", state_after.jackpot_reward);
             assert_eq!(state.jackpot_reward, Uint128::zero());
@@ -2424,7 +2285,7 @@ mod tests {
             // 720 total fees
             assert_eq!(state_after.jackpot_reward, Uint128(7_199_280));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
-            assert_eq!(state_after.lottery_counter, 1);
+            assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
     }
@@ -2524,7 +2385,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "No winners"),
+                }) => assert_eq!(msg, "Address is not a winner"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2542,32 +2403,35 @@ mod tests {
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
             state_before.jackpot_reward = Uint128(1_000_000);
+            state_before.lottery_counter = 1;
             config(&mut deps.storage).save(&state_before).unwrap();
 
-            winner_storage(&mut deps.storage)
-                .save(
-                    &1_u8.to_be_bytes(),
-                    &Winner {
-                        winners: vec![
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&HumanAddr("address2".to_string()))
-                                    .unwrap(),
-                            },
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&before_all.default_sender)
-                                    .unwrap(),
-                            },
-                        ],
-                    },
-                )
+            let addr1 = deps
+                .api
+                .canonical_address(&HumanAddr("address1".to_string()))
                 .unwrap();
-            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let addr2 = deps
+                .api
+                .canonical_address(&before_all.default_sender)
+                .unwrap();
+            println!(
+                "{:?}",
+                deps.api
+                    .canonical_address(&HumanAddr("address1".to_string()))
+                    .unwrap()
+            );
+
+            save_winner(&mut deps.storage, 1u64, addr1.clone(), 1).unwrap();
+            println!(
+                "{:?}",
+                winner_storage_read(&deps.storage, 1u64)
+                    .load(addr1.as_slice())
+                    .unwrap()
+            );
+
+            save_winner(&mut deps.storage, 1u64, addr2, 1).unwrap();
+
+            let env = mock_env("address1", &[]);
             let res = handle_jackpot(&mut deps, env.clone());
             println!("{:?}", res);
             match res {
@@ -2577,7 +2441,8 @@ mod tests {
                 }) => assert_eq!(msg, "Empty contract balance"),
                 _ => panic!("Unexpected error"),
             }
-            let store = winner_storage(&mut deps.storage)
+            /*
+            let store = winner_storage(&mut deps.storage, 1u64)
                 .load(&1_u8.to_be_bytes())
                 .unwrap();
             let claimed_address = deps
@@ -2587,6 +2452,8 @@ mod tests {
             assert_eq!(store.winners[1].address, claimed_address);
             //assert!(!store.winners[1].claimed);
             println!("{:?}", store.winners[1].claimed);
+
+             */
         }
         #[test]
         fn some_winner_sender_excluded() {
@@ -2601,55 +2468,23 @@ mod tests {
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
             state_before.jackpot_reward = Uint128(1_000_000);
+            state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
 
-            winner_storage(&mut deps.storage)
-                .save(
-                    &1_u8.to_be_bytes(),
-                    &Winner {
-                        winners: vec![
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&HumanAddr("address2".to_string()))
-                                    .unwrap(),
-                            },
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&before_all.default_sender)
-                                    .unwrap(),
-                            },
-                        ],
-                    },
-                )
+            let addr = deps
+                .api
+                .canonical_address(&HumanAddr("address".to_string()))
+                .unwrap();
+            let addr_default = deps
+                .api
+                .canonical_address(&before_all.default_sender)
                 .unwrap();
 
-            winner_storage(&mut deps.storage)
-                .save(
-                    &5_u8.to_be_bytes(),
-                    &Winner {
-                        winners: vec![
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&HumanAddr("address2".to_string()))
-                                    .unwrap(),
-                            },
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&before_all.default_sender)
-                                    .unwrap(),
-                            },
-                        ],
-                    },
-                )
-                .unwrap();
+            save_winner(&mut deps.storage, 1u64, addr.clone(), 1).unwrap();
+            save_winner(&mut deps.storage, 1u64, addr_default.clone(), 1).unwrap();
+
+            save_winner(&mut deps.storage, 1u64, addr.clone(), 4).unwrap();
+            save_winner(&mut deps.storage, 1u64, addr_default.clone(), 4).unwrap();
 
             let env = mock_env(before_all.default_sender_two.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone());
@@ -2658,7 +2493,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "No jackpot to claim, try next time"),
+                }) => assert_eq!(msg, "Address is not a winner"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -2676,55 +2511,20 @@ mod tests {
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
             state_before.jackpot_reward = Uint128(1_000_000);
+            state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
 
-            winner_storage(&mut deps.storage)
-                .save(
-                    &1_u8.to_be_bytes(),
-                    &Winner {
-                        winners: vec![
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&HumanAddr("address2".to_string()))
-                                    .unwrap(),
-                            },
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&before_all.default_sender)
-                                    .unwrap(),
-                            },
-                        ],
-                    },
-                )
+            let addr2 = deps
+                .api
+                .canonical_address(&HumanAddr("address2".to_string()))
+                .unwrap();
+            let default_addr = deps
+                .api
+                .canonical_address(&before_all.default_sender)
                 .unwrap();
 
-            winner_storage(&mut deps.storage)
-                .save(
-                    &5_u8.to_be_bytes(),
-                    &Winner {
-                        winners: vec![
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&HumanAddr("address2".to_string()))
-                                    .unwrap(),
-                            },
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&before_all.default_sender)
-                                    .unwrap(),
-                            },
-                        ],
-                    },
-                )
-                .unwrap();
+            save_winner(&mut deps.storage, 1u64, addr2.clone(), 1).unwrap();
+            save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone()).unwrap();
@@ -2751,16 +2551,20 @@ mod tests {
                 _ => panic!("Unexpected error"),
             }
 
-            let store = winner_storage(&mut deps.storage)
-                .load(&1_u8.to_be_bytes())
-                .unwrap();
             let claimed_address = deps
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-            assert_eq!(store.winners[1].address, claimed_address);
-            assert!(store.winners[1].claimed);
-            assert!(!store.winners[0].claimed);
+            let winner_claim = winner_storage(&mut deps.storage, 1u64)
+                .load(claimed_address.as_slice())
+                .unwrap();
+
+            assert_eq!(winner_claim.claimed, true);
+
+            let not_claimed = winner_storage(&mut deps.storage, 1u64)
+                .load(addr2.as_slice())
+                .unwrap();
+            assert_eq!(not_claimed.claimed, false);
 
             let state_after = config(&mut deps.storage).load().unwrap();
             assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);
@@ -2778,61 +2582,26 @@ mod tests {
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
             state_before.jackpot_reward = Uint128(1_000_000);
+            state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
 
-            winner_storage(&mut deps.storage)
-                .save(
-                    &1_u8.to_be_bytes(),
-                    &Winner {
-                        winners: vec![
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&HumanAddr("address2".to_string()))
-                                    .unwrap(),
-                            },
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&before_all.default_sender)
-                                    .unwrap(),
-                            },
-                        ],
-                    },
-                )
+            let addr2 = deps
+                .api
+                .canonical_address(&HumanAddr("address2".to_string()))
                 .unwrap();
-            winner_storage(&mut deps.storage)
-                .save(
-                    &2_u8.to_be_bytes(),
-                    &Winner {
-                        winners: vec![
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&HumanAddr("address2".to_string()))
-                                    .unwrap(),
-                            },
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&before_all.default_sender)
-                                    .unwrap(),
-                            },
-                            WinnerInfoState {
-                                claimed: false,
-                                address: deps
-                                    .api
-                                    .canonical_address(&before_all.default_sender)
-                                    .unwrap(),
-                            },
-                        ],
-                    },
-                )
+            let default_addr = deps
+                .api
+                .canonical_address(&before_all.default_sender)
                 .unwrap();
+
+            // rank 1
+            save_winner(&mut deps.storage, 1u64, addr2.clone(), 1).unwrap();
+            save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
+
+            // rank 5
+            save_winner(&mut deps.storage, 1u64, addr2.clone(), 2).unwrap();
+            save_winner(&mut deps.storage, 1u64, default_addr.clone(), 2).unwrap();
+            save_winner(&mut deps.storage, 1u64, default_addr.clone(), 2).unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle_jackpot(&mut deps, env.clone()).unwrap();
@@ -2862,22 +2631,16 @@ mod tests {
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-            let store = winner_storage(&mut deps.storage)
-                .load(&1_u8.to_be_bytes())
-                .unwrap();
-            assert_eq!(store.winners[1].address, claimed_address);
-            assert!(store.winners[1].claimed);
-            assert!(!store.winners[0].claimed);
 
-            let store = winner_storage(&mut deps.storage)
-                .load(&2_u8.to_be_bytes())
+            let claimed = winner_storage(&mut deps.storage, 1u64)
+                .load(claimed_address.as_slice())
                 .unwrap();
-            assert_eq!(store.winners[1].address, claimed_address);
-            assert!(store.winners[1].claimed);
-            assert_eq!(store.winners[2].address, claimed_address);
-            println!("{:?}", store.winners[2].claimed);
-            assert!(store.winners[2].claimed);
-            assert!(!store.winners[0].claimed);
+            assert_eq!(claimed.claimed, true);
+
+            let not_claimed = winner_storage(&mut deps.storage, 1u64)
+                .load(addr2.as_slice())
+                .unwrap();
+            assert_eq!(not_claimed.claimed, false);
 
             let state_after = config(&mut deps.storage).load().unwrap();
             assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);

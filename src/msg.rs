@@ -1,8 +1,8 @@
-use crate::state::{PollStatus, Proposal, State, WinnerInfoState};
+use crate::state::{PollStatus, Proposal, State, WinnerRewardClaims};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, Uint128};
+use cosmwasm_std::{HumanAddr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -57,9 +57,9 @@ pub enum QueryMsg {
     /// Get the config state
     Config {},
     /// Combination lottery numbers and address
-    Combination {},
+    Combination { lottery_id: u64 },
     /// Winner lottery rank and address
-    Winner {},
+    Winner { lottery_id: u64 },
     /// Get specific poll
     GetPoll { poll_id: u64 },
     /// Get the needed round for workers adding randomness to Terrand
@@ -84,8 +84,8 @@ pub enum QueryMsg {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct CombinationInfo {
-    pub key: String,
-    pub addresses: Vec<CanonicalAddr>,
+    pub combination: String,
+    pub addresses: Vec<HumanAddr>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -94,14 +94,14 @@ pub struct AllCombinationResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct WinnerInfo {
-    pub rank: u8,
-    pub winners: Vec<WinnerInfoState>,
+pub struct WinnerResponse {
+    pub address: HumanAddr,
+    pub claims: WinnerRewardClaims,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct AllWinnerResponse {
-    pub winner: Vec<WinnerInfo>,
+pub struct AllWinnersResponse {
+    pub winners: Vec<WinnerResponse>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
