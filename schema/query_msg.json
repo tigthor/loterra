@@ -138,10 +138,10 @@
       "description": "Get specific holder, address and balance from loterra staking contract",
       "type": "object",
       "required": [
-        "get_holder"
+        "holder"
       ],
       "properties": {
-        "get_holder": {
+        "holder": {
           "type": "object",
           "required": [
             "address"
@@ -151,18 +151,6 @@
               "$ref": "#/definitions/HumanAddr"
             }
           }
-        }
-      }
-    },
-    {
-      "description": "Get all bonded tokens from loterra staking contract",
-      "type": "object",
-      "required": [
-        "get_all_bonded"
-      ],
-      "properties": {
-        "get_all_bonded": {
-          "type": "object"
         }
       }
     },
