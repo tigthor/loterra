@@ -70,9 +70,7 @@ pub enum QueryMsg {
     /// Query Loterra smart contract to get the balance
     Balance { address: HumanAddr },
     /// Get specific holder, address and balance from loterra staking contract
-    GetHolder { address: HumanAddr },
-    /// Get all bonded tokens from loterra staking contract
-    GetAllBonded {},
+    Holder { address: HumanAddr },
     /// Query Loterra send
     Transfer {
         recipient: HumanAddr,

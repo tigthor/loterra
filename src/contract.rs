@@ -938,7 +938,7 @@ fn user_total_weight<S: Storage, A: Api, Q: Querier>(
     let human_address = deps.api.human_address(&address).unwrap();
 
     // Ensure sender have some reward tokens
-    let msg = QueryMsg::GetHolder {
+    let msg = QueryMsg::Holder {
         address: human_address,
     };
     let loterra_human = deps
@@ -948,8 +948,8 @@ fn user_total_weight<S: Storage, A: Api, Q: Querier>(
     let res = encode_msg_query(msg, loterra_human).unwrap();
     let loterra_balance = wrapper_msg_loterra_staking(&deps, res).unwrap();
 
-    if !loterra_balance.bonded.is_zero() {
-        weight += loterra_balance.bonded;
+    if !loterra_balance.balance.is_zero() {
+        weight += loterra_balance.balance;
     }
 
     weight
@@ -1252,8 +1252,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
         QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
         QueryMsg::PayoutReward {} => to_binary(&query_payout_reward(deps)?)?,
-        QueryMsg::GetHolder { .. } => to_binary(&query_loterra_staking_holder(deps)?)?,
-        QueryMsg::GetAllBonded {} => to_binary(&query_loterra_staking_total_bonded(deps)?)?,
+        _ => to_binary(&())?,
     };
     Ok(response)
 }
@@ -1280,16 +1279,6 @@ fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(
     Err(StdError::Unauthorized { backtrace: None })
 }
 fn query_payout_reward<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_loterra_staking_holder<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_loterra_staking_total_bonded<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
     Err(StdError::Unauthorized { backtrace: None })
@@ -3230,10 +3219,10 @@ mod tests {
             deps.querier.with_holder(
                 before_all.default_sender.clone(),
                 Uint128(0),
-                Uint128(10_000),
-                Uint128(0),
-                0,
+                Decimal::zero(),
+                Decimal::zero(),
             );
+
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
@@ -3265,9 +3254,8 @@ mod tests {
             deps.querier.with_holder(
                 before_all.default_sender.clone(),
                 Uint128(150_000),
-                Uint128(10_000),
-                Uint128(0),
-                0,
+                Decimal::zero(),
+                Decimal::zero(),
             );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
@@ -3616,9 +3604,8 @@ mod tests {
             deps.querier.with_holder(
                 before_all.default_sender.clone(),
                 Uint128(150_000),
-                Uint128(10_000),
-                Uint128(0),
-                0,
+                Decimal::zero(),
+                Decimal::zero(),
             );
 
             default_init(&mut deps);
@@ -3685,9 +3672,8 @@ mod tests {
             deps.querier.with_holder(
                 before_all.default_sender.clone(),
                 Uint128(150_000),
-                Uint128(10_000),
-                Uint128(0),
-                0,
+                Decimal::zero(),
+                Decimal::zero(),
             );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
@@ -3745,9 +3731,8 @@ mod tests {
             deps.querier.with_holder(
                 before_all.default_sender.clone(),
                 Uint128(150_000),
-                Uint128(10_000),
-                Uint128(0),
-                0,
+                Decimal::zero(),
+                Decimal::zero(),
             );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
@@ -3786,9 +3771,8 @@ mod tests {
             deps.querier.with_holder(
                 before_all.default_sender.clone(),
                 Uint128(150_000),
-                Uint128(10_000),
-                Uint128(0),
-                0,
+                Decimal::zero(),
+                Decimal::zero(),
             );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
