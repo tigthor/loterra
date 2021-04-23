@@ -1,4 +1,4 @@
-use cosmwasm_std::{Binary, HumanAddr, Uint128};
+use cosmwasm_std::{Binary, HumanAddr, Uint128, Decimal};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,8 +16,7 @@ pub struct LoterraBalanceResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetHolderResponse {
     pub address: HumanAddr,
-    pub bonded: Uint128,
-    pub un_bonded: Uint128,
-    pub available: Uint128,
-    pub period: u64,
+    pub balance: Uint128,
+    pub index: Decimal,
+    pub pending_rewards: Decimal,
 }

@@ -1,8 +1,5 @@
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{
-    from_slice, to_binary, Api, Binary, Coin, Empty, Extern, HumanAddr, Querier, QuerierResult,
-    QueryRequest, SystemError, Uint128, WasmQuery,
-};
+use cosmwasm_std::{from_slice, to_binary, Api, Binary, Coin, Empty, Extern, HumanAddr, Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, Decimal};
 use serde::Serialize;
 use terra_cosmwasm::TaxCapResponse;
 
@@ -66,26 +63,23 @@ impl GetAllBondedResponse {
 #[derive(Clone, Default, Serialize)]
 pub struct GetHolderResponse {
     pub address: HumanAddr,
-    pub bonded: Uint128,
-    pub un_bonded: Uint128,
-    pub available: Uint128,
-    pub period: u64,
+    pub balance: Uint128,
+    pub index: Decimal,
+    pub pending_rewards: Decimal,
 }
 
 impl GetHolderResponse {
     pub fn new(
-        address: HumanAddr,
-        bonded: Uint128,
-        un_bonded: Uint128,
-        available: Uint128,
-        period: u64,
+         address: HumanAddr,
+         balance: Uint128,
+         index: Decimal,
+         pending_rewards: Decimal,
     ) -> Self {
         GetHolderResponse {
             address,
-            bonded,
-            un_bonded,
-            available,
-            period,
+            balance,
+            index,
+            pending_rewards,
         }
     }
 }
@@ -136,23 +130,21 @@ impl WasmMockQuerier {
                         };
                         return Ok(to_binary(&msg_balance));
                     }
-                    else if msg == &Binary::from(r#"{"get_holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#.as_bytes()){
+                    else if msg == &Binary::from(r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#.as_bytes()){
                         let msg_balance = GetHolderResponse {
                             address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
-                            bonded: self.holder_response.bonded,
-                            un_bonded: self.holder_response.un_bonded,
-                            available: self.holder_response.available,
-                            period: self.holder_response.period
+                            balance: self.holder_response.balance,
+                            index: self.holder_response.index,
+                            pending_rewards: self.holder_response.pending_rewards
                         };
                         return Ok(to_binary(&msg_balance));
                     }
-                    else if msg == &Binary::from(r#"{"get_holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#.as_bytes()){
+                    else if msg == &Binary::from(r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#.as_bytes()){
                         let msg_balance = GetHolderResponse {
                             address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
-                            bonded: self.holder_response.bonded,
-                            un_bonded: self.holder_response.un_bonded,
-                            available: self.holder_response.available,
-                            period: self.holder_response.period
+                            balance: self.holder_response.balance,
+                            index: self.holder_response.index,
+                            pending_rewards: self.holder_response.pending_rewards
                         };
                         return Ok(to_binary(&msg_balance));
                     }
@@ -186,11 +178,10 @@ impl WasmMockQuerier {
     pub fn with_holder(
         &mut self,
         address: HumanAddr,
-        bonded: Uint128,
-        un_bonded: Uint128,
-        available: Uint128,
-        period: u64,
+        balance: Uint128,
+        index: Decimal,
+        pending_rewards: Decimal,
     ) {
-        self.holder_response = GetHolderResponse::new(address, bonded, un_bonded, available, period)
+        self.holder_response = GetHolderResponse::new(address, balance, index, pending_rewards)
     }
 }
