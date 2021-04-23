@@ -3615,7 +3615,7 @@ mod tests {
             deps.querier.with_holder(
                 before_all.default_sender.clone(),
                 Uint128(150_000),
-                    Decimal::zero(),
+                Decimal::zero(),
                 Decimal::zero(),
             );
 

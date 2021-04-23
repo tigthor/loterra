@@ -1,5 +1,8 @@
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{from_slice, to_binary, Api, Binary, Coin, Empty, Extern, HumanAddr, Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, Decimal};
+use cosmwasm_std::{
+    from_slice, to_binary, Api, Binary, Coin, Decimal, Empty, Extern, HumanAddr, Querier,
+    QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery,
+};
 use serde::Serialize;
 use terra_cosmwasm::TaxCapResponse;
 
@@ -70,10 +73,10 @@ pub struct GetHolderResponse {
 
 impl GetHolderResponse {
     pub fn new(
-         address: HumanAddr,
-         balance: Uint128,
-         index: Decimal,
-         pending_rewards: Decimal,
+        address: HumanAddr,
+        balance: Uint128,
+        index: Decimal,
+        pending_rewards: Decimal,
     ) -> Self {
         GetHolderResponse {
             address,
@@ -124,27 +127,35 @@ impl WasmMockQuerier {
                 } else if contract_addr
                     == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking")
                 {
-                    if msg == &Binary::from(r#"{"get_all_bonded":{}}"#.as_bytes()){
+                    if msg == &Binary::from(r#"{"get_all_bonded":{}}"#.as_bytes()) {
                         let msg_balance = GetAllBondedResponse {
                             total_bonded: self.lottery_balance_response.balance.clone(),
                         };
                         return Ok(to_binary(&msg_balance));
-                    }
-                    else if msg == &Binary::from(r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#.as_bytes()){
+                    } else if msg == &Binary::from(
+                        r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#
+                            .as_bytes(),
+                    ) {
                         let msg_balance = GetHolderResponse {
-                            address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
+                            address: HumanAddr::from(
+                                "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007",
+                            ),
                             balance: self.holder_response.balance,
                             index: self.holder_response.index,
-                            pending_rewards: self.holder_response.pending_rewards
+                            pending_rewards: self.holder_response.pending_rewards,
                         };
                         return Ok(to_binary(&msg_balance));
-                    }
-                    else if msg == &Binary::from(r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#.as_bytes()){
+                    } else if msg == &Binary::from(
+                        r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#
+                            .as_bytes(),
+                    ) {
                         let msg_balance = GetHolderResponse {
-                            address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
+                            address: HumanAddr::from(
+                                "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007",
+                            ),
                             balance: self.holder_response.balance,
                             index: self.holder_response.index,
-                            pending_rewards: self.holder_response.pending_rewards
+                            pending_rewards: self.holder_response.pending_rewards,
                         };
                         return Ok(to_binary(&msg_balance));
                     }
