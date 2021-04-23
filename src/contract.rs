@@ -1252,7 +1252,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
         QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
         QueryMsg::PayoutReward {} => to_binary(&query_payout_reward(deps)?)?,
-        QueryMsg::Holder { .. } => to_binary(&query_loterra_staking_holder(deps)?)?,
+        _ => to_binary(&())?,
     };
     Ok(response)
 }
@@ -1279,11 +1279,6 @@ fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(
     Err(StdError::Unauthorized { backtrace: None })
 }
 fn query_payout_reward<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_loterra_staking_holder<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
     Err(StdError::Unauthorized { backtrace: None })
