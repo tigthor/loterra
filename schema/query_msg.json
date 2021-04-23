@@ -155,18 +155,6 @@
       }
     },
     {
-      "description": "Get all bonded tokens from loterra staking contract",
-      "type": "object",
-      "required": [
-        "get_all_bonded"
-      ],
-      "properties": {
-        "get_all_bonded": {
-          "type": "object"
-        }
-      }
-    },
-    {
       "description": "Query Loterra send",
       "type": "object",
       "required": [
