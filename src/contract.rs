@@ -381,7 +381,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                 &mut deps.storage,
                 state.lottery_counter.clone(),
                 addr,
-                rank.clone(),
+                rank,
             )?;
         }
     }
@@ -788,7 +788,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                             "Numbers between 0 to 100".to_string(),
                         ));
                     }
-                    total_percentage += rank.clone();
+                    total_percentage += rank;
                 }
                 // Ensure the repartition sum is 100%
                 if total_percentage != 100 {
@@ -890,7 +890,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         creator: sender_to_canonical,
         status: PollStatus::InProgress,
         end_height: env.block.height + state.poll_default_end_height,
-        start_height: env.block.height.clone(),
+        start_height: env.block.height,
         description,
         weight_yes_vote: Uint128::zero(),
         weight_no_vote: Uint128::zero(),
