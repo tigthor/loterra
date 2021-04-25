@@ -318,7 +318,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // Drand worker fee
     let fee_for_drand_worker = jackpot
         .mul(Decimal::percent(
-            state.fee_for_drand_worker_in_percentage.clone() as u64,
+            state.fee_for_drand_worker_in_percentage as u64,
         ))
         .mul(Decimal::percent(
             state.fee_for_drand_worker_in_percentage as u64,
@@ -377,7 +377,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // save winners by rank
     for (rank, winners) in winners_ranked {
         for addr in winners {
-            save_winner(&mut deps.storage, state.lottery_counter.clone(), addr, rank)?;
+            save_winner(&mut deps.storage, state.lottery_counter, addr, rank)?;
         }
     }
 
