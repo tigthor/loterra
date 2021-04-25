@@ -182,10 +182,10 @@
       "description": "Send payout to Loterra holders",
       "type": "object",
       "required": [
-        "payout_reward"
+        "update_global_index"
       ],
       "properties": {
-        "payout_reward": {
+        "update_global_index": {
           "type": "object"
         }
       }
