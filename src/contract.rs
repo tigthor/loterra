@@ -394,27 +394,25 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         }],
     };
 
-    let mut all_msg = vec![msg_fee_worker.into()];
+    let mut all_msg: Vec<CosmosMsg> = vec![msg_fee_worker.into()];
 
     if !holders_rewards.is_zero() {
-        let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
-        let msg_payout = QueryMsg::PayoutReward {};
         let loterra_human = deps
             .api
             .human_address(&state.loterra_staking_contract_address)?;
+        let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
 
-        let res_payout = encode_msg_execute(
-            msg_payout,
+        let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
+        let res_update_global_index = encode_msg_execute(
+            msg_update_global_index,
             loterra_human,
             vec![Coin {
                 denom: state.denom_stable.clone(),
                 amount: amount_to_send,
             }],
         )?;
-
-        all_msg.push(res_payout);
+        all_msg.push(res_update_global_index);
     }
-
     // Update the state
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
@@ -1248,10 +1246,6 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Winner { lottery_id } => to_binary(&query_all_winner(deps, lottery_id)?)?,
         QueryMsg::GetPoll { poll_id } => to_binary(&query_poll(deps, poll_id)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
-        QueryMsg::GetRandomness { round: _ } => to_binary(&query_terrand_randomness(deps)?)?,
-        QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
-        QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
-        QueryMsg::PayoutReward {} => to_binary(&query_payout_reward(deps)?)?,
         _ => to_binary(&())?,
     };
     Ok(response)
@@ -1262,26 +1256,6 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<ConfigResponse> {
     let state = config_read(&deps.storage).load()?;
     Ok(state)
-}
-fn query_terrand_randomness<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_loterra_balance<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_payout_reward<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
 }
 
 fn query_all_combination<S: Storage, A: Api, Q: Querier>(
@@ -2204,7 +2178,7 @@ mod tests {
                         .api
                         .human_address(&state.loterra_staking_contract_address)
                         .unwrap(),
-                    msg: Binary::from(r#"{"payout_reward":{}}"#.as_bytes()),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
                         amount: Uint128(719999)
@@ -3279,7 +3253,7 @@ mod tests {
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-            let vote_state = poll_vote_storage(&mut deps.storage, poll_id)
+            let vote_state = poll_vote_storage(&mut deps.storage, poll_id.clone())
                 .load(sender_to_canonical.as_slice())
                 .unwrap();
             assert_eq!(vote_state, approve);
