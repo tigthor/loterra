@@ -179,7 +179,7 @@
       }
     },
     {
-      "description": "Send payout to Loterra holders",
+      "description": "Update balance of the staking contract with rewards",
       "type": "object",
       "required": [
         "update_global_index"
