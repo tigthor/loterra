@@ -1254,7 +1254,6 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::GetRandomness { round: _ } => to_binary(&query_terrand_randomness(deps)?)?,
         QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
         QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
-        QueryMsg::UpdateGlobalIndex {} => to_binary(&query_update_global_index(deps)?)?,
         _ => to_binary(&())?,
     };
     Ok(response)
