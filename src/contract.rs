@@ -377,12 +377,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // save winners by rank
     for (rank, winners) in winners_ranked {
         for addr in winners {
-            save_winner(
-                &mut deps.storage,
-                state.lottery_counter.clone(),
-                addr,
-                rank,
-            )?;
+            save_winner(&mut deps.storage, state.lottery_counter.clone(), addr, rank)?;
         }
     }
 
