@@ -1251,9 +1251,6 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::Winner { lottery_id } => to_binary(&query_all_winner(deps, lottery_id)?)?,
         QueryMsg::GetPoll { poll_id } => to_binary(&query_poll(deps, poll_id)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
-        QueryMsg::GetRandomness { round: _ } => to_binary(&query_terrand_randomness(deps)?)?,
-        QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
-        QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
         _ => to_binary(&())?,
     };
     Ok(response)
@@ -1264,26 +1261,6 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<ConfigResponse> {
     let state = config_read(&deps.storage).load()?;
     Ok(state)
-}
-fn query_terrand_randomness<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_loterra_balance<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
-}
-fn query_update_global_index<S: Storage, A: Api, Q: Querier>(
-    _deps: &Extern<S, A, Q>,
-) -> StdResult<StdError> {
-    Err(StdError::Unauthorized { backtrace: None })
 }
 
 fn query_all_combination<S: Storage, A: Api, Q: Querier>(
