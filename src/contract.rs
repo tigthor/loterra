@@ -318,7 +318,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // Drand worker fee
     let fee_for_drand_worker = jackpot
         .mul(Decimal::percent(
-            state.fee_for_drand_worker_in_percentage as u64,
+            state.fee_for_drand_worker_in_percentage.clone() as u64,
         ))
         .mul(Decimal::percent(
             state.fee_for_drand_worker_in_percentage as u64,
@@ -377,7 +377,12 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // save winners by rank
     for (rank, winners) in winners_ranked {
         for addr in winners {
-            save_winner(&mut deps.storage, state.lottery_counter, addr, rank)?;
+            save_winner(
+                &mut deps.storage,
+                state.lottery_counter.clone(),
+                addr,
+                rank.clone(),
+            )?;
         }
     }
 
@@ -394,27 +399,25 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         }],
     };
 
-    let mut all_msg = vec![msg_fee_worker.into()];
+    let mut all_msg: Vec<CosmosMsg> = vec![msg_fee_worker.into()];
 
     if !holders_rewards.is_zero() {
-        let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
-        let msg_payout = QueryMsg::PayoutReward {};
         let loterra_human = deps
             .api
             .human_address(&state.loterra_staking_contract_address)?;
+        let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
 
-        let res_payout = encode_msg_execute(
-            msg_payout,
+        let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
+        let res_update_global_index = encode_msg_execute(
+            msg_update_global_index,
             loterra_human,
             vec![Coin {
                 denom: state.denom_stable.clone(),
                 amount: amount_to_send,
             }],
         )?;
-
-        all_msg.push(res_payout);
+        all_msg.push(res_update_global_index);
     }
-
     // Update the state
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
@@ -785,7 +788,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                             "Numbers between 0 to 100".to_string(),
                         ));
                     }
-                    total_percentage += rank;
+                    total_percentage += rank.clone();
                 }
                 // Ensure the repartition sum is 100%
                 if total_percentage != 100 {
@@ -887,7 +890,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         creator: sender_to_canonical,
         status: PollStatus::InProgress,
         end_height: env.block.height + state.poll_default_end_height,
-        start_height: env.block.height,
+        start_height: env.block.height.clone(),
         description,
         weight_yes_vote: Uint128::zero(),
         weight_no_vote: Uint128::zero(),
@@ -1251,7 +1254,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::GetRandomness { round: _ } => to_binary(&query_terrand_randomness(deps)?)?,
         QueryMsg::Balance { .. } => to_binary(&query_loterra_balance(deps)?)?,
         QueryMsg::Transfer { .. } => to_binary(&query_loterra_transfer(deps)?)?,
-        QueryMsg::PayoutReward {} => to_binary(&query_payout_reward(deps)?)?,
+        QueryMsg::UpdateGlobalIndex {} => to_binary(&query_update_global_index(deps)?)?,
         _ => to_binary(&())?,
     };
     Ok(response)
@@ -1278,7 +1281,7 @@ fn query_loterra_transfer<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<StdError> {
     Err(StdError::Unauthorized { backtrace: None })
 }
-fn query_payout_reward<S: Storage, A: Api, Q: Querier>(
+fn query_update_global_index<S: Storage, A: Api, Q: Querier>(
     _deps: &Extern<S, A, Q>,
 ) -> StdResult<StdError> {
     Err(StdError::Unauthorized { backtrace: None })
@@ -2204,7 +2207,7 @@ mod tests {
                         .api
                         .human_address(&state.loterra_staking_contract_address)
                         .unwrap(),
-                    msg: Binary::from(r#"{"payout_reward":{}}"#.as_bytes()),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
                         amount: Uint128(719999)
@@ -3279,7 +3282,7 @@ mod tests {
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-            let vote_state = poll_vote_storage(&mut deps.storage, poll_id)
+            let vote_state = poll_vote_storage(&mut deps.storage, poll_id.clone())
                 .load(sender_to_canonical.as_slice())
                 .unwrap();
             assert_eq!(vote_state, approve);

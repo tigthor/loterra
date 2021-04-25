@@ -77,7 +77,7 @@ pub enum QueryMsg {
         amount: Uint128,
     },
     /// Send payout to Loterra holders
-    PayoutReward {},
+    UpdateGlobalIndex {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
