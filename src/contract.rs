@@ -394,7 +394,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         }],
     };
 
-    let mut all_msg: Vec<CosmosMsg> = vec![msg_fee_worker.into()];
+    let mut all_msg = vec![msg_fee_worker.into()];
 
     if !holders_rewards.is_zero() {
         let loterra_human = deps
@@ -411,7 +411,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                 amount: amount_to_send,
             }],
         )?;
-        all_msg.push(res_update_global_index);
+        all_msg.push(res_update_global_index.into());
     }
     // Update the state
     state.jackpot_reward = jackpot_after;
