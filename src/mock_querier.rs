@@ -4,7 +4,7 @@ use cosmwasm_std::{
     QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery,
 };
 use serde::Serialize;
-use terra_cosmwasm::TaxCapResponse;
+use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 
 pub fn mock_dependencies_custom(
     canonical_length: usize,
@@ -25,7 +25,7 @@ pub fn mock_dependencies_custom(
 }
 
 pub struct WasmMockQuerier {
-    base: MockQuerier<Empty>,
+    base: MockQuerier<TerraQueryWrapper>,
     terrand_response: TerrandResponse,
     lottery_balance_response: LotteraBalanceResponse,
     holder_response: GetHolderResponse,
@@ -90,7 +90,7 @@ impl GetHolderResponse {
 impl Querier for WasmMockQuerier {
     fn raw_query(&self, bin_request: &[u8]) -> QuerierResult {
         // MockQuerier doesn't support Custom, so we ignore it completely here
-        let request: QueryRequest<Empty> = match from_slice(bin_request) {
+        let request: QueryRequest<TerraQueryWrapper> = match from_slice(bin_request) {
             Ok(v) => v,
             Err(e) => {
                 return Err(SystemError::InvalidRequest {
@@ -103,7 +103,7 @@ impl Querier for WasmMockQuerier {
     }
 }
 impl WasmMockQuerier {
-    pub fn handle_query(&self, request: &QueryRequest<Empty>) -> QuerierResult {
+    pub fn handle_query(&self, request: &QueryRequest<TerraQueryWrapper>) -> QuerierResult {
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
                 println!("{:?} {}", request, msg);
@@ -162,16 +162,30 @@ impl WasmMockQuerier {
                 }
                 panic!("DO NOT ENTER HERE")
             }
-            QueryRequest::Custom(_e) => {
-                let x = TaxCapResponse { cap: Uint128(1) };
-                return Ok(to_binary(&x));
-            }
+            QueryRequest::Custom(TerraQueryWrapper { route, query_data }) => match query_data {
+                TerraQuery::TaxRate {} => {
+                    let res = TaxRateResponse {
+                        rate: Decimal::percent(1),
+                    };
+                    Ok(to_binary(&res))
+                }
+                TerraQuery::TaxCap { denom: _ } => {
+                    let cap = Uint128(1u128);
+                    let res = TaxCapResponse { cap };
+                    Ok(to_binary(&res))
+                }
+                _ => panic!("DO NOT ENTER HERE"),
+            },
             _ => self.base.handle_query(request),
         }
     }
 }
 impl WasmMockQuerier {
-    pub fn new<A: Api>(base: MockQuerier<Empty>, _canonical_length: usize, _api: A) -> Self {
+    pub fn new<A: Api>(
+        base: MockQuerier<TerraQueryWrapper>,
+        _canonical_length: usize,
+        _api: A,
+    ) -> Self {
         WasmMockQuerier {
             base,
             terrand_response: TerrandResponse::default(),
