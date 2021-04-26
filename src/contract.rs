@@ -16,7 +16,6 @@ use cosmwasm_std::{
     StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
 use std::ops::{Add, Mul, Sub};
-use terra_cosmwasm::{TaxCapResponse, TerraQuerier};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -2113,7 +2112,7 @@ mod tests {
 
             default_init(&mut deps);
             let state = config(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let mut env = mock_env(before_all.default_sender_owner, &[]);
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
             assert_eq!(res.messages.len(), 1);
@@ -2166,7 +2165,7 @@ mod tests {
             .unwrap();
 
             let state = config(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            let mut env = mock_env(before_all.default_sender_owner, &[]);
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
             println!("{:?}", res);
