@@ -274,6 +274,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         ));
     }
 
+    // calculate next round randomness
+    let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
+    let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
+
     // Make the contract callable for everyone every x blocks
     if env.block.time > state.block_time_play {
         // Update the state
@@ -284,10 +288,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             state.block_time_play
         )));
     }
-
-    // calculate next round randomness
-    let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
-    let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     let msg = QueryMsg::GetRandomness { round: next_round };
     let terrand_human = deps.api.human_address(&state.terrand_contract_address)?;
