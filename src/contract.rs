@@ -9,13 +9,13 @@ use crate::state::{
     poll_storage_read, poll_vote_storage, save_winner, winner_count_by_rank_read, winner_storage,
     winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
+use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
     StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
 use std::ops::{Add, Mul, Sub};
-use terra_cosmwasm::{TaxCapResponse, TerraQuerier};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -381,17 +381,21 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         }
     }
 
-    let querier = TerraQuerier::new(&deps.querier);
+    /*let querier = TerraQuerier::new(&deps.querier);
     let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
     let amount_to_send = fee_for_drand_worker.sub(tax_cap.cap)?;
+      */
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
         to_address: res.worker,
-        amount: vec![Coin {
-            denom: state.denom_stable.clone(),
-            amount: amount_to_send,
-        }],
+        amount: vec![deduct_tax(
+            &deps,
+            Coin {
+                denom: state.denom_stable.clone(),
+                amount: fee_for_drand_worker,
+            },
+        )?],
     };
 
     let mut all_msg = vec![msg_fee_worker.into()];
@@ -400,16 +404,19 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         let loterra_human = deps
             .api
             .human_address(&state.loterra_staking_contract_address)?;
-        let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
+        // let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
 
         let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
         let res_update_global_index = encode_msg_execute(
             msg_update_global_index,
             loterra_human,
-            vec![Coin {
-                denom: state.denom_stable.clone(),
-                amount: amount_to_send,
-            }],
+            vec![deduct_tax(
+                &deps,
+                Coin {
+                    denom: state.denom_stable.clone(),
+                    amount: holders_rewards,
+                },
+            )?],
         )?;
         all_msg.push(res_update_global_index);
     }
@@ -1167,17 +1174,21 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             let contract_balance = deps
                 .querier
                 .query_balance(&env.contract.address, &state.denom_stable)?;
-            let querier = TerraQuerier::new(&deps.querier);
+            /*let querier = TerraQuerier::new(&deps.querier);
             let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
             let amount_to_send = contract_balance.amount.sub(tax_cap.cap)?;
+              */
 
             let msg = BankMsg::Send {
                 from_address: env.contract.address,
                 to_address: store.migration_address.unwrap(),
-                amount: vec![Coin {
-                    denom: state.denom_stable.to_string(),
-                    amount: amount_to_send,
-                }],
+                amount: vec![deduct_tax(
+                    &deps,
+                    Coin {
+                        denom: state.denom_stable.to_string(),
+                        amount: contract_balance.amount,
+                    },
+                )?],
             };
             msgs.push(msg.into())
         }
@@ -2101,7 +2112,7 @@ mod tests {
 
             default_init(&mut deps);
             let state = config(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let mut env = mock_env(before_all.default_sender_owner, &[]);
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
             assert_eq!(res.messages.len(), 1);
@@ -2154,7 +2165,7 @@ mod tests {
             .unwrap();
 
             let state = config(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            let mut env = mock_env(before_all.default_sender_owner, &[]);
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
             println!("{:?}", res);
