@@ -14,6 +14,7 @@ const WINNER_KEY: &[u8] = b"winner";
 const WINNER_RANK_KEY: &[u8] = b"rank";
 const POLL_KEY: &[u8] = b"poll";
 const VOTE_KEY: &[u8] = b"user";
+const WINNING_COMBINATION_KEY: &[u8] = b"winning";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -220,4 +221,17 @@ pub fn poll_vote_storage<T: Storage>(storage: &mut T, poll_id: u64) -> Bucket<T,
 
 pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> ReadonlyBucket<T, bool> {
     ReadonlyBucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
+}
+
+
+
+pub fn winning_combination_storage<T: Storage>(storage: &mut T, lottery_id: u64) -> Bucket<T, String> {
+    Bucket::multilevel(&[WINNING_COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+pub fn winning_combination_storage_read<T: Storage>(
+    storage: &T,
+    lottery_id: u64,
+) -> ReadonlyBucket<T, String> {
+    ReadonlyBucket::multilevel(&[WINNING_COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
 }
