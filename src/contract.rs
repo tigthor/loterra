@@ -4,11 +4,7 @@ use crate::msg::{
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
-use crate::state::{
-    all_winners, combination_bucket, combination_bucket_read, config, config_read, poll_storage,
-    poll_storage_read, poll_vote_storage, save_winner, winner_count_by_rank_read, winner_storage,
-    winner_storage_read, PollInfoState, PollStatus, Proposal, State,
-};
+use crate::state::{all_winners, combination_bucket, combination_bucket_read, config, config_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, winning_combination_storage};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
