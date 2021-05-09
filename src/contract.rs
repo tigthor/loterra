@@ -555,11 +555,11 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
 
     let winning_combination = winning_combination_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes()).unwrap();
     let addr = deps.api.canonical_address(&env.message.sender)?;
-    let lottery_counter = state.lottery_counter - 1;
+    let last_lottery_counter_round = state.lottery_counter - 1;
 
     let mut combination: Vec<(CanonicalAddr, Vec<String>)> = vec![];
     if addresses.is_none() {
-        let is_combination = user_combination_bucket_read(&mut deps.storage, lottery_counter).may_load(addr.as_slice())?;
+        let is_combination = user_combination_bucket_read(&mut deps.storage, last_lottery_counter_round).may_load(addr.as_slice())?;
 
         if is_combination.is_some(){
             combination.push((addr, is_combination.unwrap()));
@@ -568,7 +568,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     else {
         for address in addresses.unwrap() {
             let addr = deps.api.canonical_address(&address)?;
-            let is_combination = user_combination_bucket_read(&mut deps.storage, lottery_counter).may_load(addr.as_slice())?;
+            let is_combination = user_combination_bucket_read(&mut deps.storage, last_lottery_counter_round).may_load(addr.as_slice())?;
             if is_combination.is_some(){
                 combination.push((addr, is_combination.unwrap()));
             }
@@ -2369,6 +2369,28 @@ mod tests {
             }
         }
         #[test]
+        fn collect_jackpot_is_closed() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            default_init(&mut deps);
+
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let res = handle_jackpot(&mut deps, env.clone());
+            match res {
+                Err(GenericErr {
+                        msg,
+                        backtrace: None,
+                    }) => assert_eq!(msg, "Collecting jackpot is closed"),
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
         fn no_jackpot_rewards() {
             let before_all = before_all();
             let mut deps = mock_dependencies(
@@ -2379,7 +2401,10 @@ mod tests {
                 }],
             );
             default_init(&mut deps);
-            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let state = config_read(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            env.block.time = state.block_time_play - state.every_block_time_play / 2;
+
             let res = handle_jackpot(&mut deps, env.clone());
             match res {
                 Err(GenericErr {
@@ -2405,7 +2430,10 @@ mod tests {
             state.jackpot_reward = Uint128(1_000_000);
             config(&mut deps.storage).save(&state).unwrap();
 
-            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let state = config_read(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            env.block.time = state.block_time_play - state.every_block_time_play / 2;
+
             let res = handle_jackpot(&mut deps, env.clone());
 
             match res {
@@ -2457,8 +2485,10 @@ mod tests {
             );
 
             save_winner(&mut deps.storage, 1u64, addr2, 1).unwrap();
+            let state = config_read(&mut deps.storage).load().unwrap();
+            let mut env = mock_env("address1", &[]);
+            env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let env = mock_env("address1", &[]);
             let res = handle_jackpot(&mut deps, env.clone());
             println!("{:?}", res);
             match res {
@@ -2513,7 +2543,8 @@ mod tests {
             save_winner(&mut deps.storage, 1u64, addr.clone(), 4).unwrap();
             save_winner(&mut deps.storage, 1u64, addr_default.clone(), 4).unwrap();
 
-            let env = mock_env(before_all.default_sender_two.clone(), &[]);
+            let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
+            env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
             let res = handle_jackpot(&mut deps, env.clone());
             println!("{:?}", res);
             match res {
@@ -2536,6 +2567,7 @@ mod tests {
                 }],
             );
             default_init(&mut deps);
+
             let mut state_before = config(&mut deps.storage).load().unwrap();
             state_before.jackpot_reward = Uint128(1_000_000);
             state_before.lottery_counter = 2;
@@ -2553,7 +2585,9 @@ mod tests {
             save_winner(&mut deps.storage, 1u64, addr2.clone(), 1).unwrap();
             save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
 
-            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
+
             let res = handle_jackpot(&mut deps, env.clone()).unwrap();
             println!("{:?}", res);
             let amount_claimed = Uint128(420000);
@@ -2630,7 +2664,10 @@ mod tests {
             save_winner(&mut deps.storage, 1u64, default_addr.clone(), 2).unwrap();
             save_winner(&mut deps.storage, 1u64, default_addr.clone(), 2).unwrap();
 
-            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let state = config_read(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            env.block.time = state.block_time_play - state.every_block_time_play / 2;
+
             let res = handle_jackpot(&mut deps, env.clone()).unwrap();
             let amount_claimed = Uint128(486666);
             assert_eq!(
