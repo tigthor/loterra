@@ -334,7 +334,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // The jackpot after worker fee applied
     let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
     let mut holders_rewards = Uint128::zero();
-    let is_big_winner_empty = combination_bucket_read(&deps.storage, state.lottery_counter).load(winning_combination.as_bytes())?.is_empty();
+    let is_big_winner_empty = combination_bucket_read(&deps.storage, state.lottery_counter).may_load(winning_combination.as_bytes())?;
     /*
     let winners: Vec<(usize, Vec<CanonicalAddr>)> =
         combination_bucket_read(&deps.storage, state.lottery_counter)
@@ -386,7 +386,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     */
 
     // Prepare sending jackpot to staking holder if there is a big winner
-    if !is_big_winner_empty {
+    if !is_big_winner_empty.is_none() {
         jackpot_after = jackpot.sub(total_fee).unwrap();
         holders_rewards = holders_rewards.add(token_holder_fee_reward);
     }
