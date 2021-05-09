@@ -223,15 +223,11 @@ pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> Readonly
     ReadonlyBucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
 }
 
-
-
-pub fn winning_combination_storage<T: Storage>(storage: &mut T, lottery_id: u64) -> Bucket<T, String> {
-    Bucket::multilevel(&[WINNING_COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+pub fn winning_combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, String> {
+    bucket(WINNING_COMBINATION_KEY, storage)
 }
 
-pub fn winning_combination_storage_read<T: Storage>(
-    storage: &T,
-    lottery_id: u64,
-) -> ReadonlyBucket<T, String> {
-    ReadonlyBucket::multilevel(&[WINNING_COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+pub fn winning_combination_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, String> {
+    bucket_read(WINNING_COMBINATION_KEY, storage)
 }
+
