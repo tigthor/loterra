@@ -347,55 +347,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
     let mut holders_rewards = Uint128::zero();
     let is_big_winner_empty = combination_bucket_read(&deps.storage, state.lottery_counter).may_load(winning_combination.as_bytes())?;
-    /*
-    let winners: Vec<(usize, Vec<CanonicalAddr>)> =
-        combination_bucket_read(&deps.storage, state.lottery_counter)
-            .range(None, None, Order::Ascending)
-            .filter_map(|res| {
-                println!("{:?}", res);
-                let (comb_raw, addrs) = res.ok()?;
-                let comb = String::from_utf8(comb_raw).ok()?;
-                println!("{}", comb);
-                let match_count = count_match(comb.as_str(), winning_combination);
-                if match_count < winning_combination.len() - 3 {
-                    return None;
-                }
-
-                Some((match_count, addrs))
-            })
-            .collect();
-
-    // rank winners
-    let winners_ranked: Vec<(u8, Vec<CanonicalAddr>)> = winners
-        .into_iter()
-        .filter_map(|(match_count, addrs)| {
-            let rank = match match_count {
-                count if count == winning_combination.len() => {
-                    // Set the new jackpot after new fee calculation
-                    jackpot_after = jackpot.sub(total_fee).unwrap();
-                    holders_rewards = holders_rewards.add(token_holder_fee_reward);
-                    1
-                }
-                count if count == winning_combination.len() - 1 => 2,
-                count if count == winning_combination.len() - 2 => 3,
-                count if count == winning_combination.len() - 3 => 4,
-                _ => 0,
-            } as u8;
-
-            if rank == 0 {
-                return None;
-            }
-            Some((rank, addrs))
-        })
-        .collect();
-
-    // save winners by rank
-    for (rank, winners) in winners_ranked {
-        for addr in winners {
-            save_winner(&mut deps.storage, state.lottery_counter, addr, rank)?;
-        }
-    }
-    */
 
     // Prepare sending jackpot to staking holder if there is a big winner
     if !is_big_winner_empty.is_none() {
