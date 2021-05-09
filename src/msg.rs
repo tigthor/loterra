@@ -28,6 +28,8 @@ pub enum HandleMsg {
     /// Public sale buy the token holders with 1:1 ratio
     PublicSale {},
     /// Claim jackpot
+    Claim { addresses: Option<Vec<HumanAddr>> },
+    /// Collect jackpot
     Jackpot {},
     /// DAO
     /// Make a proposal

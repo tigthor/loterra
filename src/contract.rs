@@ -71,6 +71,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Register { combination } => handle_register(deps, env, combination),
         HandleMsg::Play {} => handle_play(deps, env),
         HandleMsg::PublicSale {} => handle_public_sale(deps, env),
+        HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
         HandleMsg::Jackpot {} => handle_jackpot(deps, env),
         HandleMsg::Proposal {
             description,
@@ -303,11 +304,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     // Save the combination for the current lottery count
     winning_combination_storage(&mut deps.storage).save(&state.lottery_counter.to_be_bytes(), &winning_combination.to_string());
-    /*
-        TODO: Move the read winning combination to claim place
-     */
-    // let combination = winning_combination_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes()).unwrap();
-    // println!("{}, that's the combination", combination);
 
     // Set jackpot amount
     let balance = deps
@@ -338,13 +334,16 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // The jackpot after worker fee applied
     let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
     let mut holders_rewards = Uint128::zero();
-
+    let is_big_winner_empty = combination_bucket_read(&deps.storage, state.lottery_counter).load(winning_combination.as_bytes())?.is_empty();
+    /*
     let winners: Vec<(usize, Vec<CanonicalAddr>)> =
         combination_bucket_read(&deps.storage, state.lottery_counter)
             .range(None, None, Order::Ascending)
             .filter_map(|res| {
+                println!("{:?}", res);
                 let (comb_raw, addrs) = res.ok()?;
                 let comb = String::from_utf8(comb_raw).ok()?;
+                println!("{}", comb);
                 let match_count = count_match(comb.as_str(), winning_combination);
                 if match_count < winning_combination.len() - 3 {
                     return None;
@@ -384,11 +383,13 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             save_winner(&mut deps.storage, state.lottery_counter, addr, rank)?;
         }
     }
+    */
 
-    /*let querier = TerraQuerier::new(&deps.querier);
-    let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
-    let amount_to_send = fee_for_drand_worker.sub(tax_cap.cap)?;
-      */
+    // Prepare sending jackpot to staking holder if there is a big winner
+    if !is_big_winner_empty {
+        jackpot_after = jackpot.sub(total_fee).unwrap();
+        holders_rewards = holders_rewards.add(token_holder_fee_reward);
+    }
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
@@ -569,6 +570,16 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    addresses: Option<Vec<HumanAddr>>
+) -> StdResult<HandleResponse> {
+    let state = config(&mut deps.storage).load()?;
+    let combination = winning_combination_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes()).unwrap();
+
+    Ok(HandleResponse::default())
+}
 // Players claim the jackpot
 pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
