@@ -4,7 +4,7 @@ use crate::msg::{
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
-use crate::state::{all_winners, combination_bucket, combination_bucket_read, config, config_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, winning_combination_storage};
+use crate::state::{all_winners, combination_bucket, combination_bucket_read, config, config_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, winning_combination_storage, user_combination_bucket, user_combination_bucket_read};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
@@ -214,17 +214,29 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    // save combination
+    // save combination by combinations
     let addr = deps.api.canonical_address(&env.message.sender)?;
     combination_bucket(&mut deps.storage, state.lottery_counter).update(
         combination.as_bytes(),
         |exists| match exists {
             Some(addrs) => {
                 let mut modified = addrs;
-                modified.push(addr);
+                modified.push(addr.clone());
                 Ok(modified)
             }
-            None => Ok(vec![addr]),
+            None => Ok(vec![addr.clone()]),
+        },
+    )?;
+    // Save combination by senders
+    user_combination_bucket(&mut deps.storage, state.lottery_counter).update(
+        addr.as_slice(),
+        |exists| match exists {
+            Some(combinations) => {
+                let mut modified = combinations;
+                modified.push(combination);
+                Ok(modified)
+            }
+            None => Ok(vec![combination]),
         },
     )?;
 
@@ -303,7 +315,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let winning_combination = &randomness_hash[n..];
 
     // Save the combination for the current lottery count
-    winning_combination_storage(&mut deps.storage).save(&state.lottery_counter.to_be_bytes(), &winning_combination.to_string());
+    let _save_winning_combination = winning_combination_storage(&mut deps.storage).save(&state.lottery_counter.to_be_bytes(), &winning_combination.to_string());
 
     // Set jackpot amount
     let balance = deps
@@ -576,9 +588,74 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     addresses: Option<Vec<HumanAddr>>
 ) -> StdResult<HandleResponse> {
     let state = config(&mut deps.storage).load()?;
-    let combination = winning_combination_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes()).unwrap();
 
-    Ok(HandleResponse::default())
+    if state.safe_lock {
+        return Err(StdError::generic_err(
+            "Contract deactivated for update or/and preventing security issue",
+        ));
+    }
+
+    if env.block.time > state.block_time_play - state.every_block_time_play / 2 {
+        return Err(StdError::generic_err(
+            "Claiming is closed",
+        ));
+    }
+
+    let winning_combination = winning_combination_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes()).unwrap();
+    let addr = deps.api.canonical_address(&env.message.sender)?;
+    let lottery_counter = state.lottery_counter - 1;
+
+    let mut combination: Vec<(CanonicalAddr, Vec<String>)> = vec![];
+    if addresses.is_none() {
+        let is_combination = user_combination_bucket_read(&mut deps.storage, lottery_counter).may_load(addr.as_slice())?;
+
+        if is_combination.is_some(){
+            combination.push((addr, is_combination.unwrap()));
+        }
+    }
+    else {
+        for address in addresses.unwrap() {
+            let addr = deps.api.canonical_address(&address)?;
+            let is_combination = user_combination_bucket_read(&mut deps.storage, lottery_counter).may_load(addr.as_slice())?;
+            if is_combination.is_some(){
+                combination.push((addr, is_combination.unwrap()));
+            }
+        }
+    }
+
+    if combination.is_empty(){
+        return Err(StdError::generic_err("No winning combination"));
+    }
+
+    let _combo = combination.into_iter()
+        .filter_map(|res| {
+            let (addr, comb_raw) = res;
+
+            for combo in comb_raw {
+                let match_count = count_match(combo.as_str(), &winning_combination);
+                let rank = match match_count {
+                    count if count == winning_combination.len() => 1,
+                    count if count == winning_combination.len() - 1 => 2,
+                    count if count == winning_combination.len() - 2 => 3,
+                    count if count == winning_combination.len() - 3 => 4,
+                    _ => 0,
+                } as u8;
+
+                save_winner(&mut deps.storage, state.lottery_counter, addr.clone(), rank).unwrap();
+            }
+            Some(())
+        });
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![
+            LogAttribute {
+                key: "action".to_string(),
+                value: "claim".to_string(),
+            }
+        ],
+        data: None,
+    })
 }
 // Players claim the jackpot
 pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
@@ -598,7 +675,11 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
             "Contract deactivated for update or/and preventing security issue",
         ));
     }
-
+    if env.block.time < state.block_time_play - state.every_block_time_play / 2 {
+        return Err(StdError::generic_err(
+            "Collecting jackpot is closed",
+        ));
+    }
     // Ensure there is jackpot reward to claim
     if state.jackpot_reward.is_zero() {
         return Err(StdError::generic_err("No jackpot reward"));

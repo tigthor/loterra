@@ -49,11 +49,6 @@ pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State> {
     singleton_read(storage, CONFIG_KEY)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct Combination {
-    pub addresses: Vec<CanonicalAddr>,
-}
-
 // index = COMBINATION_KEY | lottery_id | combination -> address
 // TODO maybe implement index COMBINATION_KEY | lottery_id | combination | address -> true ?
 pub fn combination_bucket<T: Storage>(
@@ -68,6 +63,20 @@ pub fn combination_bucket_read<T: Storage>(
     storage: &T,
     lottery_id: u64,
 ) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
+    ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+pub fn user_combination_bucket<T: Storage>(
+    storage: &mut T,
+    lottery_id: u64,
+) -> Bucket<T, Vec<String>> {
+    Bucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+pub fn user_combination_bucket_read<T: Storage>(
+    storage: &T,
+    lottery_id: u64,
+) -> ReadonlyBucket<T, Vec<String>> {
     ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
 }
 
