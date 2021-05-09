@@ -301,6 +301,14 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         .unwrap();
     let winning_combination = &randomness_hash[n..];
 
+    // Save the combination for the current lottery count
+    winning_combination_storage(&mut deps.storage).save(&state.lottery_counter.to_be_bytes(), &winning_combination.to_string());
+    /*
+        TODO: Move the read winning combination to claim place
+     */
+    // let combination = winning_combination_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes()).unwrap();
+    // println!("{}, that's the combination", combination);
+
     // Set jackpot amount
     let balance = deps
         .querier
