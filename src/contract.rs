@@ -2379,8 +2379,9 @@ mod tests {
                 }],
             );
             default_init(&mut deps);
-
+            let state = config_read(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            env.block.time = state.block_time_play - state.every_block_time_play;
             let res = handle_jackpot(&mut deps, env.clone());
             match res {
                 Err(GenericErr {
