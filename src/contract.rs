@@ -20,7 +20,7 @@ const MAX_DESCRIPTION_LEN: u64 = 255;
 const MIN_DESCRIPTION_LEN: u64 = 6;
 const HOLDERS_MAX_REWARD: u8 = 20;
 const WORKER_MAX_REWARD: u8 = 10;
-const DIV_BLOCK_TIME_BY_X: u8 = 2;
+const DIV_BLOCK_TIME_BY_X: u64 = 2;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
