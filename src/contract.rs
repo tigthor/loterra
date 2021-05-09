@@ -20,6 +20,7 @@ const MAX_DESCRIPTION_LEN: u64 = 255;
 const MIN_DESCRIPTION_LEN: u64 = 6;
 const HOLDERS_MAX_REWARD: u8 = 20;
 const WORKER_MAX_REWARD: u8 = 10;
+const DIV_BLOCK_TIME_BY_X: u8 = 2;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
@@ -546,7 +547,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
         ));
     }
 
-    if env.block.time > state.block_time_play - state.every_block_time_play / 2 {
+    if env.block.time > state.block_time_play - state.every_block_time_play / DIV_BLOCK_TIME_BY_X {
         return Err(StdError::generic_err(
             "Claiming is closed",
         ));
@@ -626,7 +627,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
             "Contract deactivated for update or/and preventing security issue",
         ));
     }
-    if env.block.time < state.block_time_play - state.every_block_time_play / 2 {
+    if env.block.time < state.block_time_play - state.every_block_time_play / DIV_BLOCK_TIME_BY_X {
         return Err(StdError::generic_err(
             "Collecting jackpot is closed",
         ));
