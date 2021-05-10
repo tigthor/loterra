@@ -293,7 +293,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let winning_combination = &randomness_hash[n..];
 
     // Save the combination for the current lottery count
-    let _save_winning_combination = lottery_winning_combination_storage(&mut deps.storage).save(
+    lottery_winning_combination_storage(&mut deps.storage).save(
         &state.lottery_counter.to_be_bytes(),
         &winning_combination.to_string(),
     )?;
