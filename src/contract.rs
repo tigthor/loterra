@@ -251,6 +251,14 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+fn encode_msg_execute(msg: QueryMsg, address: HumanAddr, coin: Vec<Coin>) -> StdResult<CosmosMsg> {
+    Ok(WasmMsg::Execute {
+        contract_addr: address,
+        msg: to_binary(&msg)?,
+        send: coin,
+    }
+        .into())
+}
 fn encode_msg_query(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
     Ok(WasmQuery::Smart {
         contract_addr: address,
@@ -412,14 +420,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-fn encode_msg_execute(msg: QueryMsg, address: HumanAddr, coin: Vec<Coin>) -> StdResult<CosmosMsg> {
-    Ok(WasmMsg::Execute {
-        contract_addr: address,
-        msg: to_binary(&msg)?,
-        send: coin,
-    }
-    .into())
-}
 fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     query: QueryRequest<Empty>,
@@ -552,10 +552,19 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
             "Claiming is closed",
         ));
     }
-
-    let winning_combination = winning_combination_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes()).unwrap();
-    let addr = deps.api.canonical_address(&env.message.sender)?;
     let last_lottery_counter_round = state.lottery_counter - 1;
+
+    let winning_combination = match winning_combination_storage(&mut deps.storage).may_load(&last_lottery_counter_round.to_be_bytes())? {
+        Some(combination) => Some(combination),
+        None => {
+            return Err(StdError::NotFound {
+                kind: "No winning combination".to_string(),
+                backtrace: None,
+            })
+        }
+    }.unwrap();
+
+    let addr = deps.api.canonical_address(&env.message.sender)?;
 
     let mut combination: Vec<(CanonicalAddr, Vec<String>)> = vec![];
     if addresses.is_none() {
@@ -576,27 +585,27 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     }
 
     if combination.is_empty(){
-        return Err(StdError::generic_err("No winning combination"));
+        return Err(StdError::NotFound {
+            kind: "No combination found".to_string(),
+            backtrace: None,
+        })
     }
 
-    let _combo = combination.into_iter()
-        .filter_map(|res| {
-            let (addr, comb_raw) = res;
+    for (addr, comb_raw) in combination {
 
-            for combo in comb_raw {
-                let match_count = count_match(combo.as_str(), &winning_combination);
-                let rank = match match_count {
-                    count if count == winning_combination.len() => 1,
-                    count if count == winning_combination.len() - 1 => 2,
-                    count if count == winning_combination.len() - 2 => 3,
-                    count if count == winning_combination.len() - 3 => 4,
-                    _ => 0,
-                } as u8;
+        for combo in comb_raw {
+            let match_count = count_match(combo.as_str(), &winning_combination);
+            let rank = match match_count {
+                count if count == winning_combination.len() => 1,
+                count if count == winning_combination.len() - 1 => 2,
+                count if count == winning_combination.len() - 2 => 3,
+                count if count == winning_combination.len() - 3 => 4,
+                _ => 0,
+            } as u8;
 
-                save_winner(&mut deps.storage, state.lottery_counter, addr.clone(), rank).unwrap();
-            }
-            Some(())
-        });
+            save_winner(&mut deps.storage, last_lottery_counter_round, addr.clone(), rank).unwrap();
+        }
+    }
 
     Ok(HandleResponse {
         messages: vec![],
@@ -675,7 +684,6 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         let prize = state
             .jackpot_reward
             .mul(Decimal::percent(
-                // TODO claim.rank checked anywhere? this can cause panic
                 state.prize_rank_winner_percentage[rank as usize - 1] as u64,
             ))
             .u128()
@@ -1530,6 +1538,88 @@ mod tests {
         let res = query_all_winner(&deps, 1u64).unwrap();
         println!("{:?}", res);
     }
+    mod claim {
+        // handle_claim
+        use super::*;
+        #[test]
+        fn no_winning_combination(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+
+            let msg = HandleMsg::Claim { addresses: None };
+            let res = handle(&mut deps, mock_env(before_all.default_sender, &[]), msg.clone());
+            match res {
+                Err(StdError::NotFound { kind, backtrace: None }) => assert_eq!(kind, "No winning combination"),
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
+        fn no_combination(){
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let addr = deps.api.canonical_address(&before_all.default_sender).unwrap();
+            let mut state = config(&mut deps.storage).load().unwrap();
+            state.lottery_counter = 2;
+            config(&mut deps.storage).save(&state).unwrap();
+            let last_lottery_counter_round = state.lottery_counter - 1;
+            // Save winning combination
+            winning_combination_storage(&mut deps.storage).save(&last_lottery_counter_round.to_be_bytes(), &"123456".to_string());
+            let msg = HandleMsg::Claim { addresses: None };
+            let res = handle(&mut deps, mock_env(before_all.default_sender, &[]), msg.clone());
+            match res {
+                Err(StdError::NotFound { kind, backtrace: None }) => assert_eq!(kind, "No combination found"),
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
+        fn success() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let addr = deps.api.canonical_address(&before_all.default_sender).unwrap();
+            let mut state = config(&mut deps.storage).load().unwrap();
+            // Save combination by senders
+            user_combination_bucket(&mut deps.storage, state.lottery_counter).update(
+                addr.as_slice(),
+                |exists| match exists {
+                    Some(combinations) => {
+                        let mut modified = combinations;
+                        modified.push("123456".to_string());
+                        modified.push("12345f".to_string());
+                        Ok(modified)
+                    }
+                    None => Ok(vec!["123456".to_string(), "12345f".to_string()]),
+                },
+            ).unwrap();
+            // Save winning combination
+            winning_combination_storage(&mut deps.storage).save(&state.lottery_counter.to_be_bytes(), &"123456".to_string());
+            state.lottery_counter = 2;
+            config(&mut deps.storage).save(&state).unwrap();
+
+
+            let msg = HandleMsg::Claim { addresses: None };
+            let res = handle(&mut deps, mock_env(before_all.default_sender, &[]), msg.clone()).unwrap();
+            println!("{:?}", res);
+            assert_eq!(
+                res,
+                HandleResponse {
+                    messages: vec![],
+                    log: vec![LogAttribute {
+                        key: "action".to_string(),
+                        value: "claim".to_string()
+                    }],
+                    data: None
+                }
+            );
+
+            let last_lottery_counter_round = state.lottery_counter - 1;
+            let winners = winner_storage_read(&deps.storage, last_lottery_counter_round).load(&addr.as_slice()).unwrap();
+            assert!(!winners.claimed);
+            assert_eq!(winners.ranks.len(), 2);
+        }
+    }
     mod register {
         use super::*;
         #[test]
@@ -1609,6 +1699,10 @@ mod tests {
                 .load(&"1e3fab".as_bytes())
                 .unwrap();
             assert_eq!(1, store.len());
+            let addr = deps.api.canonical_address(&before_all.default_sender).unwrap();
+            let store_two =  user_combination_bucket_read(&mut deps.storage, 1u64).load(addr.as_slice()).unwrap();
+            assert_eq!(1, store_two.len());
+
             let player1 = deps
                 .api
                 .canonical_address(&before_all.default_sender)
@@ -2072,6 +2166,7 @@ mod tests {
     }
     mod play {
         use super::*;
+        use crate::state::winning_combination_storage_read;
 
         #[test]
         fn security_active() {
@@ -2244,6 +2339,9 @@ mod tests {
                     }]
                 })
             );
+
+            let store = winning_combination_storage_read(&deps.storage).load(&state.lottery_counter.to_be_bytes()).unwrap();
+            assert_eq!(store, "39493d");
 
             // TODO add winner checks
             let state_after = config(&mut deps.storage).load().unwrap();
