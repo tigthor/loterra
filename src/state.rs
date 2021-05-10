@@ -14,6 +14,7 @@ const WINNER_KEY: &[u8] = b"winner";
 const WINNER_RANK_KEY: &[u8] = b"rank";
 const POLL_KEY: &[u8] = b"poll";
 const VOTE_KEY: &[u8] = b"user";
+const WINNING_COMBINATION_KEY: &[u8] = b"winning";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -48,11 +49,6 @@ pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State> {
     singleton_read(storage, CONFIG_KEY)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, Default)]
-pub struct Combination {
-    pub addresses: Vec<CanonicalAddr>,
-}
-
 // index = COMBINATION_KEY | lottery_id | combination -> address
 // TODO maybe implement index COMBINATION_KEY | lottery_id | combination | address -> true ?
 pub fn combination_bucket<T: Storage>(
@@ -67,6 +63,20 @@ pub fn combination_bucket_read<T: Storage>(
     storage: &T,
     lottery_id: u64,
 ) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
+    ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+pub fn user_combination_bucket<T: Storage>(
+    storage: &mut T,
+    lottery_id: u64,
+) -> Bucket<T, Vec<String>> {
+    Bucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+pub fn user_combination_bucket_read<T: Storage>(
+    storage: &T,
+    lottery_id: u64,
+) -> ReadonlyBucket<T, Vec<String>> {
     ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
 }
 
@@ -220,4 +230,14 @@ pub fn poll_vote_storage<T: Storage>(storage: &mut T, poll_id: u64) -> Bucket<T,
 
 pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> ReadonlyBucket<T, bool> {
     ReadonlyBucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
+}
+
+pub fn lottery_winning_combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, String> {
+    bucket(WINNING_COMBINATION_KEY, storage)
+}
+
+pub fn lottery_winning_combination_storage_read<T: Storage>(
+    storage: &T,
+) -> ReadonlyBucket<T, String> {
+    bucket_read(WINNING_COMBINATION_KEY, storage)
 }
