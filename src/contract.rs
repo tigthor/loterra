@@ -367,7 +367,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         .may_load(winning_combination.as_bytes())?;
 
     // Prepare sending jackpot to staking holder if there is a big winner
-    if !is_big_winner_empty.is_none() {
+    if is_big_winner_empty.is_some() {
         jackpot_after = jackpot.sub(total_fee).unwrap();
         holders_rewards = holders_rewards.add(token_holder_fee_reward);
     }
@@ -578,22 +578,21 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
 
     let mut combination: Vec<(CanonicalAddr, Vec<String>)> = vec![];
     if addresses.is_none() {
-        let is_combination =
-            user_combination_bucket_read(&mut deps.storage, last_lottery_counter_round)
-                .may_load(addr.as_slice())?;
-
-        if is_combination.is_some() {
-            combination.push((addr, is_combination.unwrap()));
-        }
+        match user_combination_bucket_read(&deps.storage, last_lottery_counter_round)
+            .may_load(addr.as_slice())?
+        {
+            None => {}
+            Some(combo) => combination.push((addr, combo)),
+        };
     } else {
         for address in addresses.unwrap() {
             let addr = deps.api.canonical_address(&address)?;
-            let is_combination =
-                user_combination_bucket_read(&mut deps.storage, last_lottery_counter_round)
-                    .may_load(addr.as_slice())?;
-            if is_combination.is_some() {
-                combination.push((addr, is_combination.unwrap()));
-            }
+            match user_combination_bucket_read(&deps.storage, last_lottery_counter_round)
+                .may_load(addr.as_slice())?
+            {
+                None => {}
+                Some(combo) => combination.push((addr, combo)),
+            };
         }
     }
 
