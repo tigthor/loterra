@@ -50,6 +50,29 @@
       "description": "Claim jackpot",
       "type": "object",
       "required": [
+        "claim"
+      ],
+      "properties": {
+        "claim": {
+          "type": "object",
+          "properties": {
+            "addresses": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "$ref": "#/definitions/HumanAddr"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Collect jackpot",
+      "type": "object",
+      "required": [
         "jackpot"
       ],
       "properties": {
