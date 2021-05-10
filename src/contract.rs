@@ -515,7 +515,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
             return Err(StdError::NotFound {
                 kind: "No winning combination".to_string(),
                 backtrace: None,
-            })
+            });
         }
     }
     .unwrap();
