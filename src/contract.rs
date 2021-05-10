@@ -1,9 +1,11 @@
-use crate::helpers::count_match;
+use crate::helpers::{
+    count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight,
+    wrapper_msg_loterra, wrapper_msg_terrand,
+};
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, CombinationInfo, ConfigResponse, GetPollResponse,
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
-use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
 use crate::state::{
     all_winners, combination_bucket, combination_bucket_read, config, config_read, poll_storage,
     poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket,
@@ -12,9 +14,8 @@ use crate::state::{
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
-    to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Empty, Env, Extern,
-    HandleResponse, HumanAddr, InitResponse, LogAttribute, Order, Querier, QueryRequest, StdError,
-    StdResult, Storage, Uint128, WasmMsg, WasmQuery,
+    to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
+    HumanAddr, InitResponse, LogAttribute, Order, Querier, StdError, StdResult, Storage, Uint128,
 };
 use std::ops::{Add, Mul, Sub};
 
@@ -138,20 +139,6 @@ pub fn handle_safe_lock<S: Storage, A: Api, Q: Querier>(
     Ok(HandleResponse::default())
 }
 
-// There is probably some built-in function for this, but this is a simple way to do it
-fn is_lower_hex(combination: &str, len: u8) -> bool {
-    if combination.len() != (len as usize) {
-        return false;
-    }
-    if !combination
-        .chars()
-        .all(|c| ('a'..='f').contains(&c) || ('0'..='9').contains(&c))
-    {
-        return false;
-    }
-    true
-}
-
 pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -254,29 +241,6 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         }],
         data: None,
     })
-}
-
-fn encode_msg_execute(msg: QueryMsg, address: HumanAddr, coin: Vec<Coin>) -> StdResult<CosmosMsg> {
-    Ok(WasmMsg::Execute {
-        contract_addr: address,
-        msg: to_binary(&msg)?,
-        send: coin,
-    }
-    .into())
-}
-fn encode_msg_query(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
-    Ok(WasmQuery::Smart {
-        contract_addr: address,
-        msg: to_binary(&msg)?,
-    }
-    .into())
-}
-fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<TerrandResponse> {
-    let res: TerrandResponse = deps.querier.query(&query)?;
-    Ok(res)
 }
 
 pub fn handle_play<S: Storage, A: Api, Q: Querier>(
@@ -427,24 +391,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         ],
         data: None,
     })
-}
-
-fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<LoterraBalanceResponse> {
-    let res: LoterraBalanceResponse = deps.querier.query(&query)?;
-
-    Ok(res)
-}
-
-fn wrapper_msg_loterra_staking<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<GetHolderResponse> {
-    let res: GetHolderResponse = deps.querier.query(&query)?;
-
-    Ok(res)
 }
 
 pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
@@ -1007,32 +953,6 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-fn user_total_weight<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    state: &State,
-    address: &CanonicalAddr,
-) -> Uint128 {
-    let mut weight = Uint128::zero();
-    let human_address = deps.api.human_address(&address).unwrap();
-
-    // Ensure sender have some reward tokens
-    let msg = QueryMsg::Holder {
-        address: human_address,
-    };
-    let loterra_human = deps
-        .api
-        .human_address(&state.loterra_staking_contract_address.clone())
-        .unwrap();
-    let res = encode_msg_query(msg, loterra_human).unwrap();
-    let loterra_balance = wrapper_msg_loterra_staking(&deps, res).unwrap();
-
-    if !loterra_balance.balance.is_zero() {
-        weight += loterra_balance.balance;
-    }
-
-    weight
-}
-
 pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
@@ -1461,7 +1381,7 @@ mod tests {
     use crate::msg::{HandleMsg, InitMsg};
     use cosmwasm_std::testing::{mock_dependencies, mock_env};
     use cosmwasm_std::StdError::GenericErr;
-    use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128};
+    use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128, WasmMsg};
 
     struct BeforeAll {
         default_length: usize,
