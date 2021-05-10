@@ -239,4 +239,3 @@ pub fn winning_combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, Str
 pub fn winning_combination_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, String> {
     bucket_read(WINNING_COMBINATION_KEY, storage)
 }
-
