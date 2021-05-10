@@ -7,10 +7,10 @@ use crate::msg::{
     HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
-    all_winners, combination_bucket, combination_bucket_read, config, config_read, poll_storage,
-    poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket,
-    user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read,
-    winning_combination_storage, PollInfoState, PollStatus, Proposal, State,
+    all_winners, combination_bucket, combination_bucket_read, config, config_read,
+    lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
+    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
+    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
@@ -293,7 +293,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let winning_combination = &randomness_hash[n..];
 
     // Save the combination for the current lottery count
-    let _save_winning_combination = winning_combination_storage(&mut deps.storage).save(
+    let _save_winning_combination = lottery_winning_combination_storage(&mut deps.storage).save(
         &state.lottery_counter.to_be_bytes(),
         &winning_combination.to_string(),
     )?;
@@ -507,7 +507,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     }
     let last_lottery_counter_round = state.lottery_counter - 1;
 
-    let winning_combination = match winning_combination_storage(&mut deps.storage)
+    let lottery_winning_combination = match lottery_winning_combination_storage(&mut deps.storage)
         .may_load(&last_lottery_counter_round.to_be_bytes())?
     {
         Some(combination) => Some(combination),
@@ -555,12 +555,12 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
 
     for (addr, comb_raw) in combination {
         for combo in comb_raw {
-            let match_count = count_match(combo.as_str(), &winning_combination);
+            let match_count = count_match(combo.as_str(), &lottery_winning_combination);
             let rank = match match_count {
-                count if count == winning_combination.len() => 1,
-                count if count == winning_combination.len() - 1 => 2,
-                count if count == winning_combination.len() - 2 => 3,
-                count if count == winning_combination.len() - 3 => 4,
+                count if count == lottery_winning_combination.len() => 1,
+                count if count == lottery_winning_combination.len() - 1 => 2,
+                count if count == lottery_winning_combination.len() - 2 => 3,
+                count if count == lottery_winning_combination.len() - 3 => 4,
                 _ => 0,
             } as u8;
 
@@ -1529,7 +1529,7 @@ mod tests {
             config(&mut deps.storage).save(&state).unwrap();
             let last_lottery_counter_round = state.lottery_counter - 1;
             // Save winning combination
-            winning_combination_storage(&mut deps.storage).save(
+            lottery_winning_combination_storage(&mut deps.storage).save(
                 &last_lottery_counter_round.to_be_bytes(),
                 &"123456".to_string(),
             );
@@ -1570,7 +1570,7 @@ mod tests {
                 })
                 .unwrap();
             // Save winning combination
-            winning_combination_storage(&mut deps.storage)
+            lottery_winning_combination_storage(&mut deps.storage)
                 .save(&state.lottery_counter.to_be_bytes(), &"123456".to_string())
                 .unwrap();
             state.lottery_counter = 2;
@@ -2155,7 +2155,7 @@ mod tests {
     }
     mod play {
         use super::*;
-        use crate::state::winning_combination_storage_read;
+        use crate::state::lottery_winning_combination_storage_read;
 
         #[test]
         fn security_active() {
@@ -2329,7 +2329,7 @@ mod tests {
                 })
             );
 
-            let store = winning_combination_storage_read(&deps.storage)
+            let store = lottery_winning_combination_storage_read(&deps.storage)
                 .load(&state.lottery_counter.to_be_bytes())
                 .unwrap();
             assert_eq!(store, "39493d");
