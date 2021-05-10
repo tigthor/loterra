@@ -296,7 +296,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let _save_winning_combination = winning_combination_storage(&mut deps.storage).save(
         &state.lottery_counter.to_be_bytes(),
         &winning_combination.to_string(),
-    );
+    )?;
 
     // Set jackpot amount
     let balance = deps
@@ -1571,7 +1571,8 @@ mod tests {
                 .unwrap();
             // Save winning combination
             winning_combination_storage(&mut deps.storage)
-                .save(&state.lottery_counter.to_be_bytes(), &"123456".to_string());
+                .save(&state.lottery_counter.to_be_bytes(), &"123456".to_string())
+                .unwrap();
             state.lottery_counter = 2;
             config(&mut deps.storage).save(&state).unwrap();
 
