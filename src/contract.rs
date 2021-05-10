@@ -577,22 +577,26 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     let addr = deps.api.canonical_address(&env.message.sender)?;
 
     let mut combination: Vec<(CanonicalAddr, Vec<String>)> = vec![];
-    if addresses.is_none() {
-        match user_combination_bucket_read(&deps.storage, last_lottery_counter_round)
-            .may_load(addr.as_slice())?
-        {
-            None => {}
-            Some(combo) => combination.push((addr, combo)),
-        };
-    } else {
-        for address in addresses.unwrap() {
-            let addr = deps.api.canonical_address(&address)?;
+
+    match addresses {
+        None => {
             match user_combination_bucket_read(&deps.storage, last_lottery_counter_round)
                 .may_load(addr.as_slice())?
             {
                 None => {}
                 Some(combo) => combination.push((addr, combo)),
             };
+        }
+        Some(addresses) => {
+            for address in addresses {
+                let addr = deps.api.canonical_address(&address)?;
+                match user_combination_bucket_read(&deps.storage, last_lottery_counter_round)
+                    .may_load(addr.as_slice())?
+                {
+                    None => {}
+                    Some(combo) => combination.push((addr, combo)),
+                };
+            }
         }
     }
 
@@ -1554,6 +1558,23 @@ mod tests {
     mod claim {
         // handle_claim
         use super::*;
+        #[test]
+        fn claim_is_closed() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Claim { addresses: None };
+
+            let mut state = config(&mut deps.storage).load().unwrap();
+            let mut env = mock_env(before_all.default_sender, &[]);
+            env.block.time = state.block_time_play;
+            let res = handle(&mut deps, env, msg.clone());
+            match res {
+                Err(GenericErr { msg, .. }) => assert_eq!(msg, "Claiming is closed"),
+                _ => panic!("Unexpected error"),
+            }
+        }
+
         #[test]
         fn no_winning_combination() {
             let before_all = before_all();
