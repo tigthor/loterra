@@ -1602,6 +1602,8 @@ mod tests {
                 .unwrap();
             assert!(!winners.claimed);
             assert_eq!(winners.ranks.len(), 2);
+            assert_eq!(winners.ranks[0], 1);
+            assert_eq!(winners.ranks[1], 2);
         }
     }
     mod register {
