@@ -59,7 +59,7 @@ pub enum QueryMsg {
     /// Get the config state
     Config {},
     /// Combination lottery numbers and address
-    Combination { lottery_id: u64 },
+    Combination { lottery_id: u64, address: HumanAddr },
     /// Winner lottery rank and address
     Winner { lottery_id: u64 },
     /// Get specific poll
@@ -83,14 +83,8 @@ pub enum QueryMsg {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct CombinationInfo {
-    pub combination: String,
-    pub addresses: Vec<HumanAddr>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AllCombinationResponse {
-    pub combination: Vec<CombinationInfo>,
+    pub combination: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

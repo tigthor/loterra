@@ -3,8 +3,8 @@ use crate::helpers::{
     wrapper_msg_loterra, wrapper_msg_terrand,
 };
 use crate::msg::{
-    AllCombinationResponse, AllWinnersResponse, CombinationInfo, ConfigResponse, GetPollResponse,
-    HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse,
+    AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
+    InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
     all_winners, combination_bucket, combination_bucket_read, config, config_read,
@@ -1241,9 +1241,10 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
-        QueryMsg::Combination { lottery_id } => {
-            to_binary(&query_all_combination(deps, lottery_id)?)?
-        }
+        QueryMsg::Combination {
+            lottery_id,
+            address,
+        } => to_binary(&query_all_combination(deps, lottery_id, address)?)?,
         QueryMsg::Winner { lottery_id } => to_binary(&query_all_winner(deps, lottery_id)?)?,
         QueryMsg::GetPoll { poll_id } => to_binary(&query_poll(deps, poll_id)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
@@ -1262,27 +1263,21 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
 fn query_all_combination<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: u64,
+    address: HumanAddr,
 ) -> StdResult<AllCombinationResponse> {
-    let combinations: StdResult<Vec<CombinationInfo>> =
-        combination_bucket_read(&deps.storage, lottery_id)
-            .range(None, None, Order::Descending)
-            .map(|item| {
-                let (comb, cann_addrs) = item?;
-                let addrs: StdResult<Vec<HumanAddr>> = cann_addrs
-                    .iter()
-                    .map(|c| deps.api.human_address(c))
-                    .collect();
-                // TODO the safety of unwrap
-                let key = String::from_utf8(comb).unwrap();
-                Ok(CombinationInfo {
-                    combination: key,
-                    addresses: addrs?,
+    let addr = deps.api.canonical_address(&address)?;
+    let combo =
+        match user_combination_bucket_read(&deps.storage, lottery_id).may_load(addr.as_slice())? {
+            None => {
+                return Err(StdError::NotFound {
+                    kind: "not found".to_string(),
+                    backtrace: None,
                 })
-            })
-            .collect();
-    Ok(AllCombinationResponse {
-        combination: combinations?,
-    })
+            }
+            Some(combination) => combination,
+        };
+
+    Ok(AllCombinationResponse { combination: combo })
 }
 
 fn query_all_winner<S: Storage, A: Api, Q: Querier>(
