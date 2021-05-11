@@ -15,7 +15,7 @@ use crate::state::{
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
-    HumanAddr, InitResponse, LogAttribute, Order, Querier, StdError, StdResult, Storage, Uint128,
+    HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128,
 };
 use std::ops::{Add, Mul, Sub};
 
