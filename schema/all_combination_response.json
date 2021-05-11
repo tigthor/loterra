@@ -9,31 +9,8 @@
     "combination": {
       "type": "array",
       "items": {
-        "$ref": "#/definitions/CombinationInfo"
+        "type": "string"
       }
-    }
-  },
-  "definitions": {
-    "CombinationInfo": {
-      "type": "object",
-      "required": [
-        "addresses",
-        "combination"
-      ],
-      "properties": {
-        "addresses": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/HumanAddr"
-          }
-        },
-        "combination": {
-          "type": "string"
-        }
-      }
-    },
-    "HumanAddr": {
-      "type": "string"
     }
   }
 }

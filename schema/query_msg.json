@@ -24,9 +24,13 @@
         "combination": {
           "type": "object",
           "required": [
+            "address",
             "lottery_id"
           ],
           "properties": {
+            "address": {
+              "$ref": "#/definitions/HumanAddr"
+            },
             "lottery_id": {
               "type": "integer",
               "format": "uint64",
