@@ -9,8 +9,9 @@ use crate::msg::{
 use crate::state::{
     all_winners, combination_bucket, combination_bucket_read, config, config_read,
     lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
-    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
+    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank,
+    winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus,
+    Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
@@ -555,7 +556,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
 
     for (addr, comb_raw) in combination {
         for combo in comb_raw {
-            let match_count = count_match(combo.as_str(), &lottery_winning_combination);
+            let match_count = count_match(&combo, &lottery_winning_combination);
             let rank = match match_count {
                 count if count == lottery_winning_combination.len() => 1,
                 count if count == lottery_winning_combination.len() - 1 => 2,
@@ -564,13 +565,14 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
                 _ => 0,
             } as u8;
 
-            save_winner(
-                &mut deps.storage,
-                last_lottery_counter_round,
-                addr.clone(),
-                rank,
-            )
-            .unwrap();
+            if rank > 0 {
+                save_winner(
+                    &mut deps.storage,
+                    last_lottery_counter_round,
+                    addr.clone(),
+                    rank,
+                )?;
+            }
         }
     }
 
@@ -1167,10 +1169,6 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             let contract_balance = deps
                 .querier
                 .query_balance(&env.contract.address, &state.denom_stable)?;
-            /*let querier = TerraQuerier::new(&deps.querier);
-            let tax_cap: TaxCapResponse = querier.query_tax_cap(&state.denom_stable)?;
-            let amount_to_send = contract_balance.amount.sub(tax_cap.cap)?;
-              */
 
             let msg = BankMsg::Send {
                 from_address: env.contract.address,
@@ -1564,9 +1562,15 @@ mod tests {
                         let mut modified = combinations;
                         modified.push("123456".to_string());
                         modified.push("12345f".to_string());
+                        modified.push("1234a6".to_string());
                         Ok(modified)
                     }
-                    None => Ok(vec!["123456".to_string(), "12345f".to_string()]),
+                    None => Ok(vec![
+                        "123456".to_string(),
+                        "12345f".to_string(),
+                        "1234a6".to_string(),
+                        "000000".to_string(),
+                    ]),
                 })
                 .unwrap();
             // Save winning combination
@@ -1600,10 +1604,12 @@ mod tests {
             let winners = winner_storage_read(&deps.storage, last_lottery_counter_round)
                 .load(&addr.as_slice())
                 .unwrap();
+            println!("{:?}", winners);
             assert!(!winners.claimed);
-            assert_eq!(winners.ranks.len(), 2);
+            assert_eq!(winners.ranks.len(), 3);
             assert_eq!(winners.ranks[0], 1);
             assert_eq!(winners.ranks[1], 2);
+            assert_eq!(winners.ranks[2], 2);
         }
     }
     mod register {
