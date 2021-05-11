@@ -9,9 +9,8 @@ use crate::msg::{
 use crate::state::{
     all_winners, combination_bucket, combination_bucket_read, config, config_read,
     lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank,
-    winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus,
-    Proposal, State,
+    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
+    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
