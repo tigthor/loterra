@@ -6,12 +6,7 @@ use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
-use crate::state::{
-    all_winners, combination_bucket, combination_bucket_read, config, config_read,
-    lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
-    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
-};
+use crate::state::{all_winners, combination_bucket, combination_bucket_read, config, config_read, lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, WinnerRewardClaims};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
@@ -554,24 +549,29 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     }
 
     for (addr, comb_raw) in combination {
-        for combo in comb_raw {
-            let match_count = count_match(&combo, &lottery_winning_combination);
-            let rank = match match_count {
-                count if count == lottery_winning_combination.len() => 1,
-                count if count == lottery_winning_combination.len() - 1 => 2,
-                count if count == lottery_winning_combination.len() - 2 => 3,
-                count if count == lottery_winning_combination.len() - 3 => 4,
-                _ => 0,
-            } as u8;
+        match winner_storage_read(&deps.storage, last_lottery_counter_round).may_load(addr.as_slice())?{
+            None => {
+                for combo in comb_raw {
+                    let match_count = count_match(&combo, &lottery_winning_combination);
+                    let rank = match match_count {
+                        count if count == lottery_winning_combination.len() => 1,
+                        count if count == lottery_winning_combination.len() - 1 => 2,
+                        count if count == lottery_winning_combination.len() - 2 => 3,
+                        count if count == lottery_winning_combination.len() - 3 => 4,
+                        _ => 0,
+                    } as u8;
 
-            if rank > 0 {
-                save_winner(
-                    &mut deps.storage,
-                    last_lottery_counter_round,
-                    addr.clone(),
-                    rank,
-                )?;
+                    if rank > 0 {
+                        save_winner(
+                            &mut deps.storage,
+                            last_lottery_counter_round,
+                            addr.clone(),
+                            rank,
+                        )?;
+                    }
+                }
             }
+            Some(_) => {}
         }
     }
 
@@ -1577,7 +1577,7 @@ mod tests {
             let msg = HandleMsg::Claim { addresses: None };
             let res = handle(
                 &mut deps,
-                mock_env(before_all.default_sender, &[]),
+                mock_env(before_all.default_sender.clone(), &[]),
                 msg.clone(),
             )
             .unwrap();
@@ -1593,6 +1593,12 @@ mod tests {
                     data: None
                 }
             );
+            // Claim again is not possible
+            let res = handle(
+                &mut deps,
+                mock_env(before_all.default_sender, &[]),
+                msg.clone(),
+            ).unwrap();
 
             let last_lottery_counter_round = state.lottery_counter - 1;
             let winners = winner_storage_read(&deps.storage, last_lottery_counter_round)
