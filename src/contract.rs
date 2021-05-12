@@ -11,7 +11,6 @@ use crate::state::{
     lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
     save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
     winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
-    WinnerRewardClaims,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
