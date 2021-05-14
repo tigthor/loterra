@@ -39,7 +39,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         admin: deps.api.canonical_address(&env.message.sender)?,
         block_time_play: msg.block_time_play,
         every_block_time_play: msg.every_block_time_play,
-        public_sale_end_block: msg.public_sale_end_block,
+        public_sale_end_block_time: msg.public_sale_end_block_time,
         denom_stable: msg.denom_stable,
         token_holder_supply: msg.token_holder_supply,
         poll_default_end_height: msg.poll_default_end_height,
@@ -405,7 +405,7 @@ pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
         ));
     }
     // Public sale expire after blockTime
-    if state.public_sale_end_block < env.block.height {
+    if state.public_sale_end_block_time < env.block.time {
         return Err(StdError::generic_err("Public sale is ended"));
     }
     // Check if some funds are sent
@@ -1401,7 +1401,7 @@ mod tests {
         const DENOM_STABLE: &str = "ust";
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
-        const PUBLIC_SALE_END_BLOCK: u64 = 1000000000;
+        const PUBLIC_SALE_END_BLOCK_TIME: u64 = 1610566920;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
         const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
         const DAO_FUNDS: Uint128 = Uint128(10_000);
@@ -1410,7 +1410,7 @@ mod tests {
             denom_stable: DENOM_STABLE.to_string(),
             block_time_play: BLOCK_TIME_PLAY,
             every_block_time_play: EVERY_BLOCK_TIME_PLAY,
-            public_sale_end_block: PUBLIC_SALE_END_BLOCK,
+            public_sale_end_block_time: PUBLIC_SALE_END_BLOCK_TIME,
             poll_default_end_height: POLL_DEFAULT_END_HEIGHT,
             token_holder_supply: TOKEN_HOLDER_SUPPLY,
             terrand_contract_address: HumanAddr::from(
@@ -2131,7 +2131,8 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-            env.block.height = state.public_sale_end_block + 1000;
+
+            env.block.time = state.public_sale_end_block_time + 1000;
             let res = handle_public_sale(&mut deps, env);
             match res {
                 Err(GenericErr {

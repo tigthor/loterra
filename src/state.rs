@@ -21,7 +21,7 @@ pub struct State {
     pub admin: CanonicalAddr,
     pub block_time_play: u64,
     pub every_block_time_play: u64,
-    pub public_sale_end_block: u64,
+    pub public_sale_end_block_time: u64,
     pub denom_stable: String,
     pub token_holder_supply: Uint128,
     pub combination_len: u8,
