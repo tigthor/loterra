@@ -2131,8 +2131,9 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-
+            assert!(env.block.time < state.public_sale_end_block_time);
             env.block.time = state.public_sale_end_block_time + 1000;
+            assert!(env.block.time > state.public_sale_end_block_time);
             let res = handle_public_sale(&mut deps, env);
             match res {
                 Err(GenericErr {
