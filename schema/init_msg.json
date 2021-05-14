@@ -10,7 +10,7 @@
     "loterra_cw20_contract_address",
     "loterra_staking_contract_address",
     "poll_default_end_height",
-    "public_sale_end_block",
+    "public_sale_end_block_time",
     "terrand_contract_address",
     "token_holder_supply"
   ],
@@ -42,7 +42,7 @@
       "format": "uint64",
       "minimum": 0.0
     },
-    "public_sale_end_block": {
+    "public_sale_end_block_time": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0

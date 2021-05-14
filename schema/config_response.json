@@ -20,7 +20,7 @@
     "poll_default_end_height",
     "price_per_ticket_to_register",
     "prize_rank_winner_percentage",
-    "public_sale_end_block",
+    "public_sale_end_block_time",
     "safe_lock",
     "terrand_contract_address",
     "token_holder_percentage_fee_reward",
@@ -99,7 +99,7 @@
         "minimum": 0.0
       }
     },
-    "public_sale_end_block": {
+    "public_sale_end_block_time": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
