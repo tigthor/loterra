@@ -1616,9 +1616,9 @@ mod tests {
             );
             match res {
                 Err(StdError::NotFound {
-                        kind,
-                        backtrace: None,
-                    }) => assert_eq!(kind, "No winning combination or already claimed"),
+                    kind,
+                    backtrace: None,
+                }) => assert_eq!(kind, "No winning combination or already claimed"),
                 _ => panic!("Unexpected error"),
             }
 
