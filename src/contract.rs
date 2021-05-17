@@ -552,7 +552,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
             backtrace: None,
         });
     }
-
+    let mut some_winner = 0;
     for (addr, comb_raw) in combination {
         match winner_storage_read(&deps.storage, last_lottery_counter_round)
             .may_load(addr.as_slice())?
@@ -575,11 +575,19 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
                             addr.clone(),
                             rank,
                         )?;
+                        some_winner += 1;
                     }
                 }
             }
             Some(_) => {}
         }
+    }
+
+    if some_winner == 0 {
+        return Err(StdError::NotFound {
+            kind: "No winning combination or already claimed".to_string(),
+            backtrace: None,
+        });
     }
 
     Ok(HandleResponse {
@@ -1605,8 +1613,14 @@ mod tests {
                 &mut deps,
                 mock_env(before_all.default_sender, &[]),
                 msg.clone(),
-            )
-            .unwrap();
+            );
+            match res {
+                Err(StdError::NotFound {
+                        kind,
+                        backtrace: None,
+                    }) => assert_eq!(kind, "No winning combination or already claimed"),
+                _ => panic!("Unexpected error"),
+            }
 
             let last_lottery_counter_round = state.lottery_counter - 1;
             let winners = winner_storage_read(&deps.storage, last_lottery_counter_round)
