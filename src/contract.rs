@@ -75,7 +75,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> StdResult<HandleResponse> {
     match msg {
-        HandleMsg::Register { combination } => handle_register(deps, env, combination),
+        HandleMsg::Register { address, combination } => handle_register(deps, env, address, combination),
         HandleMsg::Play {} => handle_play(deps, env),
         HandleMsg::PublicSale {} => handle_public_sale(deps, env),
         HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
@@ -142,7 +142,8 @@ pub fn handle_safe_lock<S: Storage, A: Api, Q: Querier>(
 pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    combination: String,
+    address: Option<HumanAddr>,
+    combination: Vec<String>,
 ) -> StdResult<HandleResponse> {
     // Load the state
     let state = config(&mut deps.storage).load()?;
@@ -159,13 +160,23 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         ));
     }
 
-    // Regex to check if the combination is allowed
-    if !is_lower_hex(&combination, state.combination_len) {
-        return Err(StdError::generic_err(format!(
-            "Not authorized use combination of [a-f] and [0-9] with length {}",
-            state.combination_len
-        )));
+    // Check if address filled as param
+    let addr = match address {
+        None => env.message.sender,
+        Some(addr) => addr
+    };
+
+
+    for combo in combination.clone() {
+        // Regex to check if the combination is allowed
+        if !is_lower_hex(&combo, state.combination_len) {
+            return Err(StdError::generic_err(format!(
+                "Not authorized use combination of [a-f] and [0-9] with length {}",
+                state.combination_len
+            )));
+        }
     }
+
 
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
@@ -199,7 +210,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         )));
     }
     // Handle the player is not sending too much or too less
-    if sent.u128() != state.price_per_ticket_to_register.u128() {
+    if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
         return Err(StdError::generic_err(format!(
             "send {}{}",
             state.price_per_ticket_to_register.clone(),
@@ -208,28 +219,28 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     }
 
     // save combination by combinations
-    let addr = deps.api.canonical_address(&env.message.sender)?;
-    combination_bucket(&mut deps.storage, state.lottery_counter).update(
+    let addr_raw = deps.api.canonical_address(&addr)?;
+    /*combination_bucket(&mut deps.storage, state.lottery_counter).update(
         combination.as_bytes(),
         |exists| match exists {
             Some(addrs) => {
                 let mut modified = addrs;
-                modified.push(addr.clone());
+                modified.push(addr_raw.clone());
                 Ok(modified)
             }
-            None => Ok(vec![addr.clone()]),
+            None => Ok(vec![addr_raw.clone()]),
         },
-    )?;
+    )?;*/
     // Save combination by senders
     user_combination_bucket(&mut deps.storage, state.lottery_counter).update(
-        addr.as_slice(),
+        addr_raw.as_slice(),
         |exists| match exists {
             Some(combinations) => {
                 let mut modified = combinations;
-                modified.push(combination);
+                modified.extend(combination);
                 Ok(modified)
             }
-            None => Ok(vec![combination]),
+            None => Ok(combination),
         },
     )?;
 
@@ -1639,7 +1650,8 @@ mod tests {
             state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1669,7 +1681,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1743,7 +1756,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1770,7 +1784,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1804,7 +1819,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1832,7 +1848,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3far".to_string(),
+                address: None,
+                combination: vec!["1e3far".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1862,7 +1879,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fae".to_string(),
+                address: None,
+                combination: vec!["1e3fae".to_string()],
             };
             // Fail sending less than required (1_000_000)
             let res = handle(
@@ -1909,7 +1927,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fae".to_string(),
+                address: None,
+                combination: vec!["1e3fae".to_string()],
             };
             let state = config(&mut deps.storage).load().unwrap();
             let mut env = mock_env(
@@ -2283,7 +2302,8 @@ mod tests {
             default_init(&mut deps);
             // register some combination
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             handle(
                 &mut deps,
@@ -2299,7 +2319,8 @@ mod tests {
             .unwrap();
 
             let msg = HandleMsg::Register {
-                combination: "39493d".to_string(),
+                address: None,
+                combination: vec!["39493d".to_string()],
             };
             handle(
                 &mut deps,
@@ -2378,7 +2399,8 @@ mod tests {
             default_init(&mut deps);
             // register some combination
             let msg = HandleMsg::Register {
-                combination: "39498d".to_string(),
+                address: None,
+                combination: vec!["39498d".to_string()],
             };
             handle(
                 &mut deps,
