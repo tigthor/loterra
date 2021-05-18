@@ -329,24 +329,8 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             state.fee_for_drand_worker_in_percentage as u64,
         ));
 
-    // Amount token holders can claim of the reward is a fee
-    let token_holder_fee_reward = jackpot.mul(Decimal::percent(
-        state.token_holder_percentage_fee_reward as u64,
-    ));
-    // Total fees if winner of the jackpot
-    let total_fee = fee_for_drand_worker.add(token_holder_fee_reward);
-
     // The jackpot after worker fee applied
     let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
-    let mut holders_rewards = Uint128::zero();
-    let is_big_winner_empty = combination_bucket_read(&deps.storage, state.lottery_counter)
-        .may_load(winning_combination.as_bytes())?;
-
-    // Prepare sending jackpot to staking holder if there is a big winner
-    if is_big_winner_empty.is_some() {
-        jackpot_after = jackpot.sub(total_fee).unwrap();
-        holders_rewards = holders_rewards.add(token_holder_fee_reward);
-    }
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
@@ -360,28 +344,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         )?],
     };
 
-    let mut all_msg = vec![msg_fee_worker.into()];
-
-    if !holders_rewards.is_zero() {
-        let loterra_human = deps
-            .api
-            .human_address(&state.loterra_staking_contract_address)?;
-        // let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
-
-        let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
-        let res_update_global_index = encode_msg_execute(
-            msg_update_global_index,
-            loterra_human,
-            vec![deduct_tax(
-                &deps,
-                Coin {
-                    denom: state.denom_stable.clone(),
-                    amount: holders_rewards,
-                },
-            )?],
-        )?;
-        all_msg.push(res_update_global_index);
-    }
     // Update the state
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
@@ -390,7 +352,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
-        messages: all_msg,
+        messages: vec![msg_fee_worker.into()],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -684,24 +646,49 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     winner_storage(&mut deps.storage, last_lottery_counter_round)
         .save(canonical_addr.as_slice(), &rewards)?;
 
-    // Build the amount transaction
-    let amount_to_send: Vec<Coin> = vec![Coin {
-        denom: state.denom_stable,
-        amount: Uint128::from(total_prize),
-    }];
+    let total_prize = Uint128::from(total_prize);
+    // Amount token holders can claim of the reward as fee
+    let token_holder_fee_reward = total_prize.mul(Decimal::percent(
+        state.token_holder_percentage_fee_reward as u64,
+    ));
 
+    let total_prize_after = total_prize.sub(token_holder_fee_reward).unwrap();
+
+    let loterra_human = deps
+        .api
+        .human_address(&state.loterra_staking_contract_address)?;
+    let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
+    let res_update_global_index = encode_msg_execute(
+        msg_update_global_index,
+        loterra_human,
+        vec![deduct_tax(
+            &deps,
+            Coin {
+                denom: state.denom_stable.clone(),
+                amount: token_holder_fee_reward,
+            },
+        )?],
+    )?;
+
+    // Build the amount transaction
     let msg = BankMsg::Send {
         from_address: env.contract.address,
         to_address: deps
             .api
             .human_address(&deps.api.canonical_address(&addr).unwrap())
             .unwrap(),
-        amount: amount_to_send,
+        amount: vec![deduct_tax(
+            &deps,
+            Coin {
+                denom: state.denom_stable,
+                amount: total_prize_after,
+            },
+        )?],
     };
 
     // Send the jackpot
     Ok(HandleResponse {
-        messages: vec![msg.into()],
+        messages: vec![msg.into(), res_update_global_index],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -2415,7 +2402,7 @@ mod tests {
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
             println!("{:?}", res);
-            assert_eq!(res.messages.len(), 2);
+            assert_eq!(res.messages.len(), 1);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2424,21 +2411,6 @@ mod tests {
                     amount: vec![Coin {
                         denom: "ust".to_string(),
                         amount: Uint128(719)
-                    }]
-                })
-            );
-
-            assert_eq!(
-                res.messages[1],
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: deps
-                        .api
-                        .human_address(&state.loterra_staking_contract_address)
-                        .unwrap(),
-                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
-                    send: vec![Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(719999)
                     }]
                 })
             );
@@ -2454,7 +2426,7 @@ mod tests {
             assert_eq!(state.jackpot_reward, Uint128::zero());
             assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
             // 720720 total fees
-            assert_eq!(state_after.jackpot_reward, Uint128(6_479_280));
+            assert_eq!(state_after.jackpot_reward, Uint128(7199280));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
@@ -2773,7 +2745,7 @@ mod tests {
         #[test]
         fn success() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
+            let mut deps = mock_dependencies_custom(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
@@ -2805,7 +2777,8 @@ mod tests {
             let msg = HandleMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
-            let amount_claimed = Uint128(420000);
+            assert_eq!(res.messages.len(), 2);
+            let amount_claimed = Uint128(377999);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2814,6 +2787,20 @@ mod tests {
                     amount: vec![Coin {
                         denom: "ust".to_string(),
                         amount: amount_claimed.clone()
+                    }]
+                })
+            );
+            assert_eq!(
+                res.messages[1],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps
+                        .api
+                        .human_address(&state_before.loterra_staking_contract_address)
+                        .unwrap(),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
+                    send: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(41999)
                     }]
                 })
             );
@@ -2850,7 +2837,7 @@ mod tests {
         #[test]
         fn success_collecting_for_someone() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
+            let mut deps = mock_dependencies_custom(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
@@ -2884,7 +2871,9 @@ mod tests {
             };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
-            let amount_claimed = Uint128(420000);
+
+            assert_eq!(res.messages.len(), 2);
+            let amount_claimed = Uint128(377999);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2893,6 +2882,20 @@ mod tests {
                     amount: vec![Coin {
                         denom: "ust".to_string(),
                         amount: amount_claimed.clone()
+                    }]
+                })
+            );
+            assert_eq!(
+                res.messages[1],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps
+                        .api
+                        .human_address(&state_before.loterra_staking_contract_address)
+                        .unwrap(),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
+                    send: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(41999)
                     }]
                 })
             );
@@ -2931,7 +2934,7 @@ mod tests {
         #[test]
         fn success_multiple_win() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
+            let mut deps = mock_dependencies_custom(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
@@ -2969,7 +2972,8 @@ mod tests {
             let msg = HandleMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
 
-            let amount_claimed = Uint128(486666);
+            assert_eq!(res.messages.len(), 2);
+            let amount_claimed = Uint128(437999);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2978,6 +2982,20 @@ mod tests {
                     amount: vec![Coin {
                         denom: "ust".to_string(),
                         amount: amount_claimed.clone()
+                    }]
+                })
+            );
+            assert_eq!(
+                res.messages[1],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps
+                        .api
+                        .human_address(&state_before.loterra_staking_contract_address)
+                        .unwrap(),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
+                    send: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(48665)
                     }]
                 })
             );
