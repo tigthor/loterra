@@ -30,7 +30,7 @@ pub enum HandleMsg {
     /// Claim jackpot
     Claim { addresses: Option<Vec<HumanAddr>> },
     /// Collect jackpot
-    Jackpot {},
+    Collect { address: Option<HumanAddr> },
     /// DAO
     /// Make a proposal
     Proposal {
