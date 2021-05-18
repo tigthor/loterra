@@ -7,10 +7,10 @@ use crate::msg::{
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
-    all_winners, combination_bucket, combination_bucket_read, config, config_read,
-    lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
-    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
+    all_winners, config, config_read, lottery_winning_combination_storage, poll_storage,
+    poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket,
+    user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read,
+    PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
@@ -330,7 +330,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         ));
 
     // The jackpot after worker fee applied
-    let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
+    let jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),

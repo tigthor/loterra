@@ -15,8 +15,21 @@
             "combination"
           ],
           "properties": {
+            "address": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "combination": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         }
