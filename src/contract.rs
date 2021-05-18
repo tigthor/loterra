@@ -75,7 +75,10 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> StdResult<HandleResponse> {
     match msg {
-        HandleMsg::Register { address, combination } => handle_register(deps, env, address, combination),
+        HandleMsg::Register {
+            address,
+            combination,
+        } => handle_register(deps, env, address, combination),
         HandleMsg::Play {} => handle_play(deps, env),
         HandleMsg::PublicSale {} => handle_public_sale(deps, env),
         HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
@@ -163,9 +166,8 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     // Check if address filled as param
     let addr = match address {
         None => env.message.sender,
-        Some(addr) => addr
+        Some(addr) => addr,
     };
-
 
     for combo in combination.clone() {
         // Regex to check if the combination is allowed
@@ -177,11 +179,10 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         }
     }
 
-
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
         0 => Err(StdError::generic_err(format!(
-            "you need to send {}{} in order to register",
+            "you need to send {}{} per combination in order to register",
             state.price_per_ticket_to_register.clone(),
             state.denom_stable
         ))),
@@ -190,7 +191,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
                 Ok(env.message.sent_funds[0].amount)
             } else {
                 Err(StdError::generic_err(format!(
-                    "To register you need to send {}{}",
+                    "To register you need to send {}{} per combination",
                     state.price_per_ticket_to_register,
                     state.denom_stable.clone()
                 )))
@@ -204,7 +205,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
 
     if sent.is_zero() {
         return Err(StdError::generic_err(format!(
-            "you need to send {}{} in order to register",
+            "you need to send {}{} per combination in order to register",
             state.price_per_ticket_to_register.clone(),
             state.denom_stable
         )));
@@ -213,7 +214,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
         return Err(StdError::generic_err(format!(
             "send {}{}",
-            state.price_per_ticket_to_register.clone(),
+            state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
             state.denom_stable
         )));
     }
@@ -1632,6 +1633,7 @@ mod tests {
         }
     }
     mod register {
+        // handle_register
         use super::*;
         #[test]
         fn security_active() {
@@ -1682,7 +1684,11 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
-                combination: vec!["1e3fab".to_string()],
+                combination: vec![
+                    "1e3fab".to_string(),
+                    "abcdef".to_string(),
+                    "123456".to_string(),
+                ],
             };
             let res = handle(
                 &mut deps,
@@ -1690,7 +1696,7 @@ mod tests {
                     before_all.default_sender.clone(),
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
+                        amount: Uint128(3_000_000),
                     }],
                 ),
                 msg.clone(),
@@ -1708,10 +1714,6 @@ mod tests {
                 }
             );
             // Check combination added with success
-            let store = combination_bucket(&mut deps.storage, 1u64)
-                .load(&"1e3fab".as_bytes())
-                .unwrap();
-            assert_eq!(1, store.len());
             let addr = deps
                 .api
                 .canonical_address(&before_all.default_sender)
@@ -1719,36 +1721,67 @@ mod tests {
             let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
                 .load(addr.as_slice())
                 .unwrap();
-            assert_eq!(1, store_two.len());
+            assert_eq!(3, store_two.len());
 
-            let player1 = deps
+            // Play 2 more combination
+            let msg = HandleMsg::Register {
+                address: None,
+                combination: vec!["affe3b".to_string(), "098765".to_string()],
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(2_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+            .unwrap();
+            // Check combination added with success
+            let addr = deps
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-            assert!(store.contains(&player1));
-            //New player
+            let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
+                .load(addr.as_slice())
+                .unwrap();
+            assert_eq!(5, store_two.len());
+            assert_eq!(store_two[3], "affe3b".to_string());
+            assert_eq!(store_two[4], "098765".to_string());
+
+            // Someone registering combination for other player
+            let msg = HandleMsg::Register {
+                address: Some(before_all.default_sender.clone()),
+                combination: vec!["aaaaaa".to_string(), "bbbbbb".to_string()],
+            };
+            // default_sender_two sending combination for default_sender
             let _res = handle(
                 &mut deps,
                 mock_env(
                     before_all.default_sender_two.clone(),
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
+                        amount: Uint128(2_000_000),
                     }],
                 ),
                 msg.clone(),
             )
             .unwrap();
-            let store = combination_bucket_read(&mut deps.storage, 1u64)
-                .load(&"1e3fab".as_bytes())
-                .unwrap();
-            let player2 = deps
+
+            // Check combination added with success
+            let addr = deps
                 .api
-                .canonical_address(&before_all.default_sender_two)
+                .canonical_address(&before_all.default_sender)
                 .unwrap();
-            assert_eq!(2, store.len());
-            assert!(store.contains(&player1));
-            assert!(store.contains(&player2));
+            let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
+                .load(addr.as_slice())
+                .unwrap();
+            assert_eq!(7, store_two.len());
+            assert_eq!(store_two[5], "aaaaaa".to_string());
+            assert_eq!(store_two[6], "bbbbbb".to_string());
         }
         #[test]
         fn register_fail_if_sender_sent_empty_funds() {
@@ -1774,7 +1807,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "you need to send 1000000ust in order to register"),
+                }) => assert_eq!(
+                    msg,
+                    "you need to send 1000000ust per combination in order to register"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1838,7 +1874,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "To register you need to send 1000000ust"),
+                }) => assert_eq!(
+                    msg,
+                    "To register you need to send 1000000ust per combination"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1874,13 +1913,44 @@ mod tests {
             }
         }
         #[test]
+        fn register_fail_multiple_wrong_combination() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                address: None,
+                combination: vec!["1e3far".to_string(), "1e3fac".to_string()],
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            );
+            match res {
+                Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => assert_eq!(
+                    msg,
+                    "Not authorized use combination of [a-f] and [0-9] with length 6"
+                ),
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
         fn register_fail_sent_too_much_or_less() {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
-                combination: vec!["1e3fae".to_string()],
+                combination: vec!["1e3fae".to_string(), "1e3fa2".to_string()],
             };
             // Fail sending less than required (1_000_000)
             let res = handle(
@@ -1889,7 +1959,7 @@ mod tests {
                     before_all.default_sender.clone(),
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(1_000_00),
+                        amount: Uint128(1_000_000),
                     }],
                 ),
                 msg.clone(),
@@ -1898,17 +1968,17 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "send 1000000ust"),
+                }) => assert_eq!(msg, "send 2000000ust"),
                 _ => panic!("Unexpected error"),
             }
-            // Fail sending more than required (1_000_000)
+            // Fail sending more than required (2_000_000)
             let res = handle(
                 &mut deps,
                 mock_env(
                     before_all.default_sender,
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(1_000_001),
+                        amount: Uint128(3_000_000),
                     }],
                 ),
                 msg.clone(),
@@ -1917,7 +1987,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "send 1000000ust"),
+                }) => assert_eq!(msg, "send 2000000ust"),
                 _ => panic!("Unexpected error"),
             }
         }
