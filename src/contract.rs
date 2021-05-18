@@ -82,7 +82,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Play {} => handle_play(deps, env),
         HandleMsg::PublicSale {} => handle_public_sale(deps, env),
         HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
-        HandleMsg::Jackpot {} => handle_jackpot(deps, env),
+        HandleMsg::Collect { address } => handle_collect(deps, env, address),
         HandleMsg::Proposal {
             description,
             proposal,
@@ -604,9 +604,10 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     })
 }
 // Players claim the jackpot
-pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
+pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
+    address: Option<HumanAddr>,
 ) -> StdResult<HandleResponse> {
     // Ensure the sender is not sending funds
     if !env.message.sent_funds.is_empty() {
@@ -628,6 +629,10 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     if state.jackpot_reward.is_zero() {
         return Err(StdError::generic_err("No jackpot reward"));
     }
+    let addr = match address {
+        None => env.message.sender,
+        Some(addr) => addr,
+    };
 
     // Get the contract balance
     let balance = deps
@@ -639,7 +644,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Empty contract balance"));
     }
 
-    let canonical_addr = deps.api.canonical_address(&env.message.sender)?;
+    let canonical_addr = deps.api.canonical_address(&addr)?;
     // Load winner
     let last_lottery_counter_round = state.lottery_counter - 1;
     let may_claim = winner_storage_read(&deps.storage, last_lottery_counter_round)
@@ -689,7 +694,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         from_address: env.contract.address,
         to_address: deps
             .api
-            .human_address(&deps.api.canonical_address(&env.message.sender).unwrap())
+            .human_address(&deps.api.canonical_address(&addr).unwrap())
             .unwrap(),
         amount: amount_to_send,
     };
@@ -704,7 +709,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
             },
             LogAttribute {
                 key: "to".to_string(),
-                value: env.message.sender.to_string(),
+                value: addr.to_string(),
             },
             LogAttribute {
                 key: "jackpot_prize".to_string(),
@@ -2515,7 +2520,7 @@ mod tests {
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
     }
-    mod jackpot {
+    mod collect {
         use super::*;
 
         #[test]
@@ -2527,7 +2532,8 @@ mod tests {
             state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_jackpot(&mut deps, env);
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env, msg);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2557,7 +2563,8 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
                 Err(GenericErr {
@@ -2581,7 +2588,8 @@ mod tests {
             let state = config_read(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play;
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2605,7 +2613,8 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2634,7 +2643,8 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
 
             match res {
                 Err(GenericErr {
@@ -2689,7 +2699,9 @@ mod tests {
             let mut env = mock_env("address1", &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
+
             println!("{:?}", res);
             match res {
                 Err(GenericErr {
@@ -2745,7 +2757,9 @@ mod tests {
 
             let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
             env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
+
             println!("{:?}", res);
             match res {
                 Err(GenericErr {
@@ -2788,7 +2802,8 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone()).unwrap();
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
             let amount_claimed = Uint128(420000);
             assert_eq!(
@@ -2803,7 +2818,90 @@ mod tests {
                 })
             );
             // Handle can't claim multiple times
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
+
+            match res {
+                Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => assert_eq!(msg, "Already claimed"),
+                _ => panic!("Unexpected error"),
+            }
+
+            let claimed_address = deps
+                .api
+                .canonical_address(&before_all.default_sender)
+                .unwrap();
+            let winner_claim = winner_storage(&mut deps.storage, 1u64)
+                .load(claimed_address.as_slice())
+                .unwrap();
+
+            assert_eq!(winner_claim.claimed, true);
+
+            let not_claimed = winner_storage(&mut deps.storage, 1u64)
+                .load(addr2.as_slice())
+                .unwrap();
+            assert_eq!(not_claimed.claimed, false);
+
+            let state_after = config(&mut deps.storage).load().unwrap();
+            assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);
+        }
+        #[test]
+        fn success_collecting_for_someone() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            default_init(&mut deps);
+
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+            state_before.jackpot_reward = Uint128(1_000_000);
+            state_before.lottery_counter = 2;
+            config(&mut deps.storage).save(&state_before).unwrap();
+
+            let addr2 = deps
+                .api
+                .canonical_address(&HumanAddr("address2".to_string()))
+                .unwrap();
+            let default_addr = deps
+                .api
+                .canonical_address(&before_all.default_sender)
+                .unwrap();
+
+            save_winner(&mut deps.storage, 1u64, addr2.clone(), 1).unwrap();
+            save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
+
+            let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
+            env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
+
+            let msg = HandleMsg::Collect {
+                address: Some(before_all.default_sender.clone()),
+            };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            println!("{:?}", res);
+            let amount_claimed = Uint128(420000);
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Bank(BankMsg::Send {
+                    from_address: env.contract.address.clone(),
+                    to_address: before_all.default_sender.clone(),
+                    amount: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: amount_claimed.clone()
+                    }]
+                })
+            );
+            // Handle can't claim multiple times
+            let msg = HandleMsg::Collect {
+                address: Some(before_all.default_sender.clone()),
+            };
+            let res = handle(&mut deps, env.clone(), msg);
+
             match res {
                 Err(GenericErr {
                     msg,
@@ -2868,7 +2966,9 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone()).unwrap();
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+
             let amount_claimed = Uint128(486666);
             assert_eq!(
                 res.messages[0],
@@ -2882,7 +2982,9 @@ mod tests {
                 })
             );
             // Handle can't claim multiple times
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
+
             match res {
                 Err(GenericErr {
                     msg,
