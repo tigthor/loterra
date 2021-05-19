@@ -15,6 +15,7 @@ const WINNER_RANK_KEY: &[u8] = b"rank";
 const POLL_KEY: &[u8] = b"poll";
 const VOTE_KEY: &[u8] = b"user";
 const WINNING_COMBINATION_KEY: &[u8] = b"winning";
+const PLAYER_COUNT_KEY: &[u8] = b"player";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -49,6 +50,39 @@ pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State> {
     singleton_read(storage, CONFIG_KEY)
 }
 
+pub fn combination_save<T: Storage>(
+    storage: &mut T,
+    lottery_id: u64,
+    address: CanonicalAddr,
+    combination: Vec<String>,
+) -> StdResult<()> {
+    let mut exist = true;
+    // Save combination by senders
+    user_combination_bucket(storage, lottery_id).update(
+        address.as_slice(),
+        |exists| match exists {
+            Some(combinations) => {
+                let mut modified = combinations;
+                modified.extend(combination);
+                Ok(modified)
+            }
+            None => {
+                exist = false;
+                Ok(combination)
+            }
+        },
+    )?;
+    if !exist {
+        count_player_by_lottery(storage)
+            .update(&lottery_id.to_be_bytes(), |exists| match exists {
+                None => Ok(Uint128(1)),
+                Some(p) => Ok(p.add(Uint128(1))),
+            })
+            .map(|_| ())?
+    }
+    Ok(())
+}
+
 pub fn user_combination_bucket<T: Storage>(
     storage: &mut T,
     lottery_id: u64,
@@ -61,6 +95,15 @@ pub fn user_combination_bucket_read<T: Storage>(
     lottery_id: u64,
 ) -> ReadonlyBucket<T, Vec<String>> {
     ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+}
+
+// index: lottery_id | rank -> count
+pub fn count_player_by_lottery<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
+    bucket(PLAYER_COUNT_KEY, storage)
+}
+// index: lottery_id | rank -> count
+pub fn count_player_by_lottery_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
+    bucket_read(PLAYER_COUNT_KEY, storage)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

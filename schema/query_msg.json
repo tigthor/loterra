@@ -85,6 +85,28 @@
       }
     },
     {
+      "description": "Get specific poll",
+      "type": "object",
+      "required": [
+        "count_player"
+      ],
+      "properties": {
+        "count_player": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
       "description": "Get the needed round for workers adding randomness to Terrand",
       "type": "object",
       "required": [

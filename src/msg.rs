@@ -67,6 +67,8 @@ pub enum QueryMsg {
     Winner { lottery_id: u64 },
     /// Get specific poll
     GetPoll { poll_id: u64 },
+    /// Get specific poll
+    CountPlayer { lottery_id: u64 },
     /// Get the needed round for workers adding randomness to Terrand
     GetRound {},
     /// Query Terrand smart contract to get the needed randomness to play the lottery
