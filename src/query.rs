@@ -20,3 +20,16 @@ pub struct GetHolderResponse {
     pub index: Decimal,
     pub pending_rewards: Decimal,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct HoldersInfo {
+    pub address: HumanAddr,
+    pub balance: Uint128,
+    pub index: Decimal,
+    pub pending_rewards: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GetHoldersResponse {
+    pub holders: Vec<HoldersInfo>,
+}
