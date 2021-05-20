@@ -85,13 +85,85 @@
       }
     },
     {
-      "description": "Get specific poll",
+      "description": "Count players by lottery id",
       "type": "object",
       "required": [
         "count_player"
       ],
       "properties": {
         "count_player": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Count ticket sold by lottery id",
+      "type": "object",
+      "required": [
+        "count_ticket"
+      ],
+      "properties": {
+        "count_ticket": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Count winner by rank and lottery id",
+      "type": "object",
+      "required": [
+        "count_winner_rank"
+      ],
+      "properties": {
+        "count_winner_rank": {
+          "type": "object",
+          "required": [
+            "lottery_id",
+            "rank"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "rank": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Get winning combination by lottery id",
+      "type": "object",
+      "required": [
+        "winning_combination"
+      ],
+      "properties": {
+        "winning_combination": {
           "type": "object",
           "required": [
             "lottery_id"
