@@ -8,9 +8,10 @@ use crate::msg::{
 };
 use crate::state::{
     all_winners, combination_save, config, config_read, count_player_by_lottery_read,
-    lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
-    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
+    count_total_ticket_by_lottery_read, lottery_winning_combination_storage,
+    lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage,
+    save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage,
+    winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
@@ -1243,6 +1244,13 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::GetPoll { poll_id } => to_binary(&query_poll(deps, poll_id)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
         QueryMsg::CountPlayer { lottery_id } => to_binary(&query_count_player(deps, lottery_id)?)?,
+        QueryMsg::CountTicket { lottery_id } => to_binary(&query_count_ticket(deps, lottery_id)?)?,
+        QueryMsg::WinningCombination { lottery_id } => {
+            to_binary(&query_winning_combination(deps, lottery_id)?)?
+        }
+        QueryMsg::CountWinnerRank { lottery_id, rank } => {
+            to_binary(&query_winner_rank(deps, lottery_id, rank)?)?
+        }
         _ => to_binary(&())?,
     };
     Ok(response)
@@ -1253,6 +1261,40 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<ConfigResponse> {
     let state = config_read(&deps.storage).load()?;
     Ok(state)
+}
+fn query_winner_rank<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    lottery_id: u64,
+    rank: u8,
+) -> StdResult<Uint128> {
+    let amount =
+        match winner_count_by_rank_read(&deps.storage, lottery_id).may_load(&rank.to_be_bytes())? {
+            None => {
+                return Err(StdError::NotFound {
+                    kind: "not found".to_string(),
+                    backtrace: None,
+                })
+            }
+            Some(winners) => winners,
+        };
+    Ok(amount)
+}
+fn query_count_ticket<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    lottery_id: u64,
+) -> StdResult<Uint128> {
+    let amount = match count_total_ticket_by_lottery_read(&deps.storage)
+        .may_load(&lottery_id.to_be_bytes())?
+    {
+        None => {
+            return Err(StdError::NotFound {
+                kind: "not found".to_string(),
+                backtrace: None,
+            })
+        }
+        Some(ticket) => ticket,
+    };
+    Ok(amount)
 }
 fn query_count_player<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
@@ -1270,7 +1312,23 @@ fn query_count_player<S: Storage, A: Api, Q: Querier>(
         };
     Ok(amount)
 }
-
+fn query_winning_combination<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    lottery_id: u64,
+) -> StdResult<Uint128> {
+    let amount = match lottery_winning_combination_storage_read(&deps.storage)
+        .may_load(&lottery_id.to_be_bytes())?
+    {
+        None => {
+            return Err(StdError::NotFound {
+                kind: "not found".to_string(),
+                backtrace: None,
+            })
+        }
+        Some(combo) => Uint128(combo.parse().unwrap()),
+    };
+    Ok(amount)
+}
 fn query_all_combination<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: u64,
@@ -1564,23 +1622,19 @@ mod tests {
                 .unwrap();
             let mut state = config(&mut deps.storage).load().unwrap();
             // Save combination by senders
-            user_combination_bucket(&mut deps.storage, state.lottery_counter)
-                .update(addr.as_slice(), |exists| match exists {
-                    Some(combinations) => {
-                        let mut modified = combinations;
-                        modified.push("123456".to_string());
-                        modified.push("12345f".to_string());
-                        modified.push("1234a6".to_string());
-                        Ok(modified)
-                    }
-                    None => Ok(vec![
-                        "123456".to_string(),
-                        "12345f".to_string(),
-                        "1234a6".to_string(),
-                        "000000".to_string(),
-                    ]),
-                })
-                .unwrap();
+            combination_save(
+                &mut deps.storage,
+                state.lottery_counter,
+                addr.clone(),
+                vec![
+                    "123456".to_string(),
+                    "12345f".to_string(),
+                    "1234a6".to_string(),
+                    "000000".to_string(),
+                ],
+            )
+            .unwrap();
+
             // Save winning combination
             lottery_winning_combination_storage(&mut deps.storage)
                 .save(&state.lottery_counter.to_be_bytes(), &"123456".to_string())
