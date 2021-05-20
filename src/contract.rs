@@ -7,10 +7,10 @@ use crate::msg::{
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
-    all_winners, combination_bucket, combination_bucket_read, config, config_read,
-    lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
-    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
+    all_winners, config, config_read, lottery_winning_combination_storage, poll_storage,
+    poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket,
+    user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read,
+    PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
@@ -75,11 +75,14 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> StdResult<HandleResponse> {
     match msg {
-        HandleMsg::Register { combination } => handle_register(deps, env, combination),
+        HandleMsg::Register {
+            address,
+            combination,
+        } => handle_register(deps, env, address, combination),
         HandleMsg::Play {} => handle_play(deps, env),
         HandleMsg::PublicSale {} => handle_public_sale(deps, env),
         HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
-        HandleMsg::Jackpot {} => handle_jackpot(deps, env),
+        HandleMsg::Collect { address } => handle_collect(deps, env, address),
         HandleMsg::Proposal {
             description,
             proposal,
@@ -142,7 +145,8 @@ pub fn handle_safe_lock<S: Storage, A: Api, Q: Querier>(
 pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
-    combination: String,
+    address: Option<HumanAddr>,
+    combination: Vec<String>,
 ) -> StdResult<HandleResponse> {
     // Load the state
     let state = config(&mut deps.storage).load()?;
@@ -159,18 +163,26 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         ));
     }
 
-    // Regex to check if the combination is allowed
-    if !is_lower_hex(&combination, state.combination_len) {
-        return Err(StdError::generic_err(format!(
-            "Not authorized use combination of [a-f] and [0-9] with length {}",
-            state.combination_len
-        )));
+    // Check if address filled as param
+    let addr = match address {
+        None => env.message.sender,
+        Some(addr) => addr,
+    };
+
+    for combo in combination.clone() {
+        // Regex to check if the combination is allowed
+        if !is_lower_hex(&combo, state.combination_len) {
+            return Err(StdError::generic_err(format!(
+                "Not authorized use combination of [a-f] and [0-9] with length {}",
+                state.combination_len
+            )));
+        }
     }
 
     // Check if some funds are sent
     let sent = match env.message.sent_funds.len() {
         0 => Err(StdError::generic_err(format!(
-            "you need to send {}{} in order to register",
+            "you need to send {}{} per combination in order to register",
             state.price_per_ticket_to_register.clone(),
             state.denom_stable
         ))),
@@ -179,7 +191,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
                 Ok(env.message.sent_funds[0].amount)
             } else {
                 Err(StdError::generic_err(format!(
-                    "To register you need to send {}{}",
+                    "To register you need to send {}{} per combination",
                     state.price_per_ticket_to_register,
                     state.denom_stable.clone()
                 )))
@@ -193,43 +205,43 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
 
     if sent.is_zero() {
         return Err(StdError::generic_err(format!(
-            "you need to send {}{} in order to register",
+            "you need to send {}{} per combination in order to register",
             state.price_per_ticket_to_register.clone(),
             state.denom_stable
         )));
     }
     // Handle the player is not sending too much or too less
-    if sent.u128() != state.price_per_ticket_to_register.u128() {
+    if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
         return Err(StdError::generic_err(format!(
             "send {}{}",
-            state.price_per_ticket_to_register.clone(),
+            state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
             state.denom_stable
         )));
     }
 
     // save combination by combinations
-    let addr = deps.api.canonical_address(&env.message.sender)?;
-    combination_bucket(&mut deps.storage, state.lottery_counter).update(
+    let addr_raw = deps.api.canonical_address(&addr)?;
+    /*combination_bucket(&mut deps.storage, state.lottery_counter).update(
         combination.as_bytes(),
         |exists| match exists {
             Some(addrs) => {
                 let mut modified = addrs;
-                modified.push(addr.clone());
+                modified.push(addr_raw.clone());
                 Ok(modified)
             }
-            None => Ok(vec![addr.clone()]),
+            None => Ok(vec![addr_raw.clone()]),
         },
-    )?;
+    )?;*/
     // Save combination by senders
     user_combination_bucket(&mut deps.storage, state.lottery_counter).update(
-        addr.as_slice(),
+        addr_raw.as_slice(),
         |exists| match exists {
             Some(combinations) => {
                 let mut modified = combinations;
-                modified.push(combination);
+                modified.extend(combination);
                 Ok(modified)
             }
-            None => Ok(vec![combination]),
+            None => Ok(combination),
         },
     )?;
 
@@ -317,24 +329,8 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             state.fee_for_drand_worker_in_percentage as u64,
         ));
 
-    // Amount token holders can claim of the reward is a fee
-    let token_holder_fee_reward = jackpot.mul(Decimal::percent(
-        state.token_holder_percentage_fee_reward as u64,
-    ));
-    // Total fees if winner of the jackpot
-    let total_fee = fee_for_drand_worker.add(token_holder_fee_reward);
-
     // The jackpot after worker fee applied
-    let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
-    let mut holders_rewards = Uint128::zero();
-    let is_big_winner_empty = combination_bucket_read(&deps.storage, state.lottery_counter)
-        .may_load(winning_combination.as_bytes())?;
-
-    // Prepare sending jackpot to staking holder if there is a big winner
-    if is_big_winner_empty.is_some() {
-        jackpot_after = jackpot.sub(total_fee).unwrap();
-        holders_rewards = holders_rewards.add(token_holder_fee_reward);
-    }
+    let jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
@@ -348,28 +344,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         )?],
     };
 
-    let mut all_msg = vec![msg_fee_worker.into()];
-
-    if !holders_rewards.is_zero() {
-        let loterra_human = deps
-            .api
-            .human_address(&state.loterra_staking_contract_address)?;
-        // let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
-
-        let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
-        let res_update_global_index = encode_msg_execute(
-            msg_update_global_index,
-            loterra_human,
-            vec![deduct_tax(
-                &deps,
-                Coin {
-                    denom: state.denom_stable.clone(),
-                    amount: holders_rewards,
-                },
-            )?],
-        )?;
-        all_msg.push(res_update_global_index);
-    }
     // Update the state
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
@@ -378,7 +352,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
-        messages: all_msg,
+        messages: vec![msg_fee_worker.into()],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -592,9 +566,10 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     })
 }
 // Players claim the jackpot
-pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
+pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
+    address: Option<HumanAddr>,
 ) -> StdResult<HandleResponse> {
     // Ensure the sender is not sending funds
     if !env.message.sent_funds.is_empty() {
@@ -616,6 +591,10 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     if state.jackpot_reward.is_zero() {
         return Err(StdError::generic_err("No jackpot reward"));
     }
+    let addr = match address {
+        None => env.message.sender,
+        Some(addr) => addr,
+    };
 
     // Get the contract balance
     let balance = deps
@@ -627,7 +606,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Empty contract balance"));
     }
 
-    let canonical_addr = deps.api.canonical_address(&env.message.sender)?;
+    let canonical_addr = deps.api.canonical_address(&addr)?;
     // Load winner
     let last_lottery_counter_round = state.lottery_counter - 1;
     let may_claim = winner_storage_read(&deps.storage, last_lottery_counter_round)
@@ -667,24 +646,49 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
     winner_storage(&mut deps.storage, last_lottery_counter_round)
         .save(canonical_addr.as_slice(), &rewards)?;
 
-    // Build the amount transaction
-    let amount_to_send: Vec<Coin> = vec![Coin {
-        denom: state.denom_stable,
-        amount: Uint128::from(total_prize),
-    }];
+    let total_prize = Uint128::from(total_prize);
+    // Amount token holders can claim of the reward as fee
+    let token_holder_fee_reward = total_prize.mul(Decimal::percent(
+        state.token_holder_percentage_fee_reward as u64,
+    ));
 
+    let total_prize_after = total_prize.sub(token_holder_fee_reward).unwrap();
+
+    let loterra_human = deps
+        .api
+        .human_address(&state.loterra_staking_contract_address)?;
+    let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
+    let res_update_global_index = encode_msg_execute(
+        msg_update_global_index,
+        loterra_human,
+        vec![deduct_tax(
+            &deps,
+            Coin {
+                denom: state.denom_stable.clone(),
+                amount: token_holder_fee_reward,
+            },
+        )?],
+    )?;
+
+    // Build the amount transaction
     let msg = BankMsg::Send {
         from_address: env.contract.address,
         to_address: deps
             .api
-            .human_address(&deps.api.canonical_address(&env.message.sender).unwrap())
+            .human_address(&deps.api.canonical_address(&addr).unwrap())
             .unwrap(),
-        amount: amount_to_send,
+        amount: vec![deduct_tax(
+            &deps,
+            Coin {
+                denom: state.denom_stable,
+                amount: total_prize_after,
+            },
+        )?],
     };
 
     // Send the jackpot
     Ok(HandleResponse {
-        messages: vec![msg.into()],
+        messages: vec![msg.into(), res_update_global_index],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -692,7 +696,7 @@ pub fn handle_jackpot<S: Storage, A: Api, Q: Querier>(
             },
             LogAttribute {
                 key: "to".to_string(),
-                value: env.message.sender.to_string(),
+                value: addr.to_string(),
             },
             LogAttribute {
                 key: "jackpot_prize".to_string(),
@@ -1621,6 +1625,7 @@ mod tests {
         }
     }
     mod register {
+        // handle_register
         use super::*;
         #[test]
         fn security_active() {
@@ -1639,7 +1644,8 @@ mod tests {
             state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1669,7 +1675,12 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec![
+                    "1e3fab".to_string(),
+                    "abcdef".to_string(),
+                    "123456".to_string(),
+                ],
             };
             let res = handle(
                 &mut deps,
@@ -1677,7 +1688,7 @@ mod tests {
                     before_all.default_sender.clone(),
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
+                        amount: Uint128(3_000_000),
                     }],
                 ),
                 msg.clone(),
@@ -1695,10 +1706,6 @@ mod tests {
                 }
             );
             // Check combination added with success
-            let store = combination_bucket(&mut deps.storage, 1u64)
-                .load(&"1e3fab".as_bytes())
-                .unwrap();
-            assert_eq!(1, store.len());
             let addr = deps
                 .api
                 .canonical_address(&before_all.default_sender)
@@ -1706,36 +1713,67 @@ mod tests {
             let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
                 .load(addr.as_slice())
                 .unwrap();
-            assert_eq!(1, store_two.len());
+            assert_eq!(3, store_two.len());
 
-            let player1 = deps
+            // Play 2 more combination
+            let msg = HandleMsg::Register {
+                address: None,
+                combination: vec!["affe3b".to_string(), "098765".to_string()],
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(2_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+            .unwrap();
+            // Check combination added with success
+            let addr = deps
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-            assert!(store.contains(&player1));
-            //New player
+            let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
+                .load(addr.as_slice())
+                .unwrap();
+            assert_eq!(5, store_two.len());
+            assert_eq!(store_two[3], "affe3b".to_string());
+            assert_eq!(store_two[4], "098765".to_string());
+
+            // Someone registering combination for other player
+            let msg = HandleMsg::Register {
+                address: Some(before_all.default_sender.clone()),
+                combination: vec!["aaaaaa".to_string(), "bbbbbb".to_string()],
+            };
+            // default_sender_two sending combination for default_sender
             let _res = handle(
                 &mut deps,
                 mock_env(
                     before_all.default_sender_two.clone(),
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
+                        amount: Uint128(2_000_000),
                     }],
                 ),
                 msg.clone(),
             )
             .unwrap();
-            let store = combination_bucket_read(&mut deps.storage, 1u64)
-                .load(&"1e3fab".as_bytes())
-                .unwrap();
-            let player2 = deps
+
+            // Check combination added with success
+            let addr = deps
                 .api
-                .canonical_address(&before_all.default_sender_two)
+                .canonical_address(&before_all.default_sender)
                 .unwrap();
-            assert_eq!(2, store.len());
-            assert!(store.contains(&player1));
-            assert!(store.contains(&player2));
+            let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
+                .load(addr.as_slice())
+                .unwrap();
+            assert_eq!(7, store_two.len());
+            assert_eq!(store_two[5], "aaaaaa".to_string());
+            assert_eq!(store_two[6], "bbbbbb".to_string());
         }
         #[test]
         fn register_fail_if_sender_sent_empty_funds() {
@@ -1743,7 +1781,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1760,7 +1799,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "you need to send 1000000ust in order to register"),
+                }) => assert_eq!(
+                    msg,
+                    "you need to send 1000000ust per combination in order to register"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1770,7 +1812,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1804,7 +1847,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1822,7 +1866,10 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "To register you need to send 1000000ust"),
+                }) => assert_eq!(
+                    msg,
+                    "To register you need to send 1000000ust per combination"
+                ),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1832,7 +1879,39 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3far".to_string(),
+                address: None,
+                combination: vec!["1e3far".to_string()],
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            );
+            match res {
+                Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => assert_eq!(
+                    msg,
+                    "Not authorized use combination of [a-f] and [0-9] with length 6"
+                ),
+                _ => panic!("Unexpected error"),
+            }
+        }
+        #[test]
+        fn register_fail_multiple_wrong_combination() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                address: None,
+                combination: vec!["1e3far".to_string(), "1e3fac".to_string()],
             };
             let res = handle(
                 &mut deps,
@@ -1862,7 +1941,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fae".to_string(),
+                address: None,
+                combination: vec!["1e3fae".to_string(), "1e3fa2".to_string()],
             };
             // Fail sending less than required (1_000_000)
             let res = handle(
@@ -1871,7 +1951,7 @@ mod tests {
                     before_all.default_sender.clone(),
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(1_000_00),
+                        amount: Uint128(1_000_000),
                     }],
                 ),
                 msg.clone(),
@@ -1880,17 +1960,17 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "send 1000000ust"),
+                }) => assert_eq!(msg, "send 2000000ust"),
                 _ => panic!("Unexpected error"),
             }
-            // Fail sending more than required (1_000_000)
+            // Fail sending more than required (2_000_000)
             let res = handle(
                 &mut deps,
                 mock_env(
                     before_all.default_sender,
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(1_000_001),
+                        amount: Uint128(3_000_000),
                     }],
                 ),
                 msg.clone(),
@@ -1899,7 +1979,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "send 1000000ust"),
+                }) => assert_eq!(msg, "send 2000000ust"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1909,7 +1989,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let msg = HandleMsg::Register {
-                combination: "1e3fae".to_string(),
+                address: None,
+                combination: vec!["1e3fae".to_string()],
             };
             let state = config(&mut deps.storage).load().unwrap();
             let mut env = mock_env(
@@ -2283,7 +2364,8 @@ mod tests {
             default_init(&mut deps);
             // register some combination
             let msg = HandleMsg::Register {
-                combination: "1e3fab".to_string(),
+                address: None,
+                combination: vec!["1e3fab".to_string()],
             };
             handle(
                 &mut deps,
@@ -2299,7 +2381,8 @@ mod tests {
             .unwrap();
 
             let msg = HandleMsg::Register {
-                combination: "39493d".to_string(),
+                address: None,
+                combination: vec!["39493d".to_string()],
             };
             handle(
                 &mut deps,
@@ -2319,7 +2402,7 @@ mod tests {
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
             println!("{:?}", res);
-            assert_eq!(res.messages.len(), 2);
+            assert_eq!(res.messages.len(), 1);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2328,21 +2411,6 @@ mod tests {
                     amount: vec![Coin {
                         denom: "ust".to_string(),
                         amount: Uint128(719)
-                    }]
-                })
-            );
-
-            assert_eq!(
-                res.messages[1],
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: deps
-                        .api
-                        .human_address(&state.loterra_staking_contract_address)
-                        .unwrap(),
-                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
-                    send: vec![Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(719999)
                     }]
                 })
             );
@@ -2358,7 +2426,7 @@ mod tests {
             assert_eq!(state.jackpot_reward, Uint128::zero());
             assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
             // 720720 total fees
-            assert_eq!(state_after.jackpot_reward, Uint128(6_479_280));
+            assert_eq!(state_after.jackpot_reward, Uint128(7199280));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
@@ -2378,7 +2446,8 @@ mod tests {
             default_init(&mut deps);
             // register some combination
             let msg = HandleMsg::Register {
-                combination: "39498d".to_string(),
+                address: None,
+                combination: vec!["39498d".to_string()],
             };
             handle(
                 &mut deps,
@@ -2423,7 +2492,7 @@ mod tests {
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
     }
-    mod jackpot {
+    mod collect {
         use super::*;
 
         #[test]
@@ -2435,7 +2504,8 @@ mod tests {
             state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let res = handle_jackpot(&mut deps, env);
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env, msg);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2465,7 +2535,8 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
                 Err(GenericErr {
@@ -2489,7 +2560,8 @@ mod tests {
             let state = config_read(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play;
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2513,7 +2585,8 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
             match res {
                 Err(GenericErr {
                     msg,
@@ -2542,7 +2615,8 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
 
             match res {
                 Err(GenericErr {
@@ -2597,7 +2671,9 @@ mod tests {
             let mut env = mock_env("address1", &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
+
             println!("{:?}", res);
             match res {
                 Err(GenericErr {
@@ -2653,7 +2729,9 @@ mod tests {
 
             let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
             env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
+
             println!("{:?}", res);
             match res {
                 Err(GenericErr {
@@ -2667,7 +2745,7 @@ mod tests {
         #[test]
         fn success() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
+            let mut deps = mock_dependencies_custom(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
@@ -2696,9 +2774,11 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone()).unwrap();
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
-            let amount_claimed = Uint128(420000);
+            assert_eq!(res.messages.len(), 2);
+            let amount_claimed = Uint128(377999);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2710,8 +2790,121 @@ mod tests {
                     }]
                 })
             );
+            assert_eq!(
+                res.messages[1],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps
+                        .api
+                        .human_address(&state_before.loterra_staking_contract_address)
+                        .unwrap(),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
+                    send: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(41999)
+                    }]
+                })
+            );
             // Handle can't claim multiple times
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
+
+            match res {
+                Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => assert_eq!(msg, "Already claimed"),
+                _ => panic!("Unexpected error"),
+            }
+
+            let claimed_address = deps
+                .api
+                .canonical_address(&before_all.default_sender)
+                .unwrap();
+            let winner_claim = winner_storage(&mut deps.storage, 1u64)
+                .load(claimed_address.as_slice())
+                .unwrap();
+
+            assert_eq!(winner_claim.claimed, true);
+
+            let not_claimed = winner_storage(&mut deps.storage, 1u64)
+                .load(addr2.as_slice())
+                .unwrap();
+            assert_eq!(not_claimed.claimed, false);
+
+            let state_after = config(&mut deps.storage).load().unwrap();
+            assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);
+        }
+        #[test]
+        fn success_collecting_for_someone() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            default_init(&mut deps);
+
+            let mut state_before = config(&mut deps.storage).load().unwrap();
+            state_before.jackpot_reward = Uint128(1_000_000);
+            state_before.lottery_counter = 2;
+            config(&mut deps.storage).save(&state_before).unwrap();
+
+            let addr2 = deps
+                .api
+                .canonical_address(&HumanAddr("address2".to_string()))
+                .unwrap();
+            let default_addr = deps
+                .api
+                .canonical_address(&before_all.default_sender)
+                .unwrap();
+
+            save_winner(&mut deps.storage, 1u64, addr2.clone(), 1).unwrap();
+            save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
+
+            let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
+            env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
+
+            let msg = HandleMsg::Collect {
+                address: Some(before_all.default_sender.clone()),
+            };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            println!("{:?}", res);
+
+            assert_eq!(res.messages.len(), 2);
+            let amount_claimed = Uint128(377999);
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Bank(BankMsg::Send {
+                    from_address: env.contract.address.clone(),
+                    to_address: before_all.default_sender.clone(),
+                    amount: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: amount_claimed.clone()
+                    }]
+                })
+            );
+            assert_eq!(
+                res.messages[1],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps
+                        .api
+                        .human_address(&state_before.loterra_staking_contract_address)
+                        .unwrap(),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
+                    send: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(41999)
+                    }]
+                })
+            );
+            // Handle can't claim multiple times
+            let msg = HandleMsg::Collect {
+                address: Some(before_all.default_sender.clone()),
+            };
+            let res = handle(&mut deps, env.clone(), msg);
+
             match res {
                 Err(GenericErr {
                     msg,
@@ -2741,7 +2934,7 @@ mod tests {
         #[test]
         fn success_multiple_win() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
+            let mut deps = mock_dependencies_custom(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
@@ -2776,8 +2969,11 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let res = handle_jackpot(&mut deps, env.clone()).unwrap();
-            let amount_claimed = Uint128(486666);
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+
+            assert_eq!(res.messages.len(), 2);
+            let amount_claimed = Uint128(437999);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2789,8 +2985,24 @@ mod tests {
                     }]
                 })
             );
+            assert_eq!(
+                res.messages[1],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps
+                        .api
+                        .human_address(&state_before.loterra_staking_contract_address)
+                        .unwrap(),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
+                    send: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(48665)
+                    }]
+                })
+            );
             // Handle can't claim multiple times
-            let res = handle_jackpot(&mut deps, env.clone());
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg);
+
             match res {
                 Err(GenericErr {
                     msg,

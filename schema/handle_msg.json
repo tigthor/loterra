@@ -15,8 +15,21 @@
             "combination"
           ],
           "properties": {
+            "address": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "combination": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         }
@@ -73,11 +86,23 @@
       "description": "Collect jackpot",
       "type": "object",
       "required": [
-        "jackpot"
+        "collect"
       ],
       "properties": {
-        "jackpot": {
-          "type": "object"
+        "collect": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
         }
       }
     },

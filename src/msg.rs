@@ -22,7 +22,10 @@ pub struct InitMsg {
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
     /// Registering to the lottery
-    Register { combination: String },
+    Register {
+        address: Option<HumanAddr>,
+        combination: Vec<String>,
+    },
     /// Run the lottery
     Play {},
     /// Public sale buy the token holders with 1:1 ratio
@@ -30,7 +33,7 @@ pub enum HandleMsg {
     /// Claim jackpot
     Claim { addresses: Option<Vec<HumanAddr>> },
     /// Collect jackpot
-    Jackpot {},
+    Collect { address: Option<HumanAddr> },
     /// DAO
     /// Make a proposal
     Proposal {
