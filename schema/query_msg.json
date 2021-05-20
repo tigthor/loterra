@@ -253,6 +253,18 @@
       }
     },
     {
+      "description": "Get all holders from loterra staking contract",
+      "type": "object",
+      "required": [
+        "holders"
+      ],
+      "properties": {
+        "holders": {
+          "type": "object"
+        }
+      }
+    },
+    {
       "description": "Query Loterra send",
       "type": "object",
       "required": [

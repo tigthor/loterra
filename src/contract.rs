@@ -1,6 +1,6 @@
 use crate::helpers::{
-    count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight,
-    wrapper_msg_loterra, wrapper_msg_terrand,
+    count_match, encode_msg_execute, encode_msg_query, is_lower_hex, total_weight,
+    user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand,
 };
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
@@ -1099,11 +1099,8 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     if store.status != PollStatus::InProgress {
         return Err(StdError::Unauthorized { backtrace: None });
     }
-    // Ensure the proposal is ended
-    if store.end_height > env.block.height {
-        return Err(StdError::generic_err("Proposal still in progress"));
-    }
 
+    let total_weight_bonded = total_weight(&deps, &state);
     let total_vote_weight = store.weight_yes_vote.add(store.weight_no_vote);
     let total_yes_weight_percentage = if !store.weight_yes_vote.is_zero() {
         store.weight_yes_vote.u128() * 100 / total_vote_weight.u128()
@@ -1115,6 +1112,15 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     } else {
         0
     };
+
+    if store.weight_yes_vote.add(store.weight_no_vote).u128() * 100 / total_weight_bonded.u128()
+        < 50
+    {
+        // Ensure the proposal is ended
+        if store.end_height > env.block.height {
+            return Err(StdError::generic_err("Proposal still in progress"));
+        }
+    }
 
     // Reject the proposal
     // Based on the recommendation of security audit
@@ -4003,7 +4009,7 @@ mod tests {
         #[test]
         fn poll_still_in_progress() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
+            let mut deps = mock_dependencies_custom(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
@@ -4277,6 +4283,105 @@ mod tests {
             };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
+        }
+        #[test]
+        fn success_with_proposal_not_expired_yet_and_more_50_percent_weight_vote() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            deps.querier.with_token_balances(Uint128(200_000));
+            deps.querier.with_holder(
+                before_all.default_sender.clone(),
+                Uint128(15_000),
+                Decimal::zero(),
+                Decimal::zero(),
+            );
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            create_poll(&mut deps, env.clone());
+
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: true,
+            };
+
+            let _res = handle(&mut deps, env.clone(), msg);
+
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let poll_state = poll_storage(&mut deps.storage)
+                .load(&1_u64.to_be_bytes())
+                .unwrap();
+            env.block.height = poll_state.end_height - 1000;
+
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            assert_eq!(res.log.len(), 3);
+            assert_eq!(res.messages.len(), 0);
+
+            let poll_state = poll_storage(&mut deps.storage)
+                .load(&1_u64.to_be_bytes())
+                .unwrap();
+            assert_eq!(poll_state.status, PollStatus::Passed);
+
+            let env = mock_env(before_all.default_sender_owner.clone(), &[]);
+            create_poll_security_migration(&mut deps, env.clone());
+            let msg = HandleMsg::Vote {
+                poll_id: 2,
+                approve: true,
+            };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            println!("{:?}", res);
+        }
+        #[test]
+        fn error_with_proposal_not_expired_yet_and_less_50_percent_weight_vote() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(9_000_000),
+                }],
+            );
+            deps.querier.with_token_balances(Uint128(200_000));
+            deps.querier.with_holder(
+                before_all.default_sender.clone(),
+                Uint128(1_000),
+                Decimal::zero(),
+                Decimal::zero(),
+            );
+            default_init(&mut deps);
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            create_poll(&mut deps, env.clone());
+
+            let env = mock_env(before_all.default_sender.clone(), &[]);
+            let msg = HandleMsg::Vote {
+                poll_id: 1,
+                approve: true,
+            };
+
+            let _res = handle(&mut deps, env.clone(), msg);
+
+            let mut env = mock_env(before_all.default_sender.clone(), &[]);
+            let poll_state = poll_storage(&mut deps.storage)
+                .load(&1_u64.to_be_bytes())
+                .unwrap();
+            env.block.height = poll_state.end_height - 1000;
+
+            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let res = handle(&mut deps, env.clone(), msg);
+            match res {
+                Err(GenericErr {
+                    msg,
+                    backtrace: None,
+                }) => assert_eq!(msg, "Proposal still in progress"),
+                _ => panic!("Unexpected error"),
+            }
         }
     }
     mod safe_lock {
