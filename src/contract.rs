@@ -225,8 +225,8 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     combination_save(
         &mut deps.storage,
         state.lottery_counter,
-        addr_raw.clone(),
-        combination.clone(),
+        addr_raw,
+        combination,
     )?;
 
     Ok(HandleResponse {
