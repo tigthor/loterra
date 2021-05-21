@@ -37,6 +37,7 @@ const MIN_DESCRIPTION_LEN: u64 = 6;
 const HOLDERS_MAX_REWARD: u8 = 20;
 const WORKER_MAX_REWARD: u8 = 10;
 const DIV_BLOCK_TIME_BY_X: u64 = 2;
+const DECIMALS_DENOM: u64 = 1_000_000;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
@@ -239,22 +240,27 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         addr_raw,
         combination,
     )?;
+
+    let balance = deps
+        .querier
+        .query_balance(&env.contract.address, &state.denom_stable)
+        .unwrap();
     let addr_raw = deps.api.human_address(&state.market_contract_address)?;
     let send = DepositStable {};
-    let res = encode_msg_execute_anchor(
+    let res_anchor = encode_msg_execute_anchor(
         send,
         addr_raw,
         vec![deduct_tax(
             &deps,
             Coin {
-                denom: state.denom_stable,
-                amount: sent,
+                denom: balance.denom,
+                amount: balance.amount,
             },
         )?],
     )?;
 
     Ok(HandleResponse {
-        messages: vec![res],
+        messages: vec![res_anchor],
         log: vec![LogAttribute {
             key: "action".to_string(),
             value: "register".to_string(),
@@ -356,7 +362,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let addr_raw = deps.api.human_address(&state.aterra_contract_address)?;
     let msg = Cw20HandleMsg::Transfer {
         recipient: res.worker,
-        amount: fee_for_drand_worker,
+        amount: Uint128(fee_for_drand_worker.u128() * DECIMALS_DENOM as u128),
     };
     let res_worker = encode_msg_execute_v2(msg, addr_raw, vec![])?;
 
@@ -367,26 +373,8 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // Save the new state
     config(&mut deps.storage).save(&state)?;
 
-    let balance = deps
-        .querier
-        .query_balance(&env.contract.address, &state.denom_stable)
-        .unwrap();
-    let addr_raw = deps.api.human_address(&state.market_contract_address)?;
-    let send = DepositStable {};
-    let res_anchor = encode_msg_execute_anchor(
-        send,
-        addr_raw,
-        vec![deduct_tax(
-            &deps,
-            Coin {
-                denom: balance.denom,
-                amount: balance.amount,
-            },
-        )?],
-    )?;
-
     Ok(HandleResponse {
-        messages: vec![res_worker, res_anchor],
+        messages: vec![res_worker],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
