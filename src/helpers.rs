@@ -30,8 +30,8 @@ pub fn is_lower_hex(combination: &str, len: u8) -> bool {
     true
 }
 
-pub fn encode_msg_execute_anchor<HandleMsg>(
-    msg: HandleMsg,
+pub fn encode_msg_execute_anchor(
+    msg: moneymarket::market::HandleMsg,
     address: HumanAddr,
     coin: Vec<Coin>,
 ) -> StdResult<CosmosMsg> {
@@ -64,12 +64,31 @@ pub fn encode_msg_execute(
     }
     .into())
 }
+pub fn encode_msg_execute_v2(
+    msg: cw20::Cw20HandleMsg,
+    address: HumanAddr,
+    coin: Vec<Coin>,
+) -> StdResult<CosmosMsg> {
+    Ok(WasmMsg::Execute {
+        contract_addr: address,
+        msg: to_binary(&msg)?,
+        send: coin,
+    }
+        .into())
+}
 pub fn encode_msg_query(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
     Ok(WasmQuery::Smart {
         contract_addr: address,
         msg: to_binary(&msg)?,
     }
     .into())
+}
+pub fn encode_msg_query_v2(msg: cw20::Cw20QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
+    Ok(WasmQuery::Smart {
+        contract_addr: address,
+        msg: to_binary(&msg)?,
+    }
+        .into())
 }
 
 pub fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
@@ -88,7 +107,14 @@ pub fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
 
     Ok(res)
 }
+pub fn wrapper_msg_aterra<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<cw20::BalanceResponse> {
+    let res: cw20::BalanceResponse = deps.querier.query(&query)?;
 
+    Ok(res)
+}
 pub fn wrapper_msg_loterra_staking<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     query: QueryRequest<Empty>,

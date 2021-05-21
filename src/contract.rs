@@ -1,4 +1,4 @@
-use crate::helpers::{count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand, encode_msg_execute_anchor, encode_msg_query_anchor, wrapper_msg_anchor};
+use crate::helpers::{count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand, encode_msg_execute_anchor, encode_msg_query_anchor, wrapper_msg_anchor, encode_msg_execute_v2, encode_msg_query_v2, wrapper_msg_aterra};
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
@@ -22,8 +22,7 @@ use cosmwasm_std::{
     HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128,
 };
 use std::ops::{Add, Mul, Sub};
-
-
+use cosmwasm_bignumber::{Uint256, Decimal256};
 
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
@@ -302,7 +301,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         &winning_combination.to_string(),
     )?;
     // Set jackpot amount
-    let anchor_balance = query_token_balance(&deps, &deps.api.human_address(&state.aterra_contract_address)?, &env.contract.address)?;
+    let msg = cw20::Cw20QueryMsg::Balance { address: env.contract.address.clone() };
+    let res_query = encode_msg_query_v2(msg, deps.api.human_address(&state.aterra_contract_address)?)?;
+    let res_wrapper = wrapper_msg_aterra(&deps, res_query)?;
+    let anchor_balance = res_wrapper.balance;
 
 
     // Max amount winners can claim
@@ -547,7 +549,6 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
                             rank,
                         )?;
                         some_winner += 1;
-                        let winners = winner_count_by_rank_read(&deps,last_lottery_counter_round ).may_load(&rank.to_be_bytes())?;
                     }
                 }
             }
@@ -700,7 +701,7 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
 
     let addr_raw = deps.api.human_address(&state.aterra_contract_address)?;
     let msg = Cw20HandleMsg::Transfer { recipient: env.contract.address, amount: total_prize_after };
-    let res_transfer = encode_msg_execute_anchor(msg, addr_raw, vec![])?;
+    let res_transfer = encode_msg_execute_v2(msg, addr_raw, vec![])?;
 
     // Send the jackpot
     Ok(HandleResponse {
