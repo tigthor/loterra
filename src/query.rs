@@ -20,4 +20,3 @@ pub struct GetHolderResponse {
     pub index: Decimal,
     pub pending_rewards: Decimal,
 }
-

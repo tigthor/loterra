@@ -1,4 +1,9 @@
-use crate::helpers::{count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand, encode_msg_execute_anchor, encode_msg_query_anchor, wrapper_msg_anchor, encode_msg_execute_v2, encode_msg_query_v2, wrapper_msg_aterra};
+use crate::helpers::{
+    count_match, encode_msg_execute, encode_msg_execute_anchor, encode_msg_execute_v2,
+    encode_msg_query, encode_msg_query_anchor, encode_msg_query_v2, is_lower_hex,
+    user_total_weight, wrapper_msg_anchor, wrapper_msg_aterra, wrapper_msg_loterra,
+    wrapper_msg_terrand,
+};
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
@@ -11,18 +16,18 @@ use crate::state::{
     winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 
-use moneymarket::querier::{deduct_tax, query_token_balance};
-use moneymarket::distribution_model::AncEmissionRateResponse;
-use moneymarket::market::HandleMsg::{ DepositStable };
-use moneymarket::market::QueryMsg::{ EpochState };
-use moneymarket::market::EpochStateResponse;
-use cw20::{Cw20HandleMsg};
+use cosmwasm_bignumber::{Decimal256, Uint256};
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
     HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128,
 };
+use cw20::Cw20HandleMsg;
+use moneymarket::distribution_model::AncEmissionRateResponse;
+use moneymarket::market::EpochStateResponse;
+use moneymarket::market::HandleMsg::DepositStable;
+use moneymarket::market::QueryMsg::EpochState;
+use moneymarket::querier::{deduct_tax, query_token_balance};
 use std::ops::{Add, Mul, Sub};
-use cosmwasm_bignumber::{Uint256, Decimal256};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -68,7 +73,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         dao_funds: msg.dao_funds,
         lottery_counter: 1,
         aterra_contract_address: deps.api.canonical_address(&msg.aterra_contract_address)?,
-        market_contract_address: deps.api.canonical_address(&msg.market_contract_address)?
+        market_contract_address: deps.api.canonical_address(&msg.market_contract_address)?,
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -236,7 +241,17 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     )?;
     let addr_raw = deps.api.human_address(&state.market_contract_address)?;
     let send = DepositStable {};
-    let res = encode_msg_execute_anchor(send, addr_raw, vec![Coin{ denom: state.denom_stable, amount: sent }])?;
+    let res = encode_msg_execute_anchor(
+        send,
+        addr_raw,
+        vec![deduct_tax(
+            &deps,
+            Coin {
+                denom: state.denom_stable,
+                amount: sent,
+            },
+        )?],
+    )?;
 
     Ok(HandleResponse {
         messages: vec![res],
@@ -303,14 +318,16 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         &winning_combination.to_string(),
     )?;
     // Set jackpot amount
-    let msg = cw20::Cw20QueryMsg::Balance { address: env.contract.address.clone() };
-    let res_query = encode_msg_query_v2(msg, deps.api.human_address(&state.aterra_contract_address)?)?;
+    let msg = cw20::Cw20QueryMsg::Balance {
+        address: env.contract.address.clone(),
+    };
+    let res_query =
+        encode_msg_query_v2(msg, deps.api.human_address(&state.aterra_contract_address)?)?;
     let res_wrapper = wrapper_msg_aterra(&deps, res_query)?;
     let anchor_balance = res_wrapper.balance;
 
     // Max amount winners can claim
-    let jackpot = anchor_balance
-        .mul(Decimal::percent(state.jackpot_percentage_reward as u64));
+    let jackpot = anchor_balance.mul(Decimal::percent(state.jackpot_percentage_reward as u64));
 
     // Drand worker fee
     let fee_for_drand_worker = jackpot
@@ -324,6 +341,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // The jackpot after worker fee applied
     let jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
 
+    /*
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
         to_address: res.worker,
@@ -334,7 +352,13 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                 amount: fee_for_drand_worker,
             },
         )?],
+    }; */
+    let addr_raw = deps.api.human_address(&state.aterra_contract_address)?;
+    let msg = Cw20HandleMsg::Transfer {
+        recipient: res.worker,
+        amount: fee_for_drand_worker,
     };
+    let res_worker = encode_msg_execute_v2(msg, addr_raw, vec![])?;
 
     // Update the state
     state.jackpot_reward = jackpot_after;
@@ -349,10 +373,20 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         .unwrap();
     let addr_raw = deps.api.human_address(&state.market_contract_address)?;
     let send = DepositStable {};
-    let res = encode_msg_execute_anchor(send, addr_raw, vec![Coin{ denom: balance.denom, amount: balance.amount }])?;
+    let res_anchor = encode_msg_execute_anchor(
+        send,
+        addr_raw,
+        vec![deduct_tax(
+            &deps,
+            Coin {
+                denom: balance.denom,
+                amount: balance.amount,
+            },
+        )?],
+    )?;
 
     Ok(HandleResponse {
-        messages: vec![msg_fee_worker.into(), res],
+        messages: vec![res_worker, res_anchor],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -699,9 +733,13 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
         )?],
     }; */
 
-
     let addr_raw = deps.api.human_address(&state.aterra_contract_address)?;
-    let msg = Cw20HandleMsg::Transfer { recipient: env.contract.address, amount: total_prize_after };
+    let msg = Cw20HandleMsg::Transfer {
+        recipient: deps
+            .api
+            .human_address(&deps.api.canonical_address(&addr)?)?,
+        amount: total_prize_after,
+    };
     let res_transfer = encode_msg_execute_v2(msg, addr_raw, vec![])?;
 
     // Send the jackpot
@@ -1519,8 +1557,12 @@ mod tests {
                 "terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking",
             ),
             dao_funds: DAO_FUNDS,
-            aterra_contract_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srloterrasaterra"),
-            market_contract_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srloterrasmarket"),
+            aterra_contract_address: HumanAddr::from(
+                "terra1q88h7ewu6h3am4mxxeqhu3srloterrasaterra",
+            ),
+            market_contract_address: HumanAddr::from(
+                "terra1q88h7ewu6h3am4mxxeqhu3srloterrasmarket",
+            ),
         };
 
         init(

@@ -1,4 +1,4 @@
-use crate::msg::{QueryMsg, HandleMsg};
+use crate::msg::{HandleMsg, QueryMsg};
 use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
 use crate::state::State;
 use cosmwasm_std::{
@@ -40,17 +40,19 @@ pub fn encode_msg_execute_anchor(
         msg: to_binary(&msg)?,
         send: coin,
     }
-        .into())
+    .into())
 }
 
-pub fn encode_msg_query_anchor(msg: moneymarket::market::QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
+pub fn encode_msg_query_anchor(
+    msg: moneymarket::market::QueryMsg,
+    address: HumanAddr,
+) -> StdResult<QueryRequest<Empty>> {
     Ok(WasmQuery::Smart {
         contract_addr: address,
         msg: to_binary(&msg)?,
     }
-        .into())
+    .into())
 }
-
 
 pub fn encode_msg_execute(
     msg: QueryMsg,
@@ -74,7 +76,7 @@ pub fn encode_msg_execute_v2(
         msg: to_binary(&msg)?,
         send: coin,
     }
-        .into())
+    .into())
 }
 pub fn encode_msg_query(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
     Ok(WasmQuery::Smart {
@@ -83,12 +85,15 @@ pub fn encode_msg_query(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryReq
     }
     .into())
 }
-pub fn encode_msg_query_v2(msg: cw20::Cw20QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
+pub fn encode_msg_query_v2(
+    msg: cw20::Cw20QueryMsg,
+    address: HumanAddr,
+) -> StdResult<QueryRequest<Empty>> {
     Ok(WasmQuery::Smart {
         contract_addr: address,
         msg: to_binary(&msg)?,
     }
-        .into())
+    .into())
 }
 
 pub fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
