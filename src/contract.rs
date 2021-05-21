@@ -697,11 +697,14 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
         )?],
     }; */
 
+
+    let addr_raw = deps.api.human_address(&state.aterra_contract_address)?;
     let msg = Cw20HandleMsg::Transfer { recipient: env.contract.address, amount: total_prize_after };
+    let res_transfer = encode_msg_execute_anchor(msg, addr_raw, vec![])?;
 
     // Send the jackpot
     Ok(HandleResponse {
-        messages: vec![msg.into(), res_update_global_index],
+        messages: vec![res_transfer, res_update_global_index],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),

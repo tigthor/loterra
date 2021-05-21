@@ -30,8 +30,8 @@ pub fn is_lower_hex(combination: &str, len: u8) -> bool {
     true
 }
 
-pub fn encode_msg_execute_anchor(
-    msg: moneymarket::market::HandleMsg,
+pub fn encode_msg_execute_anchor<HandleMsg>(
+    msg: HandleMsg,
     address: HumanAddr,
     coin: Vec<Coin>,
 ) -> StdResult<CosmosMsg> {
