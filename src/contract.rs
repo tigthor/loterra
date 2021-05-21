@@ -1,7 +1,4 @@
-use crate::helpers::{
-    count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight,
-    wrapper_msg_loterra, wrapper_msg_terrand,
-};
+use crate::helpers::{count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand, encode_msg_execute_anchor};
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
@@ -13,7 +10,11 @@ use crate::state::{
     save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage,
     winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
-use crate::taxation::deduct_tax;
+
+use moneymarket::querier::{deduct_tax, query_token_balance};
+use moneymarket::distribution_model::AncEmissionRateResponse;
+use moneymarket::market::HandleMsg::{ DepositStable };
+
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
     HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128,
@@ -63,6 +64,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         latest_winning_number: "".to_string(),
         dao_funds: msg.dao_funds,
         lottery_counter: 1,
+        aterra_contract_address: deps.api.canonical_address(&msg.aterra_contract_address)?,
+        market_contract_address: deps.api.canonical_address(&msg.market_contract_address)?
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -293,15 +296,12 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         &state.lottery_counter.to_be_bytes(),
         &winning_combination.to_string(),
     )?;
-
     // Set jackpot amount
-    let balance = deps
-        .querier
-        .query_balance(&env.contract.address, &state.denom_stable)
-        .unwrap();
+    let anchor_balance = query_token_balance(&deps, &deps.api.human_address(&state.aterra_contract_address)?, &env.contract.address)?;
+
+
     // Max amount winners can claim
-    let jackpot = balance
-        .amount
+    let jackpot = anchor_balance
         .mul(Decimal::percent(state.jackpot_percentage_reward as u64));
 
     // Drand worker fee
@@ -335,8 +335,16 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     // Save the new state
     config(&mut deps.storage).save(&state)?;
 
+    let balance = deps
+        .querier
+        .query_balance(&env.contract.address, &state.denom_stable)
+        .unwrap();
+    let addr_raw = deps.api.human_address(&state.market_contract_address)?;
+    let send = DepositStable {};
+    let res = encode_msg_execute_anchor(send, addr_raw, vec![Coin{ denom: balance.denom, amount: balance.amount }])?;
+
     Ok(HandleResponse {
-        messages: vec![msg_fee_worker.into()],
+        messages: vec![msg_fee_worker.into(), res],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -1493,6 +1501,8 @@ mod tests {
                 "terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking",
             ),
             dao_funds: DAO_FUNDS,
+            aterra_contract_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srloterrasaterra"),
+            market_contract_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srloterrasmarket"),
         };
 
         init(

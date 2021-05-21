@@ -1,4 +1,4 @@
-use crate::msg::QueryMsg;
+use crate::msg::{QueryMsg, HandleMsg};
 use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
 use crate::state::State;
 use cosmwasm_std::{
@@ -28,6 +28,19 @@ pub fn is_lower_hex(combination: &str, len: u8) -> bool {
     true
 }
 
+pub fn encode_msg_execute_anchor(
+    msg: moneymarket::market::HandleMsg,
+    address: HumanAddr,
+    coin: Vec<Coin>,
+) -> StdResult<CosmosMsg> {
+    Ok(WasmMsg::Execute {
+        contract_addr: address,
+        msg: to_binary(&msg)?,
+        send: coin,
+    }
+        .into())
+}
+
 pub fn encode_msg_execute(
     msg: QueryMsg,
     address: HumanAddr,
@@ -47,6 +60,7 @@ pub fn encode_msg_query(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryReq
     }
     .into())
 }
+
 pub fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     query: QueryRequest<Empty>,

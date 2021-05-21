@@ -42,6 +42,8 @@ pub struct State {
     pub latest_winning_number: String,
     pub dao_funds: Uint128,
     pub lottery_counter: u64,
+    pub aterra_contract_address: CanonicalAddr,
+    pub market_contract_address: CanonicalAddr,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

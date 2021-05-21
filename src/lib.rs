@@ -5,6 +5,5 @@ mod mock_querier;
 pub mod msg;
 pub mod query;
 pub mod state;
-mod taxation;
 #[cfg(target_arch = "wasm32")]
 cosmwasm_std::create_entry_points!(contract);

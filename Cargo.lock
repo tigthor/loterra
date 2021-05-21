@@ -42,10 +42,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
 
 [[package]]
+name = "bigint"
+version = "4.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0e8c8a600052b52482eff2cf4d810e462fdff1f656ac1ecb6232132a1ed7def"
+dependencies = [
+ "byteorder",
+ "crunchy",
+]
+
+[[package]]
+name = "byteorder"
+version = "1.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "cosmwasm-bignumber"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef9f9dd6522baab191620bc7505f28992bb7cd3394635bca20301d93eed5af4f"
+dependencies = [
+ "bigint",
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+]
 
 [[package]]
 name = "cosmwasm-schema"
@@ -77,6 +105,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e103531a2ce636e86b7639cec25d348c4d360832ab8e0e7f9a6e00f08aac1379"
 dependencies = [
  "cosmwasm-std",
+ "serde",
+]
+
+[[package]]
+name = "crunchy"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2f4a431c5c9f662e1200b7c7f02c34e91361150e382089a8f2dec3ba680cbda"
+
+[[package]]
+name = "cw0"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b469bb5d63a036339cbb3042fb1254016b5d4889b15f420fea1c1339497b19de"
+dependencies = [
+ "cosmwasm-std",
+ "schemars",
+ "serde",
+]
+
+[[package]]
+name = "cw20"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffd85ddcac2bf5c1899dd13e52985d260dae02db21a618d9d4c2c36dab63a915"
+dependencies = [
+ "cosmwasm-std",
+ "cw0",
+ "schemars",
  "serde",
 ]
 
@@ -118,6 +175,7 @@ dependencies = [
  "cosmwasm-std",
  "cosmwasm-storage",
  "hex",
+ "moneymarket",
  "schemars",
  "serde",
  "terra-cosmwasm",
@@ -132,6 +190,21 @@ checksum = "0f2d26ec3309788e423cfbf68ad1800f061638098d76a83681af979dc4eda19d"
 dependencies = [
  "adler",
  "autocfg",
+]
+
+[[package]]
+name = "moneymarket"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d489e76e6a197ce4837f8f2186ce24f4e9e3b2c5464915eb3f9ecab3ed6348b"
+dependencies = [
+ "cosmwasm-bignumber",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw20",
+ "schemars",
+ "serde",
+ "terra-cosmwasm",
 ]
 
 [[package]]
