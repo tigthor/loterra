@@ -5,6 +5,8 @@ use cosmwasm_std::{
     to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HumanAddr, Querier,
     QueryRequest, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
+use moneymarket::market::EpochStateResponse;
+
 pub fn count_match(x: &str, y: &str) -> usize {
     let mut count = 0;
     for i in 0..y.len() {
@@ -40,6 +42,15 @@ pub fn encode_msg_execute_anchor(
     }
         .into())
 }
+
+pub fn encode_msg_query_anchor(msg: moneymarket::market::QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
+    Ok(WasmQuery::Smart {
+        contract_addr: address,
+        msg: to_binary(&msg)?,
+    }
+        .into())
+}
+
 
 pub fn encode_msg_execute(
     msg: QueryMsg,
@@ -111,4 +122,12 @@ pub fn user_total_weight<S: Storage, A: Api, Q: Querier>(
     }
 
     weight
+}
+
+pub fn wrapper_msg_anchor<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<EpochStateResponse> {
+    let res: EpochStateResponse = deps.querier.query(&query)?;
+    Ok(res)
 }

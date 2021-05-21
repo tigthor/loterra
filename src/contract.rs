@@ -1,4 +1,4 @@
-use crate::helpers::{count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand, encode_msg_execute_anchor};
+use crate::helpers::{count_match, encode_msg_execute, encode_msg_query, is_lower_hex, user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand, encode_msg_execute_anchor, encode_msg_query_anchor, wrapper_msg_anchor};
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
@@ -14,12 +14,17 @@ use crate::state::{
 use moneymarket::querier::{deduct_tax, query_token_balance};
 use moneymarket::distribution_model::AncEmissionRateResponse;
 use moneymarket::market::HandleMsg::{ DepositStable };
-
+use moneymarket::market::QueryMsg::{ EpochState };
+use moneymarket::market::EpochStateResponse;
+use cw20::{Cw20HandleMsg};
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
     HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128,
 };
 use std::ops::{Add, Mul, Sub};
+
+
+
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -542,6 +547,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
                             rank,
                         )?;
                         some_winner += 1;
+                        let winners = winner_count_by_rank_read(&deps,last_lottery_counter_round ).may_load(&rank.to_be_bytes())?;
                     }
                 }
             }
@@ -555,6 +561,11 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
             backtrace: None,
         });
     }
+
+    /*let msg = EpochState{ block_height: None };
+    let res = encode_msg_query_anchor(msg, Default::default())?;
+    let wrapperResponse = wrapper_msg_anchor(&deps, res)?;
+    wrapperResponse.exchange_rate;*/
 
     Ok(HandleResponse {
         messages: vec![],
@@ -671,7 +682,7 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     )?;
 
     // Build the amount transaction
-    let msg = BankMsg::Send {
+    /*let msg = BankMsg::Send {
         from_address: env.contract.address,
         to_address: deps
             .api
@@ -684,7 +695,9 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
                 amount: total_prize_after,
             },
         )?],
-    };
+    }; */
+
+    let msg = Cw20HandleMsg::Transfer { recipient: env.contract.address, amount: total_prize_after };
 
     // Send the jackpot
     Ok(HandleResponse {

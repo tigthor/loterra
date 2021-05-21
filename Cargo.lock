@@ -174,6 +174,7 @@ dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
+ "cw20",
  "hex",
  "moneymarket",
  "schemars",
