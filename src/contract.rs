@@ -23,6 +23,7 @@ use cosmwasm_std::{
 };
 use std::ops::{Add, Mul, Sub};
 use cosmwasm_bignumber::{Uint256, Decimal256};
+use std::os::ios::raw::stat;
 
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
@@ -235,9 +236,12 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         addr_raw,
         combination,
     )?;
+    let addr_raw = deps.api.human_address(&state.market_contract_address)?;
+    let send = DepositStable {};
+    let res = encode_msg_execute_anchor(send, addr_raw, vec![Coin{ denom: state.denom_stable, amount: sent }])?;
 
     Ok(HandleResponse {
-        messages: vec![],
+        messages: vec![res],
         log: vec![LogAttribute {
             key: "action".to_string(),
             value: "register".to_string(),
@@ -305,7 +309,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let res_query = encode_msg_query_v2(msg, deps.api.human_address(&state.aterra_contract_address)?)?;
     let res_wrapper = wrapper_msg_aterra(&deps, res_query)?;
     let anchor_balance = res_wrapper.balance;
-
 
     // Max amount winners can claim
     let jackpot = anchor_balance
