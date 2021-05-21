@@ -23,8 +23,6 @@ use cosmwasm_std::{
 };
 use std::ops::{Add, Mul, Sub};
 use cosmwasm_bignumber::{Uint256, Decimal256};
-use std::os::ios::raw::stat;
-
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
