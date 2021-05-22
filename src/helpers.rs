@@ -1,5 +1,7 @@
 use crate::msg::QueryMsg;
-use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
+use crate::query::{
+    GetHolderResponse, GetHoldersResponse, LoterraBalanceResponse, TerrandResponse,
+};
 use crate::state::State;
 use cosmwasm_std::{
     to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HumanAddr, Querier,
@@ -72,6 +74,14 @@ pub fn wrapper_msg_loterra_staking<S: Storage, A: Api, Q: Querier>(
 
     Ok(res)
 }
+pub fn wrapper_msg_loterra_all_staking<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<GetHoldersResponse> {
+    let res: GetHoldersResponse = deps.querier.query(&query)?;
+
+    Ok(res)
+}
 
 pub fn user_total_weight<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
@@ -94,6 +104,30 @@ pub fn user_total_weight<S: Storage, A: Api, Q: Querier>(
 
     if !loterra_balance.balance.is_zero() {
         weight += loterra_balance.balance;
+    }
+
+    weight
+}
+
+pub fn total_weight<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    state: &State,
+) -> Uint128 {
+    let mut weight = Uint128::zero();
+
+    // Ensure sender have some reward tokens
+    let msg = QueryMsg::Holders {};
+    let loterra_human = deps
+        .api
+        .human_address(&state.loterra_staking_contract_address.clone())
+        .unwrap();
+    let res = encode_msg_query(msg, loterra_human).unwrap();
+    let loterra_balance = wrapper_msg_loterra_all_staking(&deps, res).unwrap();
+
+    for holder in loterra_balance.holders {
+        if !holder.balance.is_zero() {
+            weight += holder.balance;
+        }
     }
 
     weight
