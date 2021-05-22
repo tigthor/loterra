@@ -1323,8 +1323,8 @@ fn query_count_player<S: Storage, A: Api, Q: Querier>(
 fn query_winning_combination<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: u64,
-) -> StdResult<Uint128> {
-    let amount = match lottery_winning_combination_storage_read(&deps.storage)
+) -> StdResult<String> {
+    let combination = match lottery_winning_combination_storage_read(&deps.storage)
         .may_load(&lottery_id.to_be_bytes())?
     {
         None => {
@@ -1333,9 +1333,9 @@ fn query_winning_combination<S: Storage, A: Api, Q: Querier>(
                 backtrace: None,
             })
         }
-        Some(combo) => Uint128(combo.parse().unwrap()),
+        Some(combo) => combo,
     };
-    Ok(amount)
+    Ok(combination)
 }
 fn query_all_combination<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
