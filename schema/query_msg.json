@@ -132,10 +132,10 @@
       "description": "Count winner by rank and lottery id",
       "type": "object",
       "required": [
-        "count_winner_rank"
+        "count_winner"
       ],
       "properties": {
-        "count_winner_rank": {
+        "count_winner": {
           "type": "object",
           "required": [
             "lottery_id",

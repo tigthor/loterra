@@ -72,7 +72,7 @@ pub enum QueryMsg {
     /// Count ticket sold by lottery id
     CountTicket { lottery_id: u64 },
     /// Count winner by rank and lottery id
-    CountWinnerRank { lottery_id: u64, rank: u8 },
+    CountWinner { lottery_id: u64, rank: u8 },
     /// Get winning combination by lottery id
     WinningCombination { lottery_id: u64 },
     /// Get the needed round for workers adding randomness to Terrand

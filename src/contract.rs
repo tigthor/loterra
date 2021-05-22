@@ -1262,7 +1262,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::WinningCombination { lottery_id } => {
             to_binary(&query_winning_combination(deps, lottery_id)?)?
         }
-        QueryMsg::CountWinnerRank { lottery_id, rank } => {
+        QueryMsg::CountWinner { lottery_id, rank } => {
             to_binary(&query_winner_rank(deps, lottery_id, rank)?)?
         }
         _ => to_binary(&())?,
