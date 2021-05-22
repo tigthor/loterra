@@ -84,6 +84,8 @@ pub enum QueryMsg {
     Balance { address: HumanAddr },
     /// Get specific holder, address and balance from loterra staking contract
     Holder { address: HumanAddr },
+    /// Get all holders from loterra staking contract
+    Holders {},
     /// Query Loterra send
     Transfer {
         recipient: HumanAddr,

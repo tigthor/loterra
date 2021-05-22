@@ -1,3 +1,4 @@
+use crate::query::{GetHoldersResponse, HoldersInfo};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
     from_slice, to_binary, Api, Binary, Coin, Decimal, Empty, Extern, HumanAddr, Querier,
@@ -145,6 +146,24 @@ impl WasmMockQuerier {
                             pending_rewards: self.holder_response.pending_rewards,
                         };
                         return Ok(to_binary(&msg_balance));
+                    } else if msg == &Binary::from(r#"{"holders":{}}"#.as_bytes()) {
+                        let msg_holders = GetHoldersResponse {
+                            holders: vec![
+                                HoldersInfo {
+                                    address: HumanAddr::default(),
+                                    balance: Uint128(15_000),
+                                    index: Decimal::zero(),
+                                    pending_rewards: Decimal::zero(),
+                                },
+                                HoldersInfo {
+                                    address: HumanAddr::default(),
+                                    balance: Uint128(10_000),
+                                    index: Decimal::zero(),
+                                    pending_rewards: Decimal::zero(),
+                                },
+                            ],
+                        };
+                        return Ok(to_binary(&msg_holders));
                     } else if msg == &Binary::from(
                         r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#
                             .as_bytes(),
