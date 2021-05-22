@@ -359,10 +359,12 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             },
         )?],
     }; */
+
+    // prepare payout for worker
     let addr_raw = deps.api.human_address(&state.aterra_contract_address)?;
     let msg = Cw20HandleMsg::Transfer {
         recipient: res.worker,
-        amount: Uint128(fee_for_drand_worker.u128() * DECIMALS_DENOM as u128),
+        amount: fee_for_drand_worker,
     };
     let res_worker = encode_msg_execute_v2(msg, addr_raw, vec![])?;
 
@@ -632,12 +634,16 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     };
 
     // Get the contract balance
-    let balance = deps
-        .querier
-        .query_balance(&env.contract.address, &state.denom_stable)
-        .unwrap();
+    let msg = cw20::Cw20QueryMsg::Balance {
+        address: env.contract.address.clone(),
+    };
+    let res_query =
+        encode_msg_query_v2(msg, deps.api.human_address(&state.aterra_contract_address)?)?;
+    let res_wrapper = wrapper_msg_aterra(&deps, res_query)?;
+    let anchor_balance = res_wrapper.balance;
+
     // Ensure the contract have the balance
-    if balance.amount.is_zero() {
+    if anchor_balance.is_zero() {
         return Err(StdError::generic_err("Empty contract balance"));
     }
 
@@ -658,7 +664,7 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     }
 
     // Ensure the contract have sufficient balance to handle the transaction
-    if balance.amount < state.jackpot_reward {
+    if anchor_balance < state.jackpot_reward {
         return Err(StdError::generic_err("Not enough funds in the contract"));
     }
 
@@ -1220,22 +1226,23 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             state.token_holder_percentage_fee_reward = store.amount.u128() as u8
         }
         Proposal::SecurityMigration => {
-            let contract_balance = deps
-                .querier
-                .query_balance(&env.contract.address, &state.denom_stable)?;
-
-            let msg = BankMsg::Send {
-                from_address: env.contract.address,
-                to_address: store.migration_address.unwrap(),
-                amount: vec![deduct_tax(
-                    &deps,
-                    Coin {
-                        denom: state.denom_stable.to_string(),
-                        amount: contract_balance.amount,
-                    },
-                )?],
+            // Get the contract balance
+            let msg = cw20::Cw20QueryMsg::Balance {
+                address: env.contract.address.clone(),
             };
-            msgs.push(msg.into())
+            let res_query =
+                encode_msg_query_v2(msg, deps.api.human_address(&state.aterra_contract_address)?)?;
+            let res_wrapper = wrapper_msg_aterra(&deps, res_query)?;
+            let anchor_balance = res_wrapper.balance;
+            // prepare transaction
+            let addr_raw = deps.api.human_address(&state.aterra_contract_address)?;
+            let msg = Cw20HandleMsg::Transfer {
+                recipient: store.migration_address.unwrap(),
+                amount: anchor_balance,
+            };
+            let res_transfer = encode_msg_execute_v2(msg, addr_raw, vec![])?;
+
+            msgs.push(res_transfer)
         }
         Proposal::DaoFunding => {
             let recipient = deps.api.human_address(&store.creator)?;
