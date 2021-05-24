@@ -1,7 +1,5 @@
 use crate::msg::QueryMsg;
-use crate::query::{
-    GetHolderResponse, GetHoldersResponse, LoterraBalanceResponse, TerrandResponse,
-};
+use crate::query::{GetHolderResponse, GetHoldersResponse, TerrandResponse};
 use crate::state::State;
 use cosmwasm_std::{
     to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HumanAddr, Querier,
@@ -54,15 +52,6 @@ pub fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
     query: QueryRequest<Empty>,
 ) -> StdResult<TerrandResponse> {
     let res: TerrandResponse = deps.querier.query(&query)?;
-    Ok(res)
-}
-
-pub fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<LoterraBalanceResponse> {
-    let res: LoterraBalanceResponse = deps.querier.query(&query)?;
-
     Ok(res)
 }
 
