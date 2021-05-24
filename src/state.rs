@@ -17,15 +17,14 @@ const VOTE_KEY: &[u8] = b"user";
 const WINNING_COMBINATION_KEY: &[u8] = b"winning";
 const PLAYER_COUNT_KEY: &[u8] = b"player";
 const TICKET_COUNT_KEY: &[u8] = b"ticket";
+const JACKPOT_KEY: &[u8] = b"jackpot";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub admin: CanonicalAddr,
     pub block_time_play: u64,
     pub every_block_time_play: u64,
-    pub public_sale_end_block_time: u64,
     pub denom_stable: String,
-    pub token_holder_supply: Uint128,
     pub combination_len: u8,
     pub jackpot_reward: Uint128,
     pub jackpot_percentage_reward: u8,
@@ -262,4 +261,12 @@ pub fn lottery_winning_combination_storage_read<T: Storage>(
     storage: &T,
 ) -> ReadonlyBucket<T, String> {
     bucket_read(WINNING_COMBINATION_KEY, storage)
+}
+
+pub fn jackpot_storage<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
+    bucket(JACKPOT_KEY, storage)
+}
+
+pub fn jackpot_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
+    bucket_read(JACKPOT_KEY, storage)
 }

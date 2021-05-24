@@ -1,6 +1,6 @@
 use crate::helpers::{
     count_match, encode_msg_execute, encode_msg_query, is_lower_hex, total_weight,
-    user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand,
+    user_total_weight, wrapper_msg_terrand,
 };
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
@@ -8,10 +8,11 @@ use crate::msg::{
 };
 use crate::state::{
     all_winners, combination_save, config, config_read, count_player_by_lottery_read,
-    count_total_ticket_by_lottery_read, lottery_winning_combination_storage,
-    lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage,
-    winner_storage_read, PollInfoState, PollStatus, Proposal, State,
+    count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read,
+    lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage,
+    poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read,
+    winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus,
+    Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
@@ -40,9 +41,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         admin: deps.api.canonical_address(&env.message.sender)?,
         block_time_play: msg.block_time_play,
         every_block_time_play: msg.every_block_time_play,
-        public_sale_end_block_time: msg.public_sale_end_block_time,
         denom_stable: msg.denom_stable,
-        token_holder_supply: msg.token_holder_supply,
         poll_default_end_height: msg.poll_default_end_height,
         combination_len: 6,
         jackpot_reward: Uint128::zero(),
@@ -81,7 +80,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             combination,
         } => handle_register(deps, env, address, combination),
         HandleMsg::Play {} => handle_play(deps, env),
-        HandleMsg::PublicSale {} => handle_public_sale(deps, env),
         HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
         HandleMsg::Collect { address } => handle_collect(deps, env, address),
         HandleMsg::Proposal {
@@ -332,6 +330,10 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
 
+    // Save jackpot to storage
+    jackpot_storage(&mut deps.storage)
+        .save(&state.lottery_counter.to_be_bytes(), &jackpot_after)?;
+
     // Save the new state
     config(&mut deps.storage).save(&state)?;
 
@@ -341,102 +343,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             LogAttribute {
                 key: "action".to_string(),
                 value: "reward".to_string(),
-            },
-            LogAttribute {
-                key: "to".to_string(),
-                value: env.message.sender.to_string(),
-            },
-        ],
-        data: None,
-    })
-}
-
-pub fn handle_public_sale<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-) -> StdResult<HandleResponse> {
-    // Load the state
-    let mut state = config(&mut deps.storage).load()?;
-    if state.safe_lock {
-        return Err(StdError::generic_err(
-            "Contract deactivated for update or/and preventing security issue",
-        ));
-    }
-    // Public sale expire after blockTime
-    if state.public_sale_end_block_time < env.block.time {
-        return Err(StdError::generic_err("Public sale is ended"));
-    }
-    // Check if some funds are sent
-    let sent = match env.message.sent_funds.len() {
-        0 => Err(StdError::generic_err(format!(
-            "Send some {} to participate at public sale",
-            state.denom_stable
-        ))),
-        1 => {
-            if env.message.sent_funds[0].denom == state.denom_stable {
-                Ok(env.message.sent_funds[0].amount)
-            } else {
-                Err(StdError::generic_err(format!(
-                    "Only {} is accepted",
-                    state.denom_stable
-                )))
-            }
-        }
-        _ => Err(StdError::generic_err(format!(
-            "Send only {}, no extra denom",
-            state.denom_stable
-        ))),
-    }?;
-
-    if sent.is_zero() {
-        return Err(StdError::generic_err(format!(
-            "Send some {} to participate at public sale",
-            state.denom_stable
-        )));
-    };
-    // Get the contract balance prepare the tx
-    let msg_balance = QueryMsg::Balance {
-        address: env.contract.address,
-    };
-    let loterra_human = deps
-        .api
-        .human_address(&state.loterra_cw20_contract_address)?;
-    let res_balance = encode_msg_query(msg_balance, loterra_human)?;
-    let loterra_balance = wrapper_msg_loterra(&deps, res_balance)?;
-
-    let adjusted_contract_balance = loterra_balance.balance.sub(state.dao_funds)?;
-
-    if adjusted_contract_balance.is_zero() {
-        return Err(StdError::generic_err("All tokens have been sold"));
-    }
-
-    if adjusted_contract_balance.u128() < sent.u128() {
-        return Err(StdError::generic_err(format!(
-            "you want to buy {} the contract balance only remain {} token on public sale",
-            sent.u128(),
-            adjusted_contract_balance.u128()
-        )));
-    }
-
-    let msg_transfer = QueryMsg::Transfer {
-        recipient: env.message.sender.clone(),
-        amount: sent,
-    };
-    let loterra_human = deps
-        .api
-        .human_address(&state.loterra_cw20_contract_address)?;
-    let res_transfer = encode_msg_execute(msg_transfer, loterra_human, vec![])?;
-
-    state.token_holder_supply += sent;
-    // Save the new state
-    config(&mut deps.storage).save(&state)?;
-
-    Ok(HandleResponse {
-        messages: vec![res_transfer],
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "public sale".to_string(),
             },
             LogAttribute {
                 key: "to".to_string(),
@@ -1270,6 +1176,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
         QueryMsg::CountWinner { lottery_id, rank } => {
             to_binary(&query_winner_rank(deps, lottery_id, rank)?)?
         }
+        QueryMsg::Jackpot { lottery_id } => to_binary(&query_jackpot(deps, lottery_id)?)?,
         _ => to_binary(&())?,
     };
     Ok(response)
@@ -1296,6 +1203,21 @@ fn query_winner_rank<S: Storage, A: Api, Q: Querier>(
             }
             Some(winners) => winners,
         };
+    Ok(amount)
+}
+fn query_jackpot<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    lottery_id: u64,
+) -> StdResult<Uint128> {
+    let amount = match jackpot_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
+        None => {
+            return Err(StdError::NotFound {
+                kind: "not found".to_string(),
+                backtrace: None,
+            })
+        }
+        Some(jackpot) => jackpot,
+    };
     Ok(amount)
 }
 fn query_count_ticket<S: Storage, A: Api, Q: Querier>(
@@ -1484,16 +1406,13 @@ mod tests {
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const PUBLIC_SALE_END_BLOCK_TIME: u64 = 1610566920;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
-        const TOKEN_HOLDER_SUPPLY: Uint128 = Uint128(300_000);
         const DAO_FUNDS: Uint128 = Uint128(10_000);
 
         let init_msg = InitMsg {
             denom_stable: DENOM_STABLE.to_string(),
             block_time_play: BLOCK_TIME_PLAY,
             every_block_time_play: EVERY_BLOCK_TIME_PLAY,
-            public_sale_end_block_time: PUBLIC_SALE_END_BLOCK_TIME,
             poll_default_end_height: POLL_DEFAULT_END_HEIGHT,
-            token_holder_supply: TOKEN_HOLDER_SUPPLY,
             terrand_contract_address: HumanAddr::from(
                 "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand",
             ),
@@ -2101,243 +2020,6 @@ mod tests {
                 ),
                 _ => panic!("Unexpected error"),
             }
-        }
-    }
-    mod public_sale {
-        use super::*;
-        //handle_public_sale
-        #[test]
-        fn security_active() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
-            let mut state = config(&mut deps.storage).load().unwrap();
-            state.safe_lock = true;
-            config(&mut deps.storage).save(&state).unwrap();
-            let res = handle_public_sale(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000),
-                    }],
-                ),
-            );
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => assert_eq!(
-                    msg,
-                    "Contract deactivated for update or/and preventing security issue"
-                ),
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn contract_balance_sold_out() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
-            deps.querier.with_token_balances(Uint128(10_000));
-            default_init(&mut deps);
-            let res = handle_public_sale(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000),
-                    }],
-                ),
-            );
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => assert_eq!(msg, "All tokens have been sold"),
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn contract_balance_not_enough() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
-            deps.querier.with_token_balances(Uint128(10_100));
-            default_init(&mut deps);
-            let res = handle_public_sale(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000),
-                    }],
-                ),
-            );
-            println!("{:?}", res);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => {
-                    assert_eq!(msg, "you want to buy 1000 the contract balance only remain 100 token on public sale")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn sent_wrong_denom() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(900),
-                }],
-            );
-            default_init(&mut deps);
-            let res = handle_public_sale(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "wrong".to_string(),
-                        amount: Uint128(1_000),
-                    }],
-                ),
-            );
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => assert_eq!(msg, "Only ust is accepted"),
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn sent_multiple_denom_right_included() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(900),
-                }],
-            );
-            default_init(&mut deps);
-            let res = handle_public_sale(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[
-                        Coin {
-                            denom: "wrong".to_string(),
-                            amount: Uint128(1_000),
-                        },
-                        Coin {
-                            denom: "ust".to_string(),
-                            amount: Uint128(1_000),
-                        },
-                    ],
-                ),
-            );
-
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => assert_eq!(msg, "Send only ust, no extra denom"),
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn sent_empty() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(900),
-                }],
-            );
-            default_init(&mut deps);
-            let res = handle_public_sale(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(0),
-                    }],
-                ),
-            );
-            println!("{:?}", res);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => assert_eq!(msg, "Send some ust to participate at public sale"),
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn public_sale_ended() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(
-                before_all.default_length,
-                &[Coin {
-                    denom: "lota".to_string(),
-                    amount: Uint128(900),
-                }],
-            );
-            default_init(&mut deps);
-            let state = config(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(
-                before_all.default_sender,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(1_000),
-                }],
-            );
-            assert!(env.block.time < state.public_sale_end_block_time);
-            env.block.time = state.public_sale_end_block_time + 1000;
-            assert!(env.block.time > state.public_sale_end_block_time);
-            let res = handle_public_sale(&mut deps, env);
-            match res {
-                Err(GenericErr {
-                    msg,
-                    backtrace: None,
-                }) => assert_eq!(msg, "Public sale is ended"),
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn success() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
-            deps.querier.with_token_balances(Uint128(10_900));
-            default_init(&mut deps);
-            let state_before = config(&mut deps.storage).load().unwrap();
-            let env = mock_env(
-                before_all.default_sender.clone(),
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(100),
-                }],
-            );
-            let res = handle_public_sale(&mut deps, env.clone()).unwrap();
-            let state_after = config(&mut deps.storage).load().unwrap();
-
-            assert_eq!(
-                res.messages[0],
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: deps.api.human_address(&state_after.loterra_cw20_contract_address).unwrap(),
-                    msg: Binary::from(r#"{"transfer":{"recipient":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007","amount":"100"}}"#.as_bytes()),
-                    send: vec![]
-                })
-            );
-            assert!(state_after.token_holder_supply > state_before.token_holder_supply);
         }
     }
     mod play {
