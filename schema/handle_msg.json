@@ -48,18 +48,6 @@
       }
     },
     {
-      "description": "Public sale buy the token holders with 1:1 ratio",
-      "type": "object",
-      "required": [
-        "public_sale"
-      ],
-      "properties": {
-        "public_sale": {
-          "type": "object"
-        }
-      }
-    },
-    {
       "description": "Claim jackpot",
       "type": "object",
       "required": [
