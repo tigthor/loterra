@@ -62,6 +62,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         latest_winning_number: "".to_string(),
         dao_funds: msg.dao_funds,
         lottery_counter: 1,
+        holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -325,15 +326,17 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             },
         )?],
     };
-
+    if env.block.time > state.holders_bonus_block_time_end
+        && state.token_holder_percentage_fee_reward > 20
+    {
+        state.token_holder_percentage_fee_reward = 20;
+    }
     // Save jackpot to storage
     jackpot_storage(&mut deps.storage)
         .save(&state.lottery_counter.to_be_bytes(), &jackpot_after)?;
     // Update the state
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
-
-
 
     // Save the new state
     config(&mut deps.storage).save(&state)?;
@@ -1411,6 +1414,7 @@ mod tests {
         const PUBLIC_SALE_END_BLOCK_TIME: u64 = 1610566920;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
         const DAO_FUNDS: Uint128 = Uint128(10_000);
+        const BONUS_BLOCK_TIME_END: u64 = 1610567920;
 
         let init_msg = InitMsg {
             denom_stable: DENOM_STABLE.to_string(),
@@ -1427,6 +1431,7 @@ mod tests {
                 "terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking",
             ),
             dao_funds: DAO_FUNDS,
+            holders_bonus_block_time_end: BONUS_BLOCK_TIME_END,
         };
 
         init(
@@ -2184,7 +2189,7 @@ mod tests {
                     to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
                     amount: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(719)
+                        amount: Uint128(179)
                     }]
                 })
             );
@@ -2197,10 +2202,11 @@ mod tests {
             // TODO add winner checks
             let state_after = config(&mut deps.storage).load().unwrap();
             println!("{:?}", state_after.jackpot_reward);
+            assert_eq!(50, state_after.token_holder_percentage_fee_reward);
             assert_eq!(state.jackpot_reward, Uint128::zero());
             assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
             // 720720 total fees
-            assert_eq!(state_after.jackpot_reward, Uint128(7199280));
+            assert_eq!(state_after.jackpot_reward, Uint128(1_799_820));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
@@ -2249,7 +2255,7 @@ mod tests {
                     to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
                     amount: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(719)
+                        amount: Uint128(179)
                     }]
                 })
             );
@@ -2257,10 +2263,96 @@ mod tests {
             // TODO add winner check
             let state_after = config(&mut deps.storage).load().unwrap();
             println!("{:?}", state_after.jackpot_reward);
+            assert_eq!(50, state_after.token_holder_percentage_fee_reward);
             assert_eq!(state.jackpot_reward, Uint128::zero());
             assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
             // 720 total fees
-            assert_eq!(state_after.jackpot_reward, Uint128(7_199_280));
+            assert_eq!(state_after.jackpot_reward, Uint128(1_799_820));
+            assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
+            assert_eq!(state_after.lottery_counter, 2);
+            assert_ne!(state_after.lottery_counter, state.lottery_counter);
+        }
+        #[test]
+        fn success_bonus_holder_end_fee_superior_20_percent() {
+            let before_all = before_all();
+            let contract_balance = Uint128(9_000_000);
+            let mut deps = mock_dependencies_custom(
+                before_all.default_length,
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: contract_balance.clone(),
+                }],
+            );
+
+            default_init(&mut deps);
+            // register some combination
+            let msg = HandleMsg::Register {
+                address: None,
+                combination: vec!["1e3fab".to_string()],
+            };
+            handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+            .unwrap();
+
+            let msg = HandleMsg::Register {
+                address: None,
+                combination: vec!["39493d".to_string()],
+            };
+            handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender_two.clone(),
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(1_000_000),
+                    }],
+                ),
+                msg.clone(),
+            )
+            .unwrap();
+
+            let state = config(&mut deps.storage).load().unwrap();
+            assert_eq!(50, state.token_holder_percentage_fee_reward);
+            let mut env = mock_env(before_all.default_sender_owner, &[]);
+            env.block.time = state.block_time_play + 10_000;
+            let res = handle_play(&mut deps, env.clone()).unwrap();
+            println!("{:?}", res);
+
+            assert_eq!(res.messages.len(), 1);
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Bank(BankMsg::Send {
+                    from_address: env.contract.address.clone(),
+                    to_address: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
+                    amount: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(179)
+                    }]
+                })
+            );
+
+            let store = lottery_winning_combination_storage_read(&deps.storage)
+                .load(&state.lottery_counter.to_be_bytes())
+                .unwrap();
+            assert_eq!(store, "39493d");
+
+            // TODO add winner checks
+            let state_after = config(&mut deps.storage).load().unwrap();
+            assert_eq!(20, state_after.token_holder_percentage_fee_reward);
+            println!("{:?}", state_after.jackpot_reward);
+            assert_eq!(state.jackpot_reward, Uint128::zero());
+            assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
+            // 720720 total fees
+            assert_eq!(state_after.jackpot_reward, Uint128(1_799_820));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
@@ -2552,7 +2644,7 @@ mod tests {
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.messages.len(), 2);
-            let amount_claimed = Uint128(377999);
+            let amount_claimed = Uint128(217499);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2574,7 +2666,7 @@ mod tests {
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(41999)
+                        amount: Uint128(217499)
                     }]
                 })
             );
@@ -2647,7 +2739,7 @@ mod tests {
             println!("{:?}", res);
 
             assert_eq!(res.messages.len(), 2);
-            let amount_claimed = Uint128(377999);
+            let amount_claimed = Uint128(217499);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2669,7 +2761,7 @@ mod tests {
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(41999)
+                        amount: Uint128(217499)
                     }]
                 })
             );
@@ -2747,7 +2839,7 @@ mod tests {
             let res = handle(&mut deps, env.clone(), msg).unwrap();
 
             assert_eq!(res.messages.len(), 2);
-            let amount_claimed = Uint128(437999);
+            let amount_claimed = Uint128(250832);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2769,7 +2861,7 @@ mod tests {
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(48665)
+                        amount: Uint128(250832)
                     }]
                 })
             );
