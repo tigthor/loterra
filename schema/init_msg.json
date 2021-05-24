@@ -7,6 +7,7 @@
     "dao_funds",
     "denom_stable",
     "every_block_time_play",
+    "holders_bonus_block_time_end",
     "loterra_cw20_contract_address",
     "loterra_staking_contract_address",
     "poll_default_end_height",
@@ -25,6 +26,11 @@
       "type": "string"
     },
     "every_block_time_play": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "holders_bonus_block_time_end": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0

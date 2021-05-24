@@ -10,6 +10,7 @@
     "denom_stable",
     "every_block_time_play",
     "fee_for_drand_worker_in_percentage",
+    "holders_bonus_block_time_end",
     "jackpot_percentage_reward",
     "jackpot_reward",
     "latest_winning_number",
@@ -52,6 +53,11 @@
     "fee_for_drand_worker_in_percentage": {
       "type": "integer",
       "format": "uint8",
+      "minimum": 0.0
+    },
+    "holders_bonus_block_time_end": {
+      "type": "integer",
+      "format": "uint64",
       "minimum": 0.0
     },
     "jackpot_percentage_reward": {
