@@ -786,7 +786,10 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                     )));
                 }
                 proposal_amount = amount;
-                proposal_human_address = Option::from(contract_migration_address);
+                proposal_human_address = match contract_migration_address {
+                    None => None,
+                    Some(address) => Option::from(address),
+                }
             }
             None => {
                 return Err(StdError::generic_err("Amount required".to_string()));
@@ -1101,7 +1104,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
         Proposal::DaoFunding => {
             let recipient = match store.migration_address {
                 None => deps.api.human_address(&store.creator)?,
-                Some(address) => address
+                Some(address) => address,
             };
 
             let msg_transfer = QueryMsg::Transfer {
