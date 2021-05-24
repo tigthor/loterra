@@ -9,9 +9,7 @@ pub struct InitMsg {
     pub denom_stable: String,
     pub block_time_play: u64,
     pub every_block_time_play: u64,
-    pub public_sale_end_block_time: u64,
     pub poll_default_end_height: u64,
-    pub token_holder_supply: Uint128,
     pub terrand_contract_address: HumanAddr,
     pub loterra_cw20_contract_address: HumanAddr,
     pub loterra_staking_contract_address: HumanAddr,
@@ -28,8 +26,6 @@ pub enum HandleMsg {
     },
     /// Run the lottery
     Play {},
-    /// Public sale buy the token holders with 1:1 ratio
-    PublicSale {},
     /// Claim jackpot
     Claim { addresses: Option<Vec<HumanAddr>> },
     /// Collect jackpot
@@ -75,6 +71,8 @@ pub enum QueryMsg {
     CountWinner { lottery_id: u64, rank: u8 },
     /// Get winning combination by lottery id
     WinningCombination { lottery_id: u64 },
+    /// Get the jackpot by lottery id
+    Jackpot { lottery_id: u64 },
     /// Get the needed round for workers adding randomness to Terrand
     GetRound {},
     /// Query Terrand smart contract to get the needed randomness to play the lottery
