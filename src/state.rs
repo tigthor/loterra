@@ -41,6 +41,7 @@ pub struct State {
     pub latest_winning_number: String,
     pub dao_funds: Uint128,
     pub lottery_counter: u64,
+    pub holders_bonus_block_time_end: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

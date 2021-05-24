@@ -14,6 +14,7 @@ pub struct InitMsg {
     pub loterra_cw20_contract_address: HumanAddr,
     pub loterra_staking_contract_address: HumanAddr,
     pub dao_funds: Uint128,
+    pub holders_bonus_block_time_end: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
