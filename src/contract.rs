@@ -1059,31 +1059,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     // Based on the recommendation of security audit
     // We recommend to not reject votes based on the number of votes, but rather by the stake of the voters.
     if total_yes_weight_percentage < 50 || total_no_weight_percentage > 33 {
-        return reject_proposal(deps, poll_id.clone());
-        /*poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-            let mut poll_data = poll.unwrap();
-            // Update the status to rejected
-            poll_data.status = PollStatus::Rejected;
-            Ok(poll_data)
-        })?;
-        return Ok(HandleResponse {
-            messages: vec![],
-            log: vec![
-                LogAttribute {
-                    key: "action".to_string(),
-                    value: "present the proposal".to_string(),
-                },
-                LogAttribute {
-                    key: "proposal_id".to_string(),
-                    value: poll_id.to_string(),
-                },
-                LogAttribute {
-                    key: "proposal_result".to_string(),
-                    value: "rejected".to_string(),
-                },
-            ],
-            data: None,
-        });*/
+        return reject_proposal(deps, poll_id);
     }
 
     let mut msgs = vec![];
