@@ -326,7 +326,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         )?],
     };
     if env.block.time > state.holders_bonus_block_time_end
-        && state.token_holder_percentage_fee_reward > 20
+        && state.token_holder_percentage_fee_reward > HOLDERS_MAX_REWARD
     {
         state.token_holder_percentage_fee_reward = 20;
     }
