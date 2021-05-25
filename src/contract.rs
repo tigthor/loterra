@@ -1366,33 +1366,7 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
 
     Ok(RoundResponse { next_round })
 }
-/*{
-"denom_stable":"uusd",
-"block_time_play":1610566920,
-"every_block_time_play": 30,
-"public_sale_end_block": 2520000,
-"poll_default_end_height": 30,
-"token_holder_supply": "1000000",
-"terrand_contract_address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k",
-"loterra_cw20_contract_address": "terra1jzxdryg2x8vdcwydhzddk68hrl4kve6yk43u8p",
-"lottera_staking_contract_address": "terra1jzxdryg2x8vdcwydhzddk68hrl4kve6yk43u8p"
-}
-{"name":"loterra","symbol":"LOTA","decimals": 6,"initial_balances":[{"address":"terra1np82azjrpfr2ax77s854w4nyh9k63ng7vj26h0","amount":"5000000"}]}
 
-//erc20 loterra
-terra18vd8fpwxzck93qlwghaj6arh4p7c5n896xzem5
-
-terra18vd8fpwxzck93qlwghaj6arh4p7c5n896xzem5 '{"transfer":{"recipient": "terra10pyejy66429refv3g35g2t7am0was7ya7kz2a4", "amount": "1000000"}}' --from test1 --chain-id=localterra 1000000uluna  --fees=1000000uluna --gas=auto --broadcast-mode=block
-// lottera contract
-terra10pyejy66429refv3g35g2t7am0was7ya7kz2a4
-{
-    "proposal":{
-        "description":"my first proposal",
-        "proposal":"DrandWorkerFeePercentage",
-        "amount":5
-    }
-}
-*/
 #[cfg(test)]
 mod tests {
     use super::*;
