@@ -1,9 +1,11 @@
 use crate::msg::QueryMsg;
-use crate::query::{GetHolderResponse, GetHoldersResponse, TerrandResponse};
-use crate::state::State;
+use crate::query::{
+    GetHolderResponse, GetHoldersResponse, LoterraBalanceResponse, TerrandResponse,
+};
+use crate::state::{poll_storage, PollStatus, State};
 use cosmwasm_std::{
-    to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HumanAddr, Querier,
-    QueryRequest, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
+    to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HandleResponse, HumanAddr,
+    LogAttribute, Querier, QueryRequest, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
 pub fn count_match(x: &str, y: &str) -> usize {
     let mut count = 0;
@@ -120,4 +122,43 @@ pub fn total_weight<S: Storage, A: Api, Q: Querier>(
     }
 
     weight
+}
+
+pub fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<LoterraBalanceResponse> {
+    let res: LoterraBalanceResponse = deps.querier.query(&query)?;
+
+    Ok(res)
+}
+
+pub fn reject_proposal<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    poll_id: u64,
+) -> StdResult<HandleResponse> {
+    poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
+        let mut poll_data = poll.unwrap();
+        // Update the status to rejected
+        poll_data.status = PollStatus::Rejected;
+        Ok(poll_data)
+    })?;
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![
+            LogAttribute {
+                key: "action".to_string(),
+                value: "present the proposal".to_string(),
+            },
+            LogAttribute {
+                key: "proposal_id".to_string(),
+                value: poll_id.to_string(),
+            },
+            LogAttribute {
+                key: "proposal_result".to_string(),
+                value: "rejected".to_string(),
+            },
+        ],
+        data: None,
+    })
 }

@@ -1,6 +1,6 @@
 use crate::helpers::{
-    count_match, encode_msg_execute, encode_msg_query, is_lower_hex, total_weight,
-    user_total_weight, wrapper_msg_terrand,
+    count_match, encode_msg_execute, encode_msg_query, is_lower_hex, reject_proposal, total_weight,
+    user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand,
 };
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
@@ -60,7 +60,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             .canonical_address(&msg.loterra_staking_contract_address)?,
         safe_lock: false,
         latest_winning_number: "".to_string(),
-        dao_funds: msg.dao_funds,
         lottery_counter: 1,
         holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
     };
@@ -786,17 +785,29 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                 if amount.is_zero() {
                     return Err(StdError::generic_err("Amount be higher than 0".to_string()));
                 }
-                if state.dao_funds.is_zero() {
+
+                // Get the contract balance prepare the tx
+                let msg_balance = QueryMsg::Balance {
+                    address: env.contract.address,
+                };
+                let loterra_human = deps
+                    .api
+                    .human_address(&state.loterra_cw20_contract_address)?;
+                let res_balance = encode_msg_query(msg_balance, loterra_human)?;
+                let loterra_balance = wrapper_msg_loterra(&deps, res_balance)?;
+
+                if loterra_balance.balance.is_zero() {
                     return Err(StdError::generic_err(
                         "No more funds to fund project".to_string(),
                     ));
                 }
-                if state.dao_funds.u128() < amount.u128() {
+                if loterra_balance.balance.u128() < amount.u128() {
                     return Err(StdError::generic_err(format!(
                         "You need {} we only can fund you up to {}",
-                        amount, state.dao_funds
+                        amount, loterra_balance.balance
                     )));
                 }
+
                 proposal_amount = amount;
                 proposal_human_address = match contract_migration_address {
                     None => None,
@@ -1048,7 +1059,8 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     // Based on the recommendation of security audit
     // We recommend to not reject votes based on the number of votes, but rather by the stake of the voters.
     if total_yes_weight_percentage < 50 || total_no_weight_percentage > 33 {
-        poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
+        return reject_proposal(deps, poll_id.clone());
+        /*poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
             let mut poll_data = poll.unwrap();
             // Update the status to rejected
             poll_data.status = PollStatus::Rejected;
@@ -1071,7 +1083,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
                 },
             ],
             data: None,
-        });
+        });*/
     }
 
     let mut msgs = vec![];
@@ -1119,6 +1131,20 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
                 Some(address) => address,
             };
 
+            // Get the contract balance prepare the tx
+            let msg_balance = QueryMsg::Balance {
+                address: env.contract.address,
+            };
+            let loterra_human = deps
+                .api
+                .human_address(&state.loterra_cw20_contract_address)?;
+            let res_balance = encode_msg_query(msg_balance, loterra_human)?;
+            let loterra_balance = wrapper_msg_loterra(&deps, res_balance)?;
+
+            if loterra_balance.balance.u128() < store.amount.u128() {
+                return reject_proposal(deps, poll_id);
+            }
+
             let msg_transfer = QueryMsg::Transfer {
                 recipient,
                 amount: store.amount,
@@ -1127,7 +1153,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
                 .api
                 .human_address(&state.loterra_cw20_contract_address)?;
             let res_transfer = encode_msg_execute(msg_transfer, loterra_human, vec![])?;
-            state.dao_funds = state.dao_funds.sub(store.amount)?;
+
             msgs.push(res_transfer)
         }
         Proposal::StakingContractMigration => {
@@ -1421,7 +1447,6 @@ mod tests {
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const PUBLIC_SALE_END_BLOCK_TIME: u64 = 1610566920;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
-        const DAO_FUNDS: Uint128 = Uint128(10_000);
         const BONUS_BLOCK_TIME_END: u64 = 1610567920;
 
         let init_msg = InitMsg {
@@ -1438,7 +1463,6 @@ mod tests {
             loterra_staking_contract_address: HumanAddr::from(
                 "terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking",
             ),
-            dao_funds: DAO_FUNDS,
             holders_bonus_block_time_end: BONUS_BLOCK_TIME_END,
         };
 
@@ -3230,13 +3254,14 @@ mod tests {
         #[test]
         fn success() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(
+            let mut deps = mock_dependencies_custom(
                 before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
                 }],
             );
+            deps.querier.with_token_balances(Uint128(200_000));
             default_init(&mut deps);
             let state = config(&mut deps.storage).load().unwrap();
             assert_eq!(state.poll_count, 0);
@@ -3286,7 +3311,7 @@ mod tests {
             );
             let msg_dao_funding = msg_constructor_success(
                 Proposal::DaoFunding,
-                Option::from(Uint128(80)),
+                Option::from(Uint128(200_000)),
                 None,
                 None,
             );
@@ -3913,14 +3938,6 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             assert_eq!(poll_state.status, PollStatus::Passed);
-            //let state = config(&mut deps);
-            let state_after = config(&mut deps.storage).load().unwrap();
-            println!("{:?}", state_after.dao_funds);
-            println!("{:?}", state_before.dao_funds);
-            assert_eq!(
-                state_before.dao_funds.sub(poll_state.amount).unwrap(),
-                state_after.dao_funds
-            )
         }
         #[test]
         fn success_staking_migration() {
