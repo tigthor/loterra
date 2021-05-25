@@ -317,7 +317,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
-        to_address: res.worker,
+        to_address: res.worker.clone(),
         amount: vec![deduct_tax(
             &deps,
             Coin {
@@ -349,8 +349,12 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
                 value: "reward".to_string(),
             },
             LogAttribute {
-                key: "to".to_string(),
+                key: "by".to_string(),
                 value: env.message.sender.to_string(),
+            },
+            LogAttribute {
+                key: "to".to_string(),
+                value: res.worker.to_string(),
             },
         ],
         data: None,
@@ -494,7 +498,7 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("No jackpot reward"));
     }
     let addr = match address {
-        None => env.message.sender,
+        None => env.message.sender.clone(),
         Some(addr) => addr,
     };
 
@@ -595,6 +599,10 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
             LogAttribute {
                 key: "action".to_string(),
                 value: "handle_collect".to_string(),
+            },
+            LogAttribute {
+                key: "by".to_string(),
+                value: env.message.sender.to_string(),
             },
             LogAttribute {
                 key: "to".to_string(),
