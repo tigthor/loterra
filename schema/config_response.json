@@ -6,7 +6,6 @@
     "admin",
     "block_time_play",
     "combination_len",
-    "dao_funds",
     "denom_stable",
     "every_block_time_play",
     "fee_for_drand_worker_in_percentage",
@@ -38,9 +37,6 @@
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
-    },
-    "dao_funds": {
-      "$ref": "#/definitions/Uint128"
     },
     "denom_stable": {
       "type": "string"

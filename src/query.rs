@@ -28,3 +28,8 @@ pub struct HoldersInfo {
 pub struct GetHoldersResponse {
     pub holders: Vec<HoldersInfo>,
 }
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
+pub struct LoterraBalanceResponse {
+    pub balance: Uint128,
+}

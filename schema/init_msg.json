@@ -4,7 +4,6 @@
   "type": "object",
   "required": [
     "block_time_play",
-    "dao_funds",
     "denom_stable",
     "every_block_time_play",
     "holders_bonus_block_time_end",
@@ -18,9 +17,6 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
-    },
-    "dao_funds": {
-      "$ref": "#/definitions/Uint128"
     },
     "denom_stable": {
       "type": "string"
@@ -52,9 +48,6 @@
   },
   "definitions": {
     "HumanAddr": {
-      "type": "string"
-    },
-    "Uint128": {
       "type": "string"
     }
   }
