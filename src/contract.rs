@@ -594,14 +594,14 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
-                value: "handle_jackpot".to_string(),
+                value: "handle_collect".to_string(),
             },
             LogAttribute {
                 key: "to".to_string(),
                 value: addr.to_string(),
             },
             LogAttribute {
-                key: "jackpot_prize".to_string(),
+                key: "collecting_jackpot_prize".to_string(),
                 value: "yes".to_string(),
             },
         ],
