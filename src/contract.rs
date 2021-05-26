@@ -1244,15 +1244,12 @@ fn query_all_players<S: Storage, A: Api, Q: Querier>(
                     backtrace: None,
                 })
             }
-            Some(players) => {
-                let data = players.clone();
-                data[start_index..]
-                    .to_vec()
-                    .iter()
-                    .take(limit)
-                    .map(|e| deps.api.human_address(&e.clone()).unwrap())
-                    .collect()
-            }
+            Some(players) => players[start_index..]
+                .to_vec()
+                .iter()
+                .take(limit)
+                .map(|e| deps.api.human_address(&e.clone()).unwrap())
+                .collect(),
         };
     Ok(player)
 }
