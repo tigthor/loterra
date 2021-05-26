@@ -26,7 +26,6 @@ pub struct State {
     pub every_block_time_play: u64,
     pub denom_stable: String,
     pub combination_len: u8,
-    pub jackpot_reward: Uint128,
     pub jackpot_percentage_reward: u8,
     pub token_holder_percentage_fee_reward: u8,
     pub fee_for_drand_worker_in_percentage: u8,

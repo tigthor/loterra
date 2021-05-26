@@ -11,7 +11,6 @@
     "fee_for_drand_worker_in_percentage",
     "holders_bonus_block_time_end",
     "jackpot_percentage_reward",
-    "jackpot_reward",
     "latest_winning_number",
     "loterra_cw20_contract_address",
     "loterra_staking_contract_address",
@@ -60,9 +59,6 @@
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
-    },
-    "jackpot_reward": {
-      "$ref": "#/definitions/Uint128"
     },
     "latest_winning_number": {
       "type": "string"
