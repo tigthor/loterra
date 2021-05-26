@@ -62,6 +62,7 @@ pub enum Proposal {
     SecurityMigration,
     DaoFunding,
     StakingContractMigration,
+    PollSurvey,
     // test purpose
     NotExist,
 }
