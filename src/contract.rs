@@ -836,6 +836,8 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             }
         }
         Proposal::StakingContractMigration
+    } else if let Proposal::PollSurvey = proposal {
+        Proposal::PollSurvey
     } else {
         return Err(StdError::generic_err(
             "Proposal type not founds".to_string(),
@@ -1137,6 +1139,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
                 .api
                 .canonical_address(&store.migration_address.unwrap())?;
         }
+        Proposal::PollSurvey => {}
         _ => {
             return Err(StdError::generic_err("Proposal not funds"));
         }
