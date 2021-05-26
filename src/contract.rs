@@ -44,7 +44,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         denom_stable: msg.denom_stable,
         poll_default_end_height: msg.poll_default_end_height,
         combination_len: 6,
-        jackpot_reward: Uint128::zero(),
         jackpot_percentage_reward: 20,
         token_holder_percentage_fee_reward: 50,
         fee_for_drand_worker_in_percentage: 1,
@@ -334,7 +333,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     jackpot_storage(&mut deps.storage)
         .save(&state.lottery_counter.to_be_bytes(), &jackpot_after)?;
     // Update the state
-    state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
 
     // Save the new state
@@ -483,6 +481,9 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
 
     // Load state
     let state = config(&mut deps.storage).load()?;
+    let last_lottery_counter_round = state.lottery_counter - 1;
+    let jackpot_reward =
+        jackpot_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes())?;
 
     if state.safe_lock {
         return Err(StdError::generic_err(
@@ -493,7 +494,7 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Collecting jackpot is closed"));
     }
     // Ensure there is jackpot reward to claim
-    if state.jackpot_reward.is_zero() {
+    if jackpot_reward.is_zero() {
         return Err(StdError::generic_err("No jackpot reward"));
     }
     let addr = match address {
@@ -513,7 +514,6 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
 
     let canonical_addr = deps.api.canonical_address(&addr)?;
     // Load winner
-    let last_lottery_counter_round = state.lottery_counter - 1;
     let may_claim = winner_storage_read(&deps.storage, last_lottery_counter_round)
         .may_load(canonical_addr.as_slice())?;
 
@@ -528,7 +528,7 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     }
 
     // Ensure the contract have sufficient balance to handle the transaction
-    if balance.amount < state.jackpot_reward {
+    if balance.amount < jackpot_reward {
         return Err(StdError::generic_err("Not enough funds in the contract"));
     }
 
@@ -536,8 +536,7 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     for rank in rewards.clone().ranks {
         let rank_count = winner_count_by_rank_read(&deps.storage, last_lottery_counter_round)
             .load(&rank.to_be_bytes())?;
-        let prize = state
-            .jackpot_reward
+        let prize = jackpot_reward
             .mul(Decimal::percent(
                 state.prize_rank_winner_percentage[rank as usize - 1] as u64,
             ))
@@ -2162,6 +2161,11 @@ mod tests {
             .unwrap();
 
             let state = config(&mut deps.storage).load().unwrap();
+            jackpot_storage(&mut deps.storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
+            let jackpot_reward_before = jackpot_storage_read(&deps.storage)
+                .load(&(state.lottery_counter - 1).to_be_bytes())
+                .unwrap();
             let mut env = mock_env(before_all.default_sender_owner, &[]);
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
@@ -2183,15 +2187,19 @@ mod tests {
                 .load(&state.lottery_counter.to_be_bytes())
                 .unwrap();
             assert_eq!(store, "39493d");
+            let state_after = config(&mut deps.storage).load().unwrap();
+            let jackpot_reward_after = jackpot_storage_read(&deps.storage)
+                .load(&state.lottery_counter.to_be_bytes())
+                .unwrap();
 
             // TODO add winner checks
-            let state_after = config(&mut deps.storage).load().unwrap();
-            println!("{:?}", state_after.jackpot_reward);
+
+            println!("{:?}", jackpot_reward_after);
             assert_eq!(50, state_after.token_holder_percentage_fee_reward);
-            assert_eq!(state.jackpot_reward, Uint128::zero());
-            assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
+            assert_eq!(jackpot_reward_before, Uint128::zero());
+            assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
-            assert_eq!(state_after.jackpot_reward, Uint128(1_799_820));
+            assert_eq!(jackpot_reward_after, Uint128(1_799_820));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
@@ -2228,6 +2236,11 @@ mod tests {
             .unwrap();
 
             let state = config(&mut deps.storage).load().unwrap();
+            jackpot_storage(&mut deps.storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
+            let jackpot_reward_before = jackpot_storage_read(&deps.storage)
+                .load(&(state.lottery_counter - 1).to_be_bytes())
+                .unwrap();
             let mut env = mock_env(before_all.default_sender_owner.clone(), &[]);
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
@@ -2247,12 +2260,16 @@ mod tests {
 
             // TODO add winner check
             let state_after = config(&mut deps.storage).load().unwrap();
-            println!("{:?}", state_after.jackpot_reward);
+            let jackpot_reward_after = jackpot_storage_read(&deps.storage)
+                .load(&state.lottery_counter.to_be_bytes())
+                .unwrap();
+
+            println!("{:?}", jackpot_reward_after);
             assert_eq!(50, state_after.token_holder_percentage_fee_reward);
-            assert_eq!(state.jackpot_reward, Uint128::zero());
-            assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
-            // 720 total fees
-            assert_eq!(state_after.jackpot_reward, Uint128(1_799_820));
+            assert_eq!(jackpot_reward_before, Uint128::zero());
+            assert_ne!(jackpot_reward_after, jackpot_reward_before);
+            // 720720 total fees
+            assert_eq!(jackpot_reward_after, Uint128(1_799_820));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
@@ -2307,6 +2324,12 @@ mod tests {
 
             let state = config(&mut deps.storage).load().unwrap();
             assert_eq!(50, state.token_holder_percentage_fee_reward);
+            jackpot_storage(&mut deps.storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
+            let jackpot_reward_before = jackpot_storage_read(&deps.storage)
+                .load(&(state.lottery_counter - 1).to_be_bytes())
+                .unwrap();
+
             let mut env = mock_env(before_all.default_sender_owner, &[]);
             env.block.time = state.block_time_play + 10_000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
@@ -2332,12 +2355,16 @@ mod tests {
 
             // TODO add winner checks
             let state_after = config(&mut deps.storage).load().unwrap();
+            let jackpot_reward_after = jackpot_storage_read(&deps.storage)
+                .load(&state.lottery_counter.to_be_bytes())
+                .unwrap();
+
+            println!("{:?}", jackpot_reward_after);
             assert_eq!(20, state_after.token_holder_percentage_fee_reward);
-            println!("{:?}", state_after.jackpot_reward);
-            assert_eq!(state.jackpot_reward, Uint128::zero());
-            assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
+            assert_eq!(jackpot_reward_before, Uint128::zero());
+            assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
-            assert_eq!(state_after.jackpot_reward, Uint128(1_799_820));
+            assert_eq!(jackpot_reward_after, Uint128(1_799_820));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
@@ -2352,6 +2379,8 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
+            jackpot_storage(&mut deps.storage)
+                .save(&state.lottery_counter.to_be_bytes(), &Uint128::zero());
             state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
@@ -2409,6 +2438,8 @@ mod tests {
             );
             default_init(&mut deps);
             let state = config_read(&mut deps.storage).load().unwrap();
+            jackpot_storage(&mut deps.storage)
+                .save(&state.lottery_counter.to_be_bytes(), &Uint128::zero());
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play;
             let msg = HandleMsg::Collect { address: None };
@@ -2433,6 +2464,8 @@ mod tests {
             );
             default_init(&mut deps);
             let state = config_read(&mut deps.storage).load().unwrap();
+            jackpot_storage(&mut deps.storage)
+                .save(&state.lottery_counter.to_be_bytes(), &Uint128::zero());
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
@@ -2459,8 +2492,8 @@ mod tests {
             );
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            state.jackpot_reward = Uint128(1_000_000);
-            config(&mut deps.storage).save(&state).unwrap();
+            jackpot_storage(&mut deps.storage)
+                .save(&state.lottery_counter.to_be_bytes(), &Uint128(1_000_000));
 
             let state = config_read(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
@@ -2490,9 +2523,10 @@ mod tests {
 
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
-            state_before.jackpot_reward = Uint128(1_000_000);
-            state_before.lottery_counter = 1;
-            config(&mut deps.storage).save(&state_before).unwrap();
+            jackpot_storage(&mut deps.storage).save(
+                &state_before.lottery_counter.to_be_bytes(),
+                &Uint128(1_000_000),
+            );
 
             let addr1 = deps
                 .api
@@ -2559,9 +2593,10 @@ mod tests {
             );
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
-            state_before.jackpot_reward = Uint128(1_000_000);
-            state_before.lottery_counter = 2;
-            config(&mut deps.storage).save(&state_before).unwrap();
+            jackpot_storage(&mut deps.storage).save(
+                &state_before.lottery_counter.to_be_bytes(),
+                &Uint128(1_000_000),
+            );
 
             let addr = deps
                 .api
@@ -2606,9 +2641,12 @@ mod tests {
             default_init(&mut deps);
 
             let mut state_before = config(&mut deps.storage).load().unwrap();
-            state_before.jackpot_reward = Uint128(1_000_000);
             state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
+            jackpot_storage(&mut deps.storage).save(
+                &(state_before.lottery_counter).to_be_bytes(),
+                &Uint128(1_000_000),
+            );
 
             let addr2 = deps
                 .api
@@ -2683,7 +2721,13 @@ mod tests {
             assert_eq!(not_claimed.claimed, false);
 
             let state_after = config(&mut deps.storage).load().unwrap();
-            assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);
+            let jackpot_before = jackpot_storage_read(&deps.storage)
+                .load(&state_before.lottery_counter.to_be_bytes())
+                .unwrap();
+            let jackpot_after = jackpot_storage_read(&deps.storage)
+                .load(&state_after.lottery_counter.to_be_bytes())
+                .unwrap();
+            assert_eq!(state_after, state_before);
         }
         #[test]
         fn success_collecting_for_someone() {
@@ -2698,9 +2742,12 @@ mod tests {
             default_init(&mut deps);
 
             let mut state_before = config(&mut deps.storage).load().unwrap();
-            state_before.jackpot_reward = Uint128(1_000_000);
             state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
+            jackpot_storage(&mut deps.storage).save(
+                &(state_before.lottery_counter).to_be_bytes(),
+                &Uint128(1_000_000),
+            );
 
             let addr2 = deps
                 .api
@@ -2780,7 +2827,13 @@ mod tests {
             assert_eq!(not_claimed.claimed, false);
 
             let state_after = config(&mut deps.storage).load().unwrap();
-            assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);
+            let jackpot_before = jackpot_storage_read(&deps.storage)
+                .load(&state_before.lottery_counter.to_be_bytes())
+                .unwrap();
+            let jackpot_after = jackpot_storage_read(&deps.storage)
+                .load(&state_after.lottery_counter.to_be_bytes())
+                .unwrap();
+            assert_eq!(state_after, state_before);
         }
         #[test]
         fn success_multiple_win() {
@@ -2793,10 +2846,14 @@ mod tests {
                 }],
             );
             default_init(&mut deps);
+
             let mut state_before = config(&mut deps.storage).load().unwrap();
-            state_before.jackpot_reward = Uint128(1_000_000);
             state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
+            jackpot_storage(&mut deps.storage).save(
+                &(state_before.lottery_counter).to_be_bytes(),
+                &Uint128(1_000_000),
+            );
 
             let addr2 = deps
                 .api
@@ -2878,7 +2935,13 @@ mod tests {
             assert_eq!(not_claimed.claimed, false);
 
             let state_after = config(&mut deps.storage).load().unwrap();
-            assert_eq!(state_after.jackpot_reward, state_before.jackpot_reward);
+            let jackpot_before = jackpot_storage_read(&deps.storage)
+                .load(&state_before.lottery_counter.to_be_bytes())
+                .unwrap();
+            let jackpot_after = jackpot_storage_read(&deps.storage)
+                .load(&state_after.lottery_counter.to_be_bytes())
+                .unwrap();
+            assert_eq!(state_after, state_before);
         }
     }
 
