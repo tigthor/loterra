@@ -98,10 +98,10 @@
       "description": "DAO Make a proposal",
       "type": "object",
       "required": [
-        "proposal"
+        "poll"
       ],
       "properties": {
-        "proposal": {
+        "poll": {
           "type": "object",
           "required": [
             "description",
@@ -112,16 +112,6 @@
               "anyOf": [
                 {
                   "$ref": "#/definitions/Uint128"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "contract_migration_address": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/HumanAddr"
                 },
                 {
                   "type": "null"
@@ -144,6 +134,16 @@
             },
             "proposal": {
               "$ref": "#/definitions/Proposal"
+            },
+            "recipient": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         }
@@ -179,10 +179,10 @@
       "description": "Valid a proposal",
       "type": "object",
       "required": [
-        "present_proposal"
+        "present_poll"
       ],
       "properties": {
-        "present_proposal": {
+        "present_poll": {
           "type": "object",
           "required": [
             "poll_id"
@@ -201,10 +201,10 @@
       "description": "Reject a proposal",
       "type": "object",
       "required": [
-        "reject_proposal"
+        "reject_poll"
       ],
       "properties": {
-        "reject_proposal": {
+        "reject_poll": {
           "type": "object",
           "required": [
             "poll_id"

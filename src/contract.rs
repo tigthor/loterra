@@ -82,12 +82,12 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         HandleMsg::Play {} => handle_play(deps, env),
         HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
         HandleMsg::Collect { address } => handle_collect(deps, env, address),
-        HandleMsg::Proposal {
+        HandleMsg::Poll {
             description,
             proposal,
             amount,
             prize_per_rank,
-            contract_migration_address,
+            recipient,
         } => handle_proposal(
             deps,
             env,
@@ -95,11 +95,11 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             proposal,
             amount,
             prize_per_rank,
-            contract_migration_address,
+            recipient,
         ),
         HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, poll_id, approve),
-        HandleMsg::PresentProposal { poll_id } => handle_present_proposal(deps, env, poll_id),
-        HandleMsg::RejectProposal { poll_id } => handle_reject_proposal(deps, env, poll_id),
+        HandleMsg::PresentPoll { poll_id } => handle_present_proposal(deps, env, poll_id),
+        HandleMsg::RejectPoll { poll_id } => handle_reject_proposal(deps, env, poll_id),
         HandleMsg::SafeLock {} => handle_safe_lock(deps, env),
         HandleMsg::Renounce {} => handle_renounce(deps, env),
     }
@@ -623,7 +623,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     proposal: Proposal,
     amount: Option<Uint128>,
     prize_per_rank: Option<Vec<u8>>,
-    contract_migration_address: Option<HumanAddr>,
+    recipient: Option<HumanAddr>,
 ) -> StdResult<HandleResponse> {
     let mut state = config(&mut deps.storage).load().unwrap();
     // Increment and get the new poll id for bucket key
@@ -757,7 +757,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         }
         Proposal::AmountToRegister
     } else if let Proposal::SecurityMigration = proposal {
-        match contract_migration_address {
+        match recipient {
             Some(migration_address) => {
                 let sender = deps.api.canonical_address(&env.message.sender)?;
                 let contract_address = deps.api.canonical_address(&env.contract.address)?;
@@ -809,7 +809,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                 }
 
                 proposal_amount = amount;
-                proposal_human_address = match contract_migration_address {
+                proposal_human_address = match recipient {
                     None => None,
                     Some(address) => Option::from(address),
                 }
@@ -820,7 +820,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         }
         Proposal::DaoFunding
     } else if let Proposal::StakingContractMigration = proposal {
-        match contract_migration_address {
+        match recipient {
             Some(migration_address) => {
                 let sender = deps.api.canonical_address(&env.message.sender)?;
                 let contract_address = deps.api.canonical_address(&env.contract.address)?;
@@ -2897,12 +2897,12 @@ mod tests {
             );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "This".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
-                contract_migration_address: None,
+                recipient: None,
             };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
@@ -2926,7 +2926,7 @@ mod tests {
             );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "let env = mock_env(before_all.default_sender.clone(), &[]);\
                  let env = mock_env(before_all.default_sender.clone(), &[]); let env \
                  = mock_env(before_all.default_sender.clone(), &[]); let env = mock_env(before_all.default_sender.clone(), &[]);\
@@ -2935,7 +2935,7 @@ mod tests {
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
-                contract_migration_address: None
+                recipient: None
             };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
@@ -2965,12 +2965,12 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
-                contract_migration_address: None,
+                recipient: None,
             };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
@@ -2984,41 +2984,41 @@ mod tests {
         }
 
         fn msg_constructor_none(proposal: Proposal) -> HandleMsg {
-            HandleMsg::Proposal {
+            HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: None,
                 prize_per_rank: None,
-                contract_migration_address: None,
+                recipient: None,
             }
         }
         fn msg_constructor_amount_out(proposal: Proposal) -> HandleMsg {
-            HandleMsg::Proposal {
+            HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: Option::from(Uint128(250)),
                 prize_per_rank: None,
-                contract_migration_address: None,
+                recipient: None,
             }
         }
 
         fn msg_constructor_prize_len_out(proposal: Proposal) -> HandleMsg {
-            HandleMsg::Proposal {
+            HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: None,
                 prize_per_rank: Option::from(vec![10, 20, 23, 23, 23, 23]),
-                contract_migration_address: None,
+                recipient: None,
             }
         }
 
         fn msg_constructor_prize_sum_out(proposal: Proposal) -> HandleMsg {
-            HandleMsg::Proposal {
+            HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: None,
                 prize_per_rank: Option::from(vec![100, 20, 23, 23]),
-                contract_migration_address: None,
+                recipient: None,
             }
         }
 
@@ -3193,14 +3193,14 @@ mod tests {
             proposal: Proposal,
             amount: Option<Uint128>,
             prize_per_rank: Option<Vec<u8>>,
-            contract_migration_address: Option<HumanAddr>,
+            recipient: Option<HumanAddr>,
         ) -> HandleMsg {
-            HandleMsg::Proposal {
+            HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount,
                 prize_per_rank,
-                contract_migration_address,
+                recipient,
             }
         }
 
@@ -3331,12 +3331,12 @@ mod tests {
         use super::*;
         // handle_vote
         fn create_poll<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env) {
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
-                contract_migration_address: None,
+                recipient: None,
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
@@ -3541,12 +3541,12 @@ mod tests {
         use super::*;
         // handle_reject
         fn create_poll<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env) {
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
-                contract_migration_address: None,
+                recipient: None,
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
@@ -3570,7 +3570,7 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-            let msg = HandleMsg::RejectProposal { poll_id: 1 };
+            let msg = HandleMsg::RejectPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3600,7 +3600,7 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
-            let msg = HandleMsg::RejectProposal { poll_id: 1 };
+            let msg = HandleMsg::RejectPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3624,7 +3624,7 @@ mod tests {
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
-            let msg = HandleMsg::RejectProposal { poll_id: 1 };
+            let msg = HandleMsg::RejectPoll { poll_id: 1 };
             let env = mock_env(before_all.default_sender_two.clone(), &[]);
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
@@ -3646,7 +3646,7 @@ mod tests {
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
-            let msg = HandleMsg::RejectProposal { poll_id: 1 };
+            let msg = HandleMsg::RejectPoll { poll_id: 1 };
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle(&mut deps, env.clone(), msg).unwrap();
@@ -3662,12 +3662,12 @@ mod tests {
         use super::*;
         // handle_present
         fn create_poll<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env) {
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
-                contract_migration_address: None,
+                recipient: None,
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
@@ -3675,12 +3675,12 @@ mod tests {
             mut deps: &mut Extern<S, A, Q>,
             env: Env,
         ) {
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::SecurityMigration,
                 amount: None,
                 prize_per_rank: None,
-                contract_migration_address: Option::from(HumanAddr::from("newAddress".to_string())),
+                recipient: Option::from(HumanAddr::from("newAddress".to_string())),
             };
             let _res = handle(&mut deps, env, msg).unwrap();
             println!("{:?}", _res);
@@ -3689,12 +3689,12 @@ mod tests {
             mut deps: &mut Extern<S, A, Q>,
             env: Env,
         ) {
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::DaoFunding,
                 amount: Option::from(Uint128(22)),
                 prize_per_rank: None,
-                contract_migration_address: None,
+                recipient: None,
             };
             let _res = handle(&mut deps, env, msg).unwrap();
         }
@@ -3702,12 +3702,12 @@ mod tests {
             mut deps: &mut Extern<S, A, Q>,
             env: Env,
         ) {
-            let msg = HandleMsg::Proposal {
+            let msg = HandleMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::StakingContractMigration,
                 amount: None,
                 prize_per_rank: None,
-                contract_migration_address: Option::from(HumanAddr::from("newAddress".to_string())),
+                recipient: Option::from(HumanAddr::from("newAddress".to_string())),
             };
             let _res = handle(&mut deps, env, msg).unwrap();
             println!("{:?}", _res);
@@ -3733,7 +3733,7 @@ mod tests {
                     amount: Uint128(9_000_000),
                 }],
             );
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3767,7 +3767,7 @@ mod tests {
                 })
                 .unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3790,7 +3790,7 @@ mod tests {
             create_poll(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3822,7 +3822,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
 
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             assert_eq!(res.log.len(), 3);
             assert_eq!(res.messages.len(), 0);
@@ -3873,7 +3873,7 @@ mod tests {
             env.block.height = poll_state.end_height + 1;
             let state_before = config(&mut deps.storage).load().unwrap();
 
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.log.len(), 3);
@@ -3928,7 +3928,7 @@ mod tests {
             env.block.height = poll_state.end_height + 1;
             let state_before = config(&mut deps.storage).load().unwrap();
 
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.log.len(), 3);
@@ -3987,7 +3987,7 @@ mod tests {
             env.block.height = poll_state.end_height + 1;
             config(&mut deps.storage).load().unwrap();
 
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
         }
@@ -4026,7 +4026,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
 
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             assert_eq!(res.log.len(), 3);
             assert_eq!(res.messages.len(), 0);
@@ -4080,7 +4080,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height - 1000;
 
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             assert_eq!(res.log.len(), 3);
             assert_eq!(res.messages.len(), 0);
@@ -4134,7 +4134,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height - 1000;
 
-            let msg = HandleMsg::PresentProposal { poll_id: 1 };
+            let msg = HandleMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             match res {
                 Err(GenericErr {
