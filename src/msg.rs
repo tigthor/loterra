@@ -32,19 +32,19 @@ pub enum HandleMsg {
     Collect { address: Option<HumanAddr> },
     /// DAO
     /// Make a proposal
-    Proposal {
+    Poll {
         description: String,
         proposal: Proposal,
         amount: Option<Uint128>,
         prize_per_rank: Option<Vec<u8>>,
-        contract_migration_address: Option<HumanAddr>,
+        recipient: Option<HumanAddr>,
     },
     /// Vote the proposal
     Vote { poll_id: u64, approve: bool },
     /// Valid a proposal
-    PresentProposal { poll_id: u64 },
+    PresentPoll { poll_id: u64 },
     /// Reject a proposal
-    RejectProposal { poll_id: u64 },
+    RejectPoll { poll_id: u64 },
     /// Admin
     /// Security owner can switch on off to prevent exploit
     SafeLock {},
