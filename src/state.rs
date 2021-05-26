@@ -18,6 +18,7 @@ const WINNING_COMBINATION_KEY: &[u8] = b"winning";
 const PLAYER_COUNT_KEY: &[u8] = b"player";
 const TICKET_COUNT_KEY: &[u8] = b"ticket";
 const JACKPOT_KEY: &[u8] = b"jackpot";
+const PLAYERS_KEY: &[u8] = b"players";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -119,6 +120,14 @@ pub fn combination_save<T: Storage>(
         },
     )?;
     if !exist {
+        all_players_storage(storage).update(&lottery_id.to_be_bytes(), |exist| match exist {
+            None => Ok(vec![address]),
+            Some(players) => {
+                let mut data = players;
+                data.push(address);
+                Ok(data)
+            }
+        })?;
         count_player_by_lottery(storage)
             .update(&lottery_id.to_be_bytes(), |exists| match exists {
                 None => Ok(Uint128(1)),
@@ -270,4 +279,12 @@ pub fn jackpot_storage<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
 
 pub fn jackpot_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
     bucket_read(JACKPOT_KEY, storage)
+}
+
+pub fn all_players_storage<T: Storage>(storage: &mut T) -> Bucket<T, Vec<CanonicalAddr>> {
+    bucket(PLAYERS_KEY, storage)
+}
+
+pub fn all_players_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
+    bucket_read(PLAYERS_KEY, storage)
 }
