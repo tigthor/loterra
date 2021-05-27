@@ -201,6 +201,28 @@
       }
     },
     {
+      "description": "Get all players by lottery id",
+      "type": "object",
+      "required": [
+        "players"
+      ],
+      "properties": {
+        "players": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      }
+    },
+    {
       "description": "Get the needed round for workers adding randomness to Terrand",
       "type": "object",
       "required": [
