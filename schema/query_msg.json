@@ -210,24 +210,12 @@
         "players": {
           "type": "object",
           "required": [
-            "limit",
-            "lottery_id",
-            "start_index"
+            "lottery_id"
           ],
           "properties": {
-            "limit": {
-              "type": "integer",
-              "format": "uint",
-              "minimum": 0.0
-            },
             "lottery_id": {
               "type": "integer",
               "format": "uint64",
-              "minimum": 0.0
-            },
-            "start_index": {
-              "type": "integer",
-              "format": "uint",
               "minimum": 0.0
             }
           }
