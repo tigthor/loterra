@@ -284,7 +284,6 @@ pub fn jackpot_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint12
 pub fn all_players_storage<T: Storage>(storage: &mut T) -> Bucket<T, Vec<CanonicalAddr>> {
     bucket(PLAYERS_KEY, storage)
 }
-
 pub fn all_players_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
     bucket_read(PLAYERS_KEY, storage)
 }

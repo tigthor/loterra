@@ -1197,11 +1197,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
             to_binary(&query_winner_rank(deps, lottery_id, rank)?)?
         }
         QueryMsg::Jackpot { lottery_id } => to_binary(&query_jackpot(deps, lottery_id)?)?,
-        QueryMsg::Players {
-            lottery_id,
-            start_index,
-            limit,
-        } => to_binary(&query_all_players(deps, lottery_id, start_index, limit)?)?,
+        QueryMsg::Players { lottery_id } => to_binary(&query_all_players(deps, lottery_id)?)?,
         _ => to_binary(&())?,
     };
     Ok(response)
@@ -1230,13 +1226,12 @@ fn query_winner_rank<S: Storage, A: Api, Q: Querier>(
         };
     Ok(amount)
 }
+
 fn query_all_players<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: u64,
-    start_index: usize,
-    limit: usize,
 ) -> StdResult<Vec<HumanAddr>> {
-    let player =
+    let players =
         match all_players_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
             None => {
                 return Err(StdError::NotFound {
@@ -1244,14 +1239,29 @@ fn query_all_players<S: Storage, A: Api, Q: Querier>(
                     backtrace: None,
                 })
             }
-            Some(players) => players[start_index..]
-                .to_vec()
+            Some(players) => players
                 .iter()
-                .take(limit)
-                .map(|e| deps.api.human_address(&e.clone()).unwrap())
+                .map(|e| deps.api.human_address(&e).unwrap())
                 .collect(),
         };
-    Ok(player)
+
+    /*let player =
+    match all_players_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
+        None => {
+            return Err(StdError::NotFound {
+                kind: "not found".to_string(),
+                backtrace: None,
+            })
+        }
+        Some(players) => players[start_index..]
+            .to_vec()
+            .iter()
+            .take(limit)
+            .map(|e| deps.api.human_address(&e.clone()).unwrap())
+            .collect(),
+    };*/
+
+    Ok(players)
 }
 fn query_jackpot<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
@@ -1734,22 +1744,21 @@ mod tests {
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
             let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
-                .load(addr.as_slice())
+                .load(&addr.as_slice())
                 .unwrap();
             assert_eq!(3, store_two.len());
-            let msg_query = QueryMsg::Players {
-                lottery_id: 1,
-                start_index: 0,
-                limit: 10,
-            };
+            let msg_query = QueryMsg::Players { lottery_id: 1 };
             let res = query(&deps, msg_query).unwrap();
             let formated_binary = String::from_utf8(res.into()).unwrap();
             println!("sdsds {:?}", formated_binary);
-            let store_three = all_players_storage_read(&deps.storage)
+
+            /*let store_three = all_players_storage_read(&deps.storage, 1u64)
                 .load(&1u64.to_be_bytes())
                 .unwrap();
             assert_eq!(store_three.len(), 1);
             assert_eq!(store_three[0], addr);
+            */
+
             // Play 2 more combination
             let msg = HandleMsg::Register {
                 address: None,
