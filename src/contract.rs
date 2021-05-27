@@ -483,7 +483,7 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
     let state = config(&mut deps.storage).load()?;
     let last_lottery_counter_round = state.lottery_counter - 1;
     let jackpot_reward =
-        jackpot_storage(&mut deps.storage).load(&state.lottery_counter.to_be_bytes())?;
+        jackpot_storage(&mut deps.storage).load(&last_lottery_counter_round.to_be_bytes())?;
 
     if state.safe_lock {
         return Err(StdError::generic_err(
@@ -2429,7 +2429,7 @@ mod tests {
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
             jackpot_storage(&mut deps.storage)
-                .save(&state.lottery_counter.to_be_bytes(), &Uint128::zero());
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
             state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
@@ -2488,7 +2488,7 @@ mod tests {
             default_init(&mut deps);
             let state = config_read(&mut deps.storage).load().unwrap();
             jackpot_storage(&mut deps.storage)
-                .save(&state.lottery_counter.to_be_bytes(), &Uint128::zero());
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play;
             let msg = HandleMsg::Collect { address: None };
@@ -2514,7 +2514,7 @@ mod tests {
             default_init(&mut deps);
             let state = config_read(&mut deps.storage).load().unwrap();
             jackpot_storage(&mut deps.storage)
-                .save(&state.lottery_counter.to_be_bytes(), &Uint128::zero());
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
@@ -2541,8 +2541,10 @@ mod tests {
             );
             default_init(&mut deps);
             let mut state = config(&mut deps.storage).load().unwrap();
-            jackpot_storage(&mut deps.storage)
-                .save(&state.lottery_counter.to_be_bytes(), &Uint128(1_000_000));
+            jackpot_storage(&mut deps.storage).save(
+                &(state.lottery_counter - 1).to_be_bytes(),
+                &Uint128(1_000_000),
+            );
 
             let state = config_read(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
@@ -2573,7 +2575,7 @@ mod tests {
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
             jackpot_storage(&mut deps.storage).save(
-                &state_before.lottery_counter.to_be_bytes(),
+                &(state_before.lottery_counter - 1).to_be_bytes(),
                 &Uint128(1_000_000),
             );
 
@@ -2643,7 +2645,7 @@ mod tests {
             default_init(&mut deps);
             let mut state_before = config(&mut deps.storage).load().unwrap();
             jackpot_storage(&mut deps.storage).save(
-                &state_before.lottery_counter.to_be_bytes(),
+                &(state_before.lottery_counter - 1).to_be_bytes(),
                 &Uint128(1_000_000),
             );
 
@@ -2693,7 +2695,7 @@ mod tests {
             state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
             jackpot_storage(&mut deps.storage).save(
-                &(state_before.lottery_counter).to_be_bytes(),
+                &(state_before.lottery_counter - 1).to_be_bytes(),
                 &Uint128(1_000_000),
             );
 
@@ -2771,10 +2773,10 @@ mod tests {
 
             let state_after = config(&mut deps.storage).load().unwrap();
             let jackpot_before = jackpot_storage_read(&deps.storage)
-                .load(&state_before.lottery_counter.to_be_bytes())
+                .load(&(state_before.lottery_counter - 1).to_be_bytes())
                 .unwrap();
             let jackpot_after = jackpot_storage_read(&deps.storage)
-                .load(&state_after.lottery_counter.to_be_bytes())
+                .load(&(state_after.lottery_counter - 1).to_be_bytes())
                 .unwrap();
             assert_eq!(state_after, state_before);
         }
@@ -2794,7 +2796,7 @@ mod tests {
             state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
             jackpot_storage(&mut deps.storage).save(
-                &(state_before.lottery_counter).to_be_bytes(),
+                &(state_before.lottery_counter - 1).to_be_bytes(),
                 &Uint128(1_000_000),
             );
 
@@ -2877,10 +2879,10 @@ mod tests {
 
             let state_after = config(&mut deps.storage).load().unwrap();
             let jackpot_before = jackpot_storage_read(&deps.storage)
-                .load(&state_before.lottery_counter.to_be_bytes())
+                .load(&(state_before.lottery_counter - 1).to_be_bytes())
                 .unwrap();
             let jackpot_after = jackpot_storage_read(&deps.storage)
-                .load(&state_after.lottery_counter.to_be_bytes())
+                .load(&(state_after.lottery_counter - 1).to_be_bytes())
                 .unwrap();
             assert_eq!(state_after, state_before);
         }
@@ -2900,7 +2902,7 @@ mod tests {
             state_before.lottery_counter = 2;
             config(&mut deps.storage).save(&state_before).unwrap();
             jackpot_storage(&mut deps.storage).save(
-                &(state_before.lottery_counter).to_be_bytes(),
+                &(state_before.lottery_counter - 1).to_be_bytes(),
                 &Uint128(1_000_000),
             );
 
@@ -2985,10 +2987,10 @@ mod tests {
 
             let state_after = config(&mut deps.storage).load().unwrap();
             let jackpot_before = jackpot_storage_read(&deps.storage)
-                .load(&state_before.lottery_counter.to_be_bytes())
+                .load(&(state_before.lottery_counter - 1).to_be_bytes())
                 .unwrap();
             let jackpot_after = jackpot_storage_read(&deps.storage)
-                .load(&state_after.lottery_counter.to_be_bytes())
+                .load(&(state_after.lottery_counter - 1).to_be_bytes())
                 .unwrap();
             assert_eq!(state_after, state_before);
         }
