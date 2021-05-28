@@ -58,7 +58,6 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
             .api
             .canonical_address(&msg.loterra_staking_contract_address)?,
         safe_lock: false,
-        latest_winning_number: "".to_string(),
         lottery_counter: 1,
         holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
     };
@@ -274,8 +273,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let res = encode_msg_query(msg, terrand_human)?;
     let res = wrapper_msg_terrand(&deps, res)?;
     let randomness_hash = hex::encode(res.randomness.as_slice());
-
-    state.latest_winning_number = randomness_hash.clone();
 
     let n = randomness_hash
         .char_indices()
@@ -1243,23 +1240,6 @@ fn query_all_players<S: Storage, A: Api, Q: Querier>(
                 .map(|e| deps.api.human_address(&e).unwrap())
                 .collect(),
         };
-
-    /*let player =
-    match all_players_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
-        None => {
-            return Err(StdError::NotFound {
-                kind: "not found".to_string(),
-                backtrace: None,
-            })
-        }
-        Some(players) => players[start_index..]
-            .to_vec()
-            .iter()
-            .take(limit)
-            .map(|e| deps.api.human_address(&e.clone()).unwrap())
-            .collect(),
-    };*/
-
     Ok(players)
 }
 fn query_jackpot<S: Storage, A: Api, Q: Querier>(
@@ -2249,7 +2229,6 @@ mod tests {
             assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
             assert_eq!(jackpot_reward_after, Uint128(1_799_820));
-            assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
@@ -2319,7 +2298,6 @@ mod tests {
             assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
             assert_eq!(jackpot_reward_after, Uint128(1_799_820));
-            assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
@@ -2414,7 +2392,6 @@ mod tests {
             assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
             assert_eq!(jackpot_reward_after, Uint128(1_799_820));
-            assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
