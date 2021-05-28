@@ -38,7 +38,6 @@ pub struct State {
     pub loterra_cw20_contract_address: CanonicalAddr,
     pub loterra_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
-    pub latest_winning_number: String,
     pub lottery_counter: u64,
     pub holders_bonus_block_time_end: u64,
 }
