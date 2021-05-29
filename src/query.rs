@@ -8,15 +8,28 @@ pub struct TerrandResponse {
     pub worker: HumanAddr,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
-pub struct LoterraBalanceResponse {
-    pub balance: Uint128,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetHolderResponse {
     pub address: HumanAddr,
     pub balance: Uint128,
     pub index: Decimal,
     pub pending_rewards: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct HoldersInfo {
+    pub address: HumanAddr,
+    pub balance: Uint128,
+    pub index: Decimal,
+    pub pending_rewards: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GetHoldersResponse {
+    pub holders: Vec<HoldersInfo>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
+pub struct LoterraBalanceResponse {
+    pub balance: Uint128,
 }

@@ -102,6 +102,7 @@
         "SecurityMigration",
         "DaoFunding",
         "StakingContractMigration",
+        "PollSurvey",
         "NotExist"
       ]
     },
