@@ -1212,12 +1212,7 @@ fn query_winner_rank<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<Uint128> {
     let amount =
         match winner_count_by_rank_read(&deps.storage, lottery_id).may_load(&rank.to_be_bytes())? {
-            None => {
-                return Err(StdError::NotFound {
-                    kind: "not found".to_string(),
-                    backtrace: None,
-                })
-            }
+            None => Uint128::zero(),
             Some(winners) => winners,
         };
     Ok(amount)
@@ -1247,12 +1242,7 @@ fn query_jackpot<S: Storage, A: Api, Q: Querier>(
     lottery_id: u64,
 ) -> StdResult<Uint128> {
     let amount = match jackpot_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
-        None => {
-            return Err(StdError::NotFound {
-                kind: "not found".to_string(),
-                backtrace: None,
-            })
-        }
+        None => Uint128::zero(),
         Some(jackpot) => jackpot,
     };
     Ok(amount)
@@ -1264,12 +1254,7 @@ fn query_count_ticket<S: Storage, A: Api, Q: Querier>(
     let amount = match count_total_ticket_by_lottery_read(&deps.storage)
         .may_load(&lottery_id.to_be_bytes())?
     {
-        None => {
-            return Err(StdError::NotFound {
-                kind: "not found".to_string(),
-                backtrace: None,
-            })
-        }
+        None => Uint128::zero(),
         Some(ticket) => ticket,
     };
     Ok(amount)
@@ -1280,12 +1265,7 @@ fn query_count_player<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<Uint128> {
     let amount =
         match count_player_by_lottery_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
-            None => {
-                return Err(StdError::NotFound {
-                    kind: "not found".to_string(),
-                    backtrace: None,
-                })
-            }
+            None => Uint128::zero(),
             Some(players) => players,
         };
     Ok(amount)
