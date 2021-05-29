@@ -15,8 +15,21 @@
             "combination"
           ],
           "properties": {
+            "address": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "combination": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         }
@@ -30,18 +43,6 @@
       ],
       "properties": {
         "play": {
-          "type": "object"
-        }
-      }
-    },
-    {
-      "description": "Public sale buy the token holders with 1:1 ratio",
-      "type": "object",
-      "required": [
-        "public_sale"
-      ],
-      "properties": {
-        "public_sale": {
           "type": "object"
         }
       }
@@ -73,11 +74,23 @@
       "description": "Collect jackpot",
       "type": "object",
       "required": [
-        "jackpot"
+        "collect"
       ],
       "properties": {
-        "jackpot": {
-          "type": "object"
+        "collect": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -85,10 +98,10 @@
       "description": "DAO Make a proposal",
       "type": "object",
       "required": [
-        "proposal"
+        "poll"
       ],
       "properties": {
-        "proposal": {
+        "poll": {
           "type": "object",
           "required": [
             "description",
@@ -99,16 +112,6 @@
               "anyOf": [
                 {
                   "$ref": "#/definitions/Uint128"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "contract_migration_address": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/HumanAddr"
                 },
                 {
                   "type": "null"
@@ -131,6 +134,16 @@
             },
             "proposal": {
               "$ref": "#/definitions/Proposal"
+            },
+            "recipient": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           }
         }
@@ -166,10 +179,10 @@
       "description": "Valid a proposal",
       "type": "object",
       "required": [
-        "present_proposal"
+        "present_poll"
       ],
       "properties": {
-        "present_proposal": {
+        "present_poll": {
           "type": "object",
           "required": [
             "poll_id"
@@ -188,10 +201,10 @@
       "description": "Reject a proposal",
       "type": "object",
       "required": [
-        "reject_proposal"
+        "reject_poll"
       ],
       "properties": {
-        "reject_proposal": {
+        "reject_poll": {
           "type": "object",
           "required": [
             "poll_id"
@@ -247,6 +260,7 @@
         "SecurityMigration",
         "DaoFunding",
         "StakingContractMigration",
+        "PollSurvey",
         "NotExist"
       ]
     },

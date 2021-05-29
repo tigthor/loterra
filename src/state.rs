@@ -15,17 +15,18 @@ const WINNER_RANK_KEY: &[u8] = b"rank";
 const POLL_KEY: &[u8] = b"poll";
 const VOTE_KEY: &[u8] = b"user";
 const WINNING_COMBINATION_KEY: &[u8] = b"winning";
+const PLAYER_COUNT_KEY: &[u8] = b"player";
+const TICKET_COUNT_KEY: &[u8] = b"ticket";
+const JACKPOT_KEY: &[u8] = b"jackpot";
+const PLAYERS_KEY: &[u8] = b"players";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub admin: CanonicalAddr,
     pub block_time_play: u64,
     pub every_block_time_play: u64,
-    pub public_sale_end_block_time: u64,
     pub denom_stable: String,
-    pub token_holder_supply: Uint128,
     pub combination_len: u8,
-    pub jackpot_reward: Uint128,
     pub jackpot_percentage_reward: u8,
     pub token_holder_percentage_fee_reward: u8,
     pub fee_for_drand_worker_in_percentage: u8,
@@ -37,9 +38,54 @@ pub struct State {
     pub loterra_cw20_contract_address: CanonicalAddr,
     pub loterra_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
-    pub latest_winning_number: String,
-    pub dao_funds: Uint128,
     pub lottery_counter: u64,
+    pub holders_bonus_block_time_end: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum PollStatus {
+    InProgress,
+    Passed,
+    Rejected,
+    RejectedByCreator,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum Proposal {
+    LotteryEveryBlockTime,
+    HolderFeePercentage,
+    DrandWorkerFeePercentage,
+    PrizePerRank,
+    JackpotRewardPercentage,
+    AmountToRegister,
+    SecurityMigration,
+    DaoFunding,
+    StakingContractMigration,
+    PollSurvey,
+    // test purpose
+    NotExist,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct PollInfoState {
+    pub creator: CanonicalAddr,
+    pub status: PollStatus,
+    pub end_height: u64,
+    pub start_height: u64,
+    pub description: String,
+    pub weight_yes_vote: Uint128,
+    pub weight_no_vote: Uint128,
+    pub yes_vote: u64,
+    pub no_vote: u64,
+    pub amount: Uint128,
+    pub prize_rank: Vec<u8>,
+    pub proposal: Proposal,
+    pub migration_address: Option<HumanAddr>,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct WinnerRewardClaims {
+    pub claimed: bool,
+    pub ranks: Vec<u8>,
 }
 
 pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
@@ -49,21 +95,50 @@ pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State> {
     singleton_read(storage, CONFIG_KEY)
 }
 
-// index = COMBINATION_KEY | lottery_id | combination -> address
-// TODO maybe implement index COMBINATION_KEY | lottery_id | combination | address -> true ?
-pub fn combination_bucket<T: Storage>(
+pub fn combination_save<T: Storage>(
     storage: &mut T,
     lottery_id: u64,
-) -> Bucket<T, Vec<CanonicalAddr>> {
-    Bucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
-}
-
-// index = COMBINATION_KEY | lottery_id | combination -> address
-pub fn combination_bucket_read<T: Storage>(
-    storage: &T,
-    lottery_id: u64,
-) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
-    ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+    address: CanonicalAddr,
+    combination: Vec<String>,
+) -> StdResult<()> {
+    let mut exist = true;
+    // Save combination by senders
+    user_combination_bucket(storage, lottery_id).update(
+        address.as_slice(),
+        |exists| match exists {
+            Some(combinations) => {
+                let mut modified = combinations;
+                modified.extend(combination.clone());
+                Ok(modified)
+            }
+            None => {
+                exist = false;
+                Ok(combination.clone())
+            }
+        },
+    )?;
+    if !exist {
+        all_players_storage(storage).update(&lottery_id.to_be_bytes(), |exist| match exist {
+            None => Ok(vec![address]),
+            Some(players) => {
+                let mut data = players;
+                data.push(address);
+                Ok(data)
+            }
+        })?;
+        count_player_by_lottery(storage)
+            .update(&lottery_id.to_be_bytes(), |exists| match exists {
+                None => Ok(Uint128(1)),
+                Some(p) => Ok(p.add(Uint128(1))),
+            })
+            .map(|_| ())?
+    }
+    count_total_ticket_by_lottery(storage)
+        .update(&lottery_id.to_be_bytes(), |exists| match exists {
+            None => Ok(Uint128(combination.len() as u128)),
+            Some(p) => Ok(p.add(Uint128(combination.len() as u128))),
+        })
+        .map(|_| ())
 }
 
 pub fn user_combination_bucket<T: Storage>(
@@ -80,16 +155,22 @@ pub fn user_combination_bucket_read<T: Storage>(
     ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct WinnerRewardClaims {
-    pub claimed: bool,
-    pub ranks: Vec<u8>,
+// index: lottery_id | count
+pub fn count_player_by_lottery<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
+    bucket(PLAYER_COUNT_KEY, storage)
+}
+// index: lottery_id | count
+pub fn count_player_by_lottery_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
+    bucket_read(PLAYER_COUNT_KEY, storage)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct RewardClaim {
-    pub rank: u8,
-    pub claimed: bool,
+// index: lottery_id | count
+pub fn count_total_ticket_by_lottery<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
+    bucket(TICKET_COUNT_KEY, storage)
+}
+// index: lottery_id | count
+pub fn count_total_ticket_by_lottery_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
+    bucket_read(TICKET_COUNT_KEY, storage)
 }
 
 // if an address won a lottery in this round, saved by rank
@@ -163,64 +244,12 @@ pub fn winner_count_by_rank<T: Storage>(storage: &mut T, lottery_id: u64) -> Buc
     Bucket::multilevel(&[WINNER_RANK_KEY, &lottery_id.to_be_bytes()], storage)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub enum PollStatus {
-    InProgress,
-    Passed,
-    Rejected,
-    RejectedByCreator,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub enum Proposal {
-    LotteryEveryBlockTime,
-    HolderFeePercentage,
-    DrandWorkerFeePercentage,
-    PrizePerRank,
-    JackpotRewardPercentage,
-    AmountToRegister,
-    SecurityMigration,
-    DaoFunding,
-    StakingContractMigration,
-    // test purpose
-    NotExist,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PollVoters {
-    pub voter: CanonicalAddr,
-    pub vote: bool,
-    pub weight: Uint128,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct PollInfoState {
-    pub creator: CanonicalAddr,
-    pub status: PollStatus,
-    pub end_height: u64,
-    pub start_height: u64,
-    pub description: String,
-    pub weight_yes_vote: Uint128,
-    pub weight_no_vote: Uint128,
-    pub yes_vote: u64,
-    pub no_vote: u64,
-    pub amount: Uint128,
-    pub prize_rank: Vec<u8>,
-    pub proposal: Proposal,
-    pub migration_address: Option<HumanAddr>,
-}
-
 pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState> {
     bucket(POLL_KEY, storage)
 }
 
 pub fn poll_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoState> {
     bucket_read(POLL_KEY, storage)
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct UserInfoState {
-    pub voted: Vec<u64>,
 }
 
 // poll vote storage index = VOTE_KEY:poll_id:address -> bool
@@ -240,4 +269,19 @@ pub fn lottery_winning_combination_storage_read<T: Storage>(
     storage: &T,
 ) -> ReadonlyBucket<T, String> {
     bucket_read(WINNING_COMBINATION_KEY, storage)
+}
+
+pub fn jackpot_storage<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
+    bucket(JACKPOT_KEY, storage)
+}
+
+pub fn jackpot_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
+    bucket_read(JACKPOT_KEY, storage)
+}
+
+pub fn all_players_storage<T: Storage>(storage: &mut T) -> Bucket<T, Vec<CanonicalAddr>> {
+    bucket(PLAYERS_KEY, storage)
+}
+pub fn all_players_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
+    bucket_read(PLAYERS_KEY, storage)
 }

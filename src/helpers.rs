@@ -1,9 +1,11 @@
 use crate::msg::QueryMsg;
-use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
-use crate::state::State;
+use crate::query::{
+    GetHolderResponse, GetHoldersResponse, LoterraBalanceResponse, TerrandResponse,
+};
+use crate::state::{poll_storage, PollStatus, State};
 use cosmwasm_std::{
-    to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HumanAddr, Querier,
-    QueryRequest, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
+    to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HandleResponse, HumanAddr,
+    LogAttribute, Querier, QueryRequest, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
 };
 pub fn count_match(x: &str, y: &str) -> usize {
     let mut count = 0;
@@ -55,20 +57,19 @@ pub fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
-pub fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<LoterraBalanceResponse> {
-    let res: LoterraBalanceResponse = deps.querier.query(&query)?;
-
-    Ok(res)
-}
-
 pub fn wrapper_msg_loterra_staking<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     query: QueryRequest<Empty>,
 ) -> StdResult<GetHolderResponse> {
     let res: GetHolderResponse = deps.querier.query(&query)?;
+
+    Ok(res)
+}
+pub fn wrapper_msg_loterra_all_staking<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<GetHoldersResponse> {
+    let res: GetHoldersResponse = deps.querier.query(&query)?;
 
     Ok(res)
 }
@@ -97,4 +98,67 @@ pub fn user_total_weight<S: Storage, A: Api, Q: Querier>(
     }
 
     weight
+}
+
+pub fn total_weight<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    state: &State,
+) -> Uint128 {
+    let mut weight = Uint128::zero();
+
+    // Ensure sender have some reward tokens
+    let msg = QueryMsg::Holders {};
+    let loterra_human = deps
+        .api
+        .human_address(&state.loterra_staking_contract_address.clone())
+        .unwrap();
+    let res = encode_msg_query(msg, loterra_human).unwrap();
+    let loterra_balance = wrapper_msg_loterra_all_staking(&deps, res).unwrap();
+
+    for holder in loterra_balance.holders {
+        if !holder.balance.is_zero() {
+            weight += holder.balance;
+        }
+    }
+
+    weight
+}
+
+pub fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    query: QueryRequest<Empty>,
+) -> StdResult<LoterraBalanceResponse> {
+    let res: LoterraBalanceResponse = deps.querier.query(&query)?;
+
+    Ok(res)
+}
+
+pub fn reject_proposal<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    poll_id: u64,
+) -> StdResult<HandleResponse> {
+    poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
+        let mut poll_data = poll.unwrap();
+        // Update the status to rejected
+        poll_data.status = PollStatus::Rejected;
+        Ok(poll_data)
+    })?;
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![
+            LogAttribute {
+                key: "action".to_string(),
+                value: "present the proposal".to_string(),
+            },
+            LogAttribute {
+                key: "proposal_id".to_string(),
+                value: poll_id.to_string(),
+            },
+            LogAttribute {
+                key: "proposal_result".to_string(),
+                value: "rejected".to_string(),
+            },
+        ],
+        data: None,
+    })
 }

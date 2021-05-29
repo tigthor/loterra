@@ -6,13 +6,11 @@
     "admin",
     "block_time_play",
     "combination_len",
-    "dao_funds",
     "denom_stable",
     "every_block_time_play",
     "fee_for_drand_worker_in_percentage",
+    "holders_bonus_block_time_end",
     "jackpot_percentage_reward",
-    "jackpot_reward",
-    "latest_winning_number",
     "loterra_cw20_contract_address",
     "loterra_staking_contract_address",
     "lottery_counter",
@@ -20,11 +18,9 @@
     "poll_default_end_height",
     "price_per_ticket_to_register",
     "prize_rank_winner_percentage",
-    "public_sale_end_block_time",
     "safe_lock",
     "terrand_contract_address",
-    "token_holder_percentage_fee_reward",
-    "token_holder_supply"
+    "token_holder_percentage_fee_reward"
   ],
   "properties": {
     "admin": {
@@ -40,9 +36,6 @@
       "format": "uint8",
       "minimum": 0.0
     },
-    "dao_funds": {
-      "$ref": "#/definitions/Uint128"
-    },
     "denom_stable": {
       "type": "string"
     },
@@ -56,16 +49,15 @@
       "format": "uint8",
       "minimum": 0.0
     },
+    "holders_bonus_block_time_end": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
     "jackpot_percentage_reward": {
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
-    },
-    "jackpot_reward": {
-      "$ref": "#/definitions/Uint128"
-    },
-    "latest_winning_number": {
-      "type": "string"
     },
     "loterra_cw20_contract_address": {
       "$ref": "#/definitions/CanonicalAddr"
@@ -99,11 +91,6 @@
         "minimum": 0.0
       }
     },
-    "public_sale_end_block_time": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
     "safe_lock": {
       "type": "boolean"
     },
@@ -114,9 +101,6 @@
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
-    },
-    "token_holder_supply": {
-      "$ref": "#/definitions/Uint128"
     }
   },
   "definitions": {
