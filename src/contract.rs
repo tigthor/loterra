@@ -6,23 +6,14 @@ use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
-use crate::state::{
-    all_players_storage_read, all_winners, combination_save, config, config_read,
-    count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage,
-    jackpot_storage_read, lottery_winning_combination_storage,
-    lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage,
-    winner_storage_read, PollInfoState, PollStatus, Proposal, State,
-};
+use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_config, read_config};
 use crate::taxation::deduct_tax;
-use cosmwasm_std::{
-    to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
-    HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128,
-};
+use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, Response, MessageInfo, DepsMut, Addr, attr};
 use std::ops::{Add, Mul, Sub};
+use crate::error::ContractError;
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
-const DRAND_PERIOD: u64 = 30;
+const DRAND_PERIOD: u64 = 30;v
 const DRAND_NEXT_ROUND_SECURITY: u64 = 10;
 const MAX_DESCRIPTION_LEN: u64 = 255;
 const MIN_DESCRIPTION_LEN: u64 = 6;
@@ -32,11 +23,13 @@ const DIV_BLOCK_TIME_BY_X: u64 = 2;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
-pub fn init<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    msg: InitMsg,
-) -> StdResult<InitResponse> {
+#[entry_point]
+pub fn instantiate(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
     let state = State {
         admin: deps.api.canonical_address(&env.message.sender)?,
         block_time_play: msg.block_time_play,
@@ -61,25 +54,22 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         lottery_counter: 1,
         holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
     };
+    STATE.save(deps.storage, &state)?;
 
-    config(&mut deps.storage).save(&state)?;
-    Ok(InitResponse::default())
+    Ok(Response::default())
 }
 
 // And declare a custom Error variant for the ones where you will want to make use of it
-pub fn handle<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    msg: HandleMsg,
-) -> StdResult<HandleResponse> {
+#[entry_point]
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         HandleMsg::Register {
             address,
             combination,
-        } => handle_register(deps, env, address, combination),
-        HandleMsg::Play {} => handle_play(deps, env),
-        HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
-        HandleMsg::Collect { address } => handle_collect(deps, env, address),
+        } => handle_register(deps, env, info, address, combination),
+        HandleMsg::Play {} => handle_play(deps, env, info),
+        HandleMsg::Claim { addresses } => handle_claim(deps, env, info, addresses),
+        HandleMsg::Collect { address } => handle_collect(deps, env, info, address),
         HandleMsg::Poll {
             description,
             proposal,
@@ -89,135 +79,113 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
         } => handle_proposal(
             deps,
             env,
+            info,
             description,
             proposal,
             amount,
             prize_per_rank,
             recipient,
         ),
-        HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, poll_id, approve),
-        HandleMsg::PresentPoll { poll_id } => handle_present_proposal(deps, env, poll_id),
-        HandleMsg::RejectPoll { poll_id } => handle_reject_proposal(deps, env, poll_id),
-        HandleMsg::SafeLock {} => handle_safe_lock(deps, env),
-        HandleMsg::Renounce {} => handle_renounce(deps, env),
+        HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, info, poll_id, approve),
+        HandleMsg::PresentPoll { poll_id } => handle_present_proposal(deps, env, info, poll_id),
+        HandleMsg::RejectPoll { poll_id } => handle_reject_proposal(deps, env, info, poll_id),
+        HandleMsg::SafeLock {} => handle_safe_lock(deps,info),
+        HandleMsg::Renounce {} => handle_renounce(deps, env, info),
     }
 }
 
-pub fn handle_renounce<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_renounce(
+    deps: DepsMut,
     env: Env,
-) -> StdResult<HandleResponse> {
+    info: MessageInfo
+) -> Result<Response, ContractError> {
     // Load the state
-    let mut state = config(&mut deps.storage).load()?;
-    let sender = deps.api.canonical_address(&env.message.sender)?;
+    let mut state = read_config(deps.storage)?;
+    let sender = deps.api.addr_canonicalize(info.sender.as_str())?;
     if state.admin != sender {
-        return Err(StdError::Unauthorized { backtrace: None });
+        return Err(ContractError::Unauthorized {});
     }
     if state.safe_lock {
-        return Err(StdError::generic_err("Contract is locked"));
+        return  Err(ContractError::Locked {});
     }
 
-    state.admin = deps.api.canonical_address(&env.contract.address)?;
-    config(&mut deps.storage).save(&state)?;
-    Ok(HandleResponse::default())
+    state.admin = deps.api.addr_canonicalize(env.contract.address.as_str())?;
+    store_config(deps.storage, &state)?;
+
+    Ok(Response::default())
 }
 
-pub fn handle_safe_lock<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-) -> StdResult<HandleResponse> {
+pub fn handle_safe_lock(
+    deps: DepsMut,
+    info: MessageInfo
+) -> Result<Response, ContractError> {
     // Load the state
-    let mut state = config(&mut deps.storage).load()?;
-    let sender = deps.api.canonical_address(&env.message.sender)?;
+    let mut state = read_config(deps.storage)?;
+    let sender = deps.api.addr_canonicalize(info.sender.as_str())?;
     if state.admin != sender {
-        return Err(StdError::Unauthorized { backtrace: None });
+        return Err(ContractError::Unauthorized {});
     }
 
     state.safe_lock = !state.safe_lock;
-    config(&mut deps.storage).save(&state)?;
+    store_config(deps.storage, &state)?;
 
-    Ok(HandleResponse::default())
+    Ok(Response::default())
 }
 
-pub fn handle_register<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_register(
+    deps: DepsMut,
     env: Env,
-    address: Option<HumanAddr>,
+    info: MessageInfo,
+    address: Option<String>,
     combination: Vec<String>,
-) -> StdResult<HandleResponse> {
+) -> Result<Response, ContractError>  {
     // Load the state
-    let state = config(&mut deps.storage).load()?;
+    let state = read_config(deps.storage)?;
     if state.safe_lock {
-        return Err(StdError::generic_err(
-            "Contract deactivated for update or/and preventing security issue",
-        ));
+        return Err(ContractError::Deactivated{});
     }
-
     // Check if the lottery is about to play and cancel new ticket to enter until play
     if env.block.time > state.block_time_play {
-        return Err(StdError::generic_err(
-            "Lottery is about to start wait until the end before register",
-        ));
+        return Err(ContractError::LotteryStart{});
     }
 
     // Check if address filled as param
     let addr = match address {
-        None => env.message.sender,
-        Some(addr) => addr,
+        None => info.sender,
+        Some(addr) => Addr::unchecked(addr),
     };
 
     for combo in combination.clone() {
         // Regex to check if the combination is allowed
         if !is_lower_hex(&combo, state.combination_len) {
-            return Err(StdError::generic_err(format!(
-                "Not authorized use combination of [a-f] and [0-9] with length {}",
-                state.combination_len
-            )));
+            return Err(ContractError::CombinationFormatError(state.combination_len));
         }
     }
 
     // Check if some funds are sent
-    let sent = match env.message.sent_funds.len() {
-        0 => Err(StdError::generic_err(format!(
-            "you need to send {}{} per combination in order to register",
-            state.price_per_ticket_to_register.clone(),
-            state.denom_stable
-        ))),
+    let sent = match info.funds.len() {
+        0 => Err(ContractError::RegisteredAmount(&state.price_per_ticket_to_register, &state.denom_stable)),
         1 => {
-            if env.message.sent_funds[0].denom == state.denom_stable {
-                Ok(env.message.sent_funds[0].amount)
+            if info.funds[0].denom == state.denom_stable {
+                Ok(info.funds[0].amount)
             } else {
-                Err(StdError::generic_err(format!(
-                    "To register you need to send {}{} per combination",
-                    state.price_per_ticket_to_register,
-                    state.denom_stable.clone()
-                )))
+                Err(ContractError::RegisteredAmount(&state.price_per_ticket_to_register, &state.denom_stable))
             }
         }
-        _ => Err(StdError::generic_err(format!(
-            "Only send {} to register",
-            state.denom_stable
-        ))),
+        _ => Err(ContractError::RegisterRequireAmount(&state.denom_stable)),
     }?;
 
     if sent.is_zero() {
-        return Err(StdError::generic_err(format!(
-            "you need to send {}{} per combination in order to register",
-            state.price_per_ticket_to_register.clone(),
-            state.denom_stable
-        )));
+        return Err(ContractError::RegisteredAmount(state.price_per_ticket_to_register.clone(), &state.denom_stable));
     }
     // Handle the player is not sending too much or too less
     if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
-        return Err(StdError::generic_err(format!(
-            "send {}{}",
-            state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
-            state.denom_stable
-        )));
+        return Err(ContractError::SendRequiredAmount(&state.price_per_ticket_to_register.u128() * combination.len() as u128,
+                                                     state.denom_stable));
     }
 
     // save combination
-    let addr_raw = deps.api.canonical_address(&addr)?;
+    let addr_raw = deps.api.addr_canonicalize(&addr.as_str())?;
     combination_save(
         &mut deps.storage,
         state.lottery_counter,
@@ -225,13 +193,11 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         combination,
     )?;
 
-    Ok(HandleResponse {
+    Ok(Response {
+        submessages: vec![],
         messages: vec![],
-        log: vec![LogAttribute {
-            key: "action".to_string(),
-            value: "register".to_string(),
-        }],
         data: None,
+        attributes: vec![attr("action", "register")]
     })
 }
 

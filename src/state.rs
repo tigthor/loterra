@@ -1,11 +1,12 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, Order, StdResult, Storage, Uint128};
+use cosmwasm_std::{CanonicalAddr, Order, StdResult, Storage, Uint128};
 use cosmwasm_storage::{
     bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
     Singleton,
 };
+use cw_storage_plus::{Bound, Item, Map};
 use std::ops::Add;
 
 pub static CONFIG_KEY: &[u8] = b"config";
@@ -40,6 +41,14 @@ pub struct State {
     pub safe_lock: bool,
     pub lottery_counter: u64,
     pub holders_bonus_block_time_end: u64,
+}
+pub const STATE: Item<State> = Item::new("state");
+pub fn store_config(storage: &mut dyn Storage, state: &State) -> StdResult<()> {
+    STATE.save(storage, state)
+}
+
+pub fn read_config(storage: &dyn Storage) -> StdResult<State> {
+    STATE.load(storage)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -80,7 +89,7 @@ pub struct PollInfoState {
     pub amount: Uint128,
     pub prize_rank: Vec<u8>,
     pub proposal: Proposal,
-    pub migration_address: Option<HumanAddr>,
+    pub migration_address: Option<String>,
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct WinnerRewardClaims {
@@ -88,22 +97,30 @@ pub struct WinnerRewardClaims {
     pub ranks: Vec<u8>,
 }
 
-pub fn config<S: Storage>(storage: &mut S) -> Singleton<S, State> {
-    singleton(storage, CONFIG_KEY)
-}
-pub fn config_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, State> {
-    singleton_read(storage, CONFIG_KEY)
-}
+pub const PREFIXED_USER_COMBINATION: Map<(&[u8], &[u8]), Vec<String>> = Map::new("holders");
 
-pub fn combination_save<T: Storage>(
-    storage: &mut T,
+pub fn combination_save(
+    storage: &mut dyn Storage,
     lottery_id: u64,
     address: CanonicalAddr,
     combination: Vec<String>,
 ) -> StdResult<()> {
     let mut exist = true;
     // Save combination by senders
-    user_combination_bucket(storage, lottery_id).update(
+    PREFIXED_USER_COMBINATION.update(storage, (&lottery_id.to_be_bytes(), address.as_slice()),
+         |exists| match exists {
+             Some(combinations) => {
+                 let mut modified = combinations;
+                 modified.extend(combination.clone());
+                 Ok(modified)
+             }
+             None => {
+                 exist = false;
+                 Ok(combination.clone())
+             }
+         },
+    )?;
+    /*user_combination_bucket(storage, lottery_id).update(
         address.as_slice(),
         |exists| match exists {
             Some(combinations) => {
@@ -116,7 +133,7 @@ pub fn combination_save<T: Storage>(
                 Ok(combination.clone())
             }
         },
-    )?;
+    )?;*/
     if !exist {
         all_players_storage(storage).update(&lottery_id.to_be_bytes(), |exist| match exist {
             None => Ok(vec![address]),
@@ -141,12 +158,17 @@ pub fn combination_save<T: Storage>(
         .map(|_| ())
 }
 
-pub fn user_combination_bucket<T: Storage>(
-    storage: &mut T,
+
+
+pub fn user_combination_bucket(
+    storage: &mut dyn Storage,
     lottery_id: u64,
-) -> Bucket<T, Vec<String>> {
+) -> StdResult<()>{
     Bucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
+    PREFIXED_USER_COMBINATION.save(storage, &lottery_id.to_be_bytes(), &());
+    pub const PREFIXED_USER_COMBINATION: Map<&[u8], u64> = Map::new("holders");
 }
+
 
 pub fn user_combination_bucket_read<T: Storage>(
     storage: &T,
