@@ -5,18 +5,6 @@ use cosmwasm_std::{CanonicalAddr, Order, StdResult, Storage, Uint128};
 use cw_storage_plus::{Bound, Item, Map};
 use std::ops::Add;
 
-pub static CONFIG_KEY: &[u8] = b"config";
-const COMBINATION_KEY: &[u8] = b"combination";
-const WINNER_KEY: &[u8] = b"winner";
-const WINNER_RANK_KEY: &[u8] = b"rank";
-const POLL_KEY: &[u8] = b"poll";
-const VOTE_KEY: &[u8] = b"user";
-const WINNING_COMBINATION_KEY: &[u8] = b"winning";
-const PLAYER_COUNT_KEY: &[u8] = b"player";
-const TICKET_COUNT_KEY: &[u8] = b"ticket";
-const JACKPOT_KEY: &[u8] = b"jackpot";
-const PLAYERS_KEY: &[u8] = b"players";
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub admin: CanonicalAddr,
