@@ -2,10 +2,7 @@ use crate::helpers::{
     count_match, encode_msg_execute, encode_msg_query, is_lower_hex, reject_proposal, total_weight,
     user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand,
 };
-use crate::msg::{
-    AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
-    InitMsg, QueryMsg, RoundResponse, WinnerResponse,
-};
+use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse, InstantiateMsg, ExecuteMsg};
 use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_config, read_config};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, Response, MessageInfo, DepsMut, Addr, attr};
@@ -186,8 +183,9 @@ pub fn handle_register(
 
     // save combination
     let addr_raw = deps.api.addr_canonicalize(&addr.as_str())?;
+
     combination_save(
-        &mut deps.storage,
+        deps.storage,
         state.lottery_counter,
         addr_raw,
         combination,
