@@ -2,10 +2,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{CanonicalAddr, Order, StdResult, Storage, Uint128};
-use cosmwasm_storage::{
-    bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
-    Singleton,
-};
 use cw_storage_plus::{Bound, Item, Map};
 use std::ops::Add;
 
@@ -98,9 +94,16 @@ pub struct WinnerRewardClaims {
 }
 
 pub const PREFIXED_USER_COMBINATION: Map<(&[u8], &[u8]), Vec<String>> = Map::new("holders");
-pub const PREFIXED_ALL_USER_COMBINATION: Map<&[u8], Vec<CanonicalAddr>> = Map::new("players");
-pub const PREFIXED_COUNT_PLAYERS: Map<&[u8], Uint128> = Map::new("count");
-pub const PREFIXED_COUNT_TICKETS: Map<&[u8], Uint128> = Map::new("tickets");
+pub const PREFIXED_WINNER: Map<(&[u8], &[u8]), WinnerRewardClaims> = Map::new("winner");
+pub const PREFIXED_RANK: Map<(&[u8], &[u8]), Uint128> = Map::new("rank");
+pub const PREFIXED_POLL_VOTE: Map<(&[u8], &[u8]), bool> = Map::new("vote");
+pub const ALL_USER_COMBINATION: Map<&[u8], Vec<CanonicalAddr>> = Map::new("players");
+pub const COUNT_PLAYERS: Map<&[u8], Uint128> = Map::new("count");
+pub const COUNT_TICKETS: Map<&[u8], Uint128> = Map::new("tickets");
+pub const POLL: Map<&[u8], PollInfoState> = Map::new("poll");
+pub const WINNING_COMBINATION: Map<&[u8], String> = Map::new("winning");
+pub const JACKPOT: Map<&[u8], Uint128> = Map::new("jackpot");
+
 pub fn combination_save(
     storage: &mut dyn Storage,
     lottery_id: u64,
@@ -123,7 +126,7 @@ pub fn combination_save(
          },
     )?;
     if !exist {
-        PREFIXED_ALL_USER_COMBINATION.update(storage, &lottery_id.to_be_bytes(), |exist| match exist {
+        ALL_USER_COMBINATION.update(storage, &lottery_id.to_be_bytes(), |exist| match exist {
             None => Ok(vec![address]),
             Some(players) => {
                 let mut data = players;
@@ -131,62 +134,27 @@ pub fn combination_save(
                 Ok(data)
             }
         })?;
-        PREFIXED_COUNT_PLAYERS.update(storage, &lottery_id.to_be_bytes(),|exists| match exists {
+        COUNT_PLAYERS.update(storage, &lottery_id.to_be_bytes(),|exists| match exists {
             None => Ok(Uint128(1)),
             Some(p) => Ok(p.add(Uint128(1))),
         })
             .map(|_| ())?
     }
-    PREFIXED_COUNT_TICKETS.update(storage, &lottery_id.to_be_bytes(), |exists| match exists {
+    COUNT_TICKETS.update(storage, &lottery_id.to_be_bytes(), |exists| match exists {
         None => Ok(Uint128(combination.len() as u128)),
         Some(p) => Ok(p.add(Uint128(combination.len() as u128))),
     })
         .map(|_| ())
 }
 
-
-
-pub fn user_combination_bucket(
-    storage: &mut dyn Storage,
-    lottery_id: u64,
-) -> StdResult<()>{
-    Bucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
-    PREFIXED_USER_COMBINATION.save(storage, &lottery_id.to_be_bytes(), &());
-    pub const PREFIXED_USER_COMBINATION: Map<&[u8], u64> = Map::new("holders");
-}
-
-
-pub fn user_combination_bucket_read<T: Storage>(
-    storage: &T,
-    lottery_id: u64,
-) -> ReadonlyBucket<T, Vec<String>> {
-    ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
-}
-
-// if an address won a lottery in this round, saved by rank
-// index address -> winner claim
-pub fn winner_storage<T: Storage>(
-    storage: &mut T,
-    lottery_id: u64,
-) -> Bucket<T, WinnerRewardClaims> {
-    Bucket::multilevel(&[WINNER_KEY, &lottery_id.to_be_bytes()], storage)
-}
-
-pub fn winner_storage_read<T: Storage>(
-    storage: &T,
-    lottery_id: u64,
-) -> ReadonlyBucket<T, WinnerRewardClaims> {
-    ReadonlyBucket::multilevel(&[WINNER_KEY, &lottery_id.to_be_bytes()], storage)
-}
-
 // save winner
-pub fn save_winner<T: Storage>(
-    storage: &mut T,
+pub fn save_winner(
+    storage: &mut dyn Storage,
     lottery_id: u64,
     addr: CanonicalAddr,
     rank: u8,
 ) -> StdResult<()> {
-    winner_storage(storage, lottery_id).update(addr.as_slice(), |exists| match exists {
+    PREFIXED_WINNER.update(storage, (&lottery_id.to_be_bytes(), addr.as_slice()),|exists| match exists {
         None => Ok(WinnerRewardClaims {
             claimed: false,
             ranks: vec![rank],
@@ -200,11 +168,11 @@ pub fn save_winner<T: Storage>(
             })
         }
     })?;
-    winner_count_by_rank(storage, lottery_id)
-        .update(&rank.to_be_bytes(), |exists| match exists {
-            None => Ok(Uint128(1)),
-            Some(r) => Ok(r.add(Uint128(1))),
-        })
+
+    PREFIXED_RANK.update(storage, (&lottery_id.to_be_bytes(), &rank.to_be_bytes()), |exists| match exists {
+        None => Ok(Uint128(1)),
+        Some(r) => Ok(r.add(Uint128(1))),
+    })
         .map(|_| ())
 }
 
@@ -212,61 +180,12 @@ pub fn all_winners<T: Storage>(
     storage: &T,
     lottery_id: u64,
 ) -> StdResult<Vec<(CanonicalAddr, WinnerRewardClaims)>> {
-    winner_storage_read(storage, lottery_id)
-        .range(None, None, Order::Ascending)
+    PREFIXED_WINNER.prefix(&lottery_id.to_be_bytes()).range( storage,None, None, Order::Ascending)
         .map(|item| {
             let (addr, claim) = item?;
             Ok((CanonicalAddr::from(addr), claim))
         })
         .collect()
-}
-
-// index: lottery_id | rank -> count
-pub fn winner_count_by_rank_read<T: Storage>(
-    storage: &T,
-    lottery_id: u64,
-) -> ReadonlyBucket<T, Uint128> {
-    ReadonlyBucket::multilevel(&[WINNER_RANK_KEY, &lottery_id.to_be_bytes()], storage)
-}
-
-// index: lottery_id | rank -> count
-pub fn winner_count_by_rank<T: Storage>(storage: &mut T, lottery_id: u64) -> Bucket<T, Uint128> {
-    Bucket::multilevel(&[WINNER_RANK_KEY, &lottery_id.to_be_bytes()], storage)
-}
-
-pub fn poll_storage<T: Storage>(storage: &mut T) -> Bucket<T, PollInfoState> {
-    bucket(POLL_KEY, storage)
-}
-
-pub fn poll_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, PollInfoState> {
-    bucket_read(POLL_KEY, storage)
-}
-
-// poll vote storage index = VOTE_KEY:poll_id:address -> bool
-pub fn poll_vote_storage<T: Storage>(storage: &mut T, poll_id: u64) -> Bucket<T, bool> {
-    Bucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
-}
-
-pub fn poll_vote_storage_read<T: Storage>(storage: &T, poll_id: u64) -> ReadonlyBucket<T, bool> {
-    ReadonlyBucket::multilevel(&[VOTE_KEY, &poll_id.to_be_bytes()], storage)
-}
-
-pub fn lottery_winning_combination_storage<T: Storage>(storage: &mut T) -> Bucket<T, String> {
-    bucket(WINNING_COMBINATION_KEY, storage)
-}
-
-pub fn lottery_winning_combination_storage_read<T: Storage>(
-    storage: &T,
-) -> ReadonlyBucket<T, String> {
-    bucket_read(WINNING_COMBINATION_KEY, storage)
-}
-
-pub fn jackpot_storage<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
-    bucket(JACKPOT_KEY, storage)
-}
-
-pub fn jackpot_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
-    bucket_read(JACKPOT_KEY, storage)
 }
 
 
