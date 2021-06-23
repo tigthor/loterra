@@ -13,7 +13,7 @@ use std::ops::{Add, Mul, Sub};
 use crate::error::ContractError;
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
-const DRAND_PERIOD: u64 = 30;v
+const DRAND_PERIOD: u64 = 30;
 const DRAND_NEXT_ROUND_SECURITY: u64 = 10;
 const MAX_DESCRIPTION_LEN: u64 = 255;
 const MIN_DESCRIPTION_LEN: u64 = 6;
