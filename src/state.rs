@@ -98,7 +98,9 @@ pub struct WinnerRewardClaims {
 }
 
 pub const PREFIXED_USER_COMBINATION: Map<(&[u8], &[u8]), Vec<String>> = Map::new("holders");
-
+pub const PREFIXED_ALL_USER_COMBINATION: Map<&[u8], Vec<CanonicalAddr>> = Map::new("players");
+pub const PREFIXED_COUNT_PLAYERS: Map<&[u8], Uint128> = Map::new("count");
+pub const PREFIXED_COUNT_TICKETS: Map<&[u8], Uint128> = Map::new("tickets");
 pub fn combination_save(
     storage: &mut dyn Storage,
     lottery_id: u64,
@@ -120,22 +122,8 @@ pub fn combination_save(
              }
          },
     )?;
-    /*user_combination_bucket(storage, lottery_id).update(
-        address.as_slice(),
-        |exists| match exists {
-            Some(combinations) => {
-                let mut modified = combinations;
-                modified.extend(combination.clone());
-                Ok(modified)
-            }
-            None => {
-                exist = false;
-                Ok(combination.clone())
-            }
-        },
-    )?;*/
     if !exist {
-        all_players_storage(storage).update(&lottery_id.to_be_bytes(), |exist| match exist {
+        PREFIXED_ALL_USER_COMBINATION.update(storage, &lottery_id.to_be_bytes(), |exist| match exist {
             None => Ok(vec![address]),
             Some(players) => {
                 let mut data = players;
@@ -143,18 +131,16 @@ pub fn combination_save(
                 Ok(data)
             }
         })?;
-        count_player_by_lottery(storage)
-            .update(&lottery_id.to_be_bytes(), |exists| match exists {
-                None => Ok(Uint128(1)),
-                Some(p) => Ok(p.add(Uint128(1))),
-            })
+        PREFIXED_COUNT_PLAYERS.update(storage, &lottery_id.to_be_bytes(),|exists| match exists {
+            None => Ok(Uint128(1)),
+            Some(p) => Ok(p.add(Uint128(1))),
+        })
             .map(|_| ())?
     }
-    count_total_ticket_by_lottery(storage)
-        .update(&lottery_id.to_be_bytes(), |exists| match exists {
-            None => Ok(Uint128(combination.len() as u128)),
-            Some(p) => Ok(p.add(Uint128(combination.len() as u128))),
-        })
+    PREFIXED_COUNT_TICKETS.update(storage, &lottery_id.to_be_bytes(), |exists| match exists {
+        None => Ok(Uint128(combination.len() as u128)),
+        Some(p) => Ok(p.add(Uint128(combination.len() as u128))),
+    })
         .map(|_| ())
 }
 
@@ -175,24 +161,6 @@ pub fn user_combination_bucket_read<T: Storage>(
     lottery_id: u64,
 ) -> ReadonlyBucket<T, Vec<String>> {
     ReadonlyBucket::multilevel(&[COMBINATION_KEY, &lottery_id.to_be_bytes()], storage)
-}
-
-// index: lottery_id | count
-pub fn count_player_by_lottery<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
-    bucket(PLAYER_COUNT_KEY, storage)
-}
-// index: lottery_id | count
-pub fn count_player_by_lottery_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
-    bucket_read(PLAYER_COUNT_KEY, storage)
-}
-
-// index: lottery_id | count
-pub fn count_total_ticket_by_lottery<T: Storage>(storage: &mut T) -> Bucket<T, Uint128> {
-    bucket(TICKET_COUNT_KEY, storage)
-}
-// index: lottery_id | count
-pub fn count_total_ticket_by_lottery_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint128> {
-    bucket_read(TICKET_COUNT_KEY, storage)
 }
 
 // if an address won a lottery in this round, saved by rank
@@ -301,9 +269,5 @@ pub fn jackpot_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Uint12
     bucket_read(JACKPOT_KEY, storage)
 }
 
-pub fn all_players_storage<T: Storage>(storage: &mut T) -> Bucket<T, Vec<CanonicalAddr>> {
-    bucket(PLAYERS_KEY, storage)
-}
-pub fn all_players_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
-    bucket_read(PLAYERS_KEY, storage)
-}
+
+
