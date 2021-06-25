@@ -27,11 +27,11 @@ pub struct State {
     pub holders_bonus_block_time_end: u64,
 }
 pub const STATE: Item<State> = Item::new("state");
-pub fn store_config(storage: &mut dyn Storage, state: &State) -> StdResult<()> {
+pub fn store_state(storage: &mut dyn Storage, state: &State) -> StdResult<()> {
     STATE.save(storage, state)
 }
 
-pub fn read_config(storage: &dyn Storage) -> StdResult<State> {
+pub fn read_state(storage: &dyn Storage) -> StdResult<State> {
     STATE.load(storage)
 }
 
