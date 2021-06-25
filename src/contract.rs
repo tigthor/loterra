@@ -3,11 +3,12 @@ use crate::helpers::{
     user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand,
 };
 use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse, InstantiateMsg, ExecuteMsg};
-use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_config, read_config};
+use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_state, read_state, WINNING_COMBINATION, JACKPOT, ALL_USER_COMBINATION, PREFIXED_USER_COMBINATION, PREFIXED_WINNER};
 use crate::taxation::deduct_tax;
-use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, Response, MessageInfo, DepsMut, Addr, attr};
+use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, Response, MessageInfo, DepsMut, Addr, attr, Deps, WasmMsg};
 use std::ops::{Add, Mul, Sub};
 use crate::error::ContractError;
+use terrand;
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -97,7 +98,7 @@ pub fn handle_renounce(
     info: MessageInfo
 ) -> Result<Response, ContractError> {
     // Load the state
-    let mut state = read_config(deps.storage)?;
+    let mut state = read_state(deps.storage)?;
     let sender = deps.api.addr_canonicalize(info.sender.as_str())?;
     if state.admin != sender {
         return Err(ContractError::Unauthorized {});
@@ -107,7 +108,7 @@ pub fn handle_renounce(
     }
 
     state.admin = deps.api.addr_canonicalize(env.contract.address.as_str())?;
-    store_config(deps.storage, &state)?;
+    store_state(deps.storage, &state)?;
 
     Ok(Response::default())
 }
@@ -117,14 +118,14 @@ pub fn handle_safe_lock(
     info: MessageInfo
 ) -> Result<Response, ContractError> {
     // Load the state
-    let mut state = read_config(deps.storage)?;
+    let mut state = read_state(deps.storage)?;
     let sender = deps.api.addr_canonicalize(info.sender.as_str())?;
     if state.admin != sender {
         return Err(ContractError::Unauthorized {});
     }
 
     state.safe_lock = !state.safe_lock;
-    store_config(deps.storage, &state)?;
+    store_state(deps.storage, &state)?;
 
     Ok(Response::default())
 }
@@ -137,7 +138,7 @@ pub fn handle_register(
     combination: Vec<String>,
 ) -> Result<Response, ContractError>  {
     // Load the state
-    let state = read_config(deps.storage)?;
+    let state = read_state(deps.storage)?;
     if state.safe_lock {
         return Err(ContractError::Deactivated{});
     }
@@ -199,17 +200,18 @@ pub fn handle_register(
     })
 }
 
-pub fn handle_play<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_play(
+    deps: DepsMut,
     env: Env,
-) -> StdResult<HandleResponse> {
+    info: MessageInfo
+) -> StdResult<Response> {
     // Ensure the sender not sending funds accidentally
     if !env.message.sent_funds.is_empty() {
         return Err(StdError::generic_err("Do not send funds with play"));
     }
 
     // Load the state
-    let mut state = config(&mut deps.storage).load()?;
+    let mut state = read_state(deps.storage)?;
 
     if state.safe_lock {
         return Err(StdError::generic_err(
@@ -232,10 +234,15 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         )));
     }
 
-    let msg = QueryMsg::GetRandomness { round: next_round };
-    let terrand_human = deps.api.human_address(&state.terrand_contract_address)?;
-    let res = encode_msg_query(msg, terrand_human)?;
-    let res = wrapper_msg_terrand(&deps, res)?;
+    let msg = terrand::msg::QueryMsg::GetRandomness {round: next_round};
+    let terrand_human = deps.api.addr_humanize(&state.terrand_contract_address)?;
+    let wasm =  WasmMsg::Execute {
+        contract_addr: address,
+        msg: to_binary(&msg)?,
+        send: vec![]
+    }
+        .into();
+    let res :terrand::msg::LatestRandomResponse = deps.querier.query(&wasm)?;
     let randomness_hash = hex::encode(res.randomness.as_slice());
 
     let n = randomness_hash
@@ -247,10 +254,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let winning_combination = &randomness_hash[n..];
 
     // Save the combination for the current lottery count
-    lottery_winning_combination_storage(&mut deps.storage).save(
-        &state.lottery_counter.to_be_bytes(),
-        &winning_combination.to_string(),
-    )?;
+    WINNING_COMBINATION.save(deps.storage, &state.lottery_counter.to_be_bytes(), &winning_combination.to_string())?;
 
     // Set jackpot amount
     let balance = deps
@@ -275,7 +279,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     let jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
 
     let msg_fee_worker = BankMsg::Send {
-        from_address: env.contract.address.clone(),
         to_address: res.worker.clone(),
         amount: vec![deduct_tax(
             &deps,
@@ -291,41 +294,28 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         state.token_holder_percentage_fee_reward = 20;
     }
     // Save jackpot to storage
-    jackpot_storage(&mut deps.storage)
-        .save(&state.lottery_counter.to_be_bytes(), &jackpot_after)?;
+    JACKPOT.save(deps.storage, &state.lottery_counter.to_be_bytes(), &jackpot_after)?;
     // Update the state
     state.lottery_counter += 1;
 
     // Save the new state
-    config(&mut deps.storage).save(&state)?;
+    store_state(deps.storage, &state)?;
 
-    Ok(HandleResponse {
+    Ok(Response {
+        submessages: vec![],
         messages: vec![msg_fee_worker.into()],
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "reward".to_string(),
-            },
-            LogAttribute {
-                key: "by".to_string(),
-                value: env.message.sender.to_string(),
-            },
-            LogAttribute {
-                key: "to".to_string(),
-                value: res.worker.to_string(),
-            },
-        ],
         data: None,
+        attributes: vec![attr("action", "reward"), attr("by", info.sender.to_string()), attr("to", res.worker)]
     })
 }
 
-pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_claim(
+    deps: DepsMut,
     env: Env,
-    addresses: Option<Vec<HumanAddr>>,
-) -> StdResult<HandleResponse> {
-    let state = config(&mut deps.storage).load()?;
-
+    info: MessageInfo,
+    addresses: Option<Vec<String>>,
+) -> StdResult<Response> {
+    let state = read_state(deps.storage)?;
     if state.safe_lock {
         return Err(StdError::generic_err(
             "Contract deactivated for update or/and preventing security issue",
@@ -337,27 +327,20 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     }
     let last_lottery_counter_round = state.lottery_counter - 1;
 
-    let lottery_winning_combination = match lottery_winning_combination_storage(&mut deps.storage)
-        .may_load(&last_lottery_counter_round.to_be_bytes())?
+    let lottery_winning_combination = match WINNING_COMBINATION.may_load(deps.storage, &last_lottery_counter_round.to_be_bytes())?
     {
         Some(combination) => Some(combination),
         None => {
-            return Err(StdError::NotFound {
-                kind: "No winning combination".to_string(),
-                backtrace: None,
-            });
+            return Err(StdError::generic_err("No winning combination"));
         }
-    }
-    .unwrap();
-
-    let addr = deps.api.canonical_address(&env.message.sender)?;
+    }?;
+    let addr = deps.api.addr_canonicalize(&info.sender.as_str())?;
 
     let mut combination: Vec<(CanonicalAddr, Vec<String>)> = vec![];
 
     match addresses {
         None => {
-            match user_combination_bucket_read(&deps.storage, last_lottery_counter_round)
-                .may_load(addr.as_slice())?
+            match PREFIXED_USER_COMBINATION.may_load(deps.storage, (&last_lottery_counter_round.to_be_bytes(), addr.as_slice()))?
             {
                 None => {}
                 Some(combo) => combination.push((addr, combo)),
@@ -365,9 +348,8 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
         }
         Some(addresses) => {
             for address in addresses {
-                let addr = deps.api.canonical_address(&address)?;
-                match user_combination_bucket_read(&deps.storage, last_lottery_counter_round)
-                    .may_load(addr.as_slice())?
+                let addr = deps.api.addr_canonicalize(&address.as_str())?;
+                match PREFIXED_USER_COMBINATION.may_load(deps.storage, (&last_lottery_counter_round.to_be_bytes(), addr.as_slice()))?
                 {
                     None => {}
                     Some(combo) => combination.push((addr, combo)),
@@ -377,15 +359,11 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     }
 
     if combination.is_empty() {
-        return Err(StdError::NotFound {
-            kind: "No combination found".to_string(),
-            backtrace: None,
-        });
+        return Err(StdError::generic_err("No combination found"));
     }
     let mut some_winner = 0;
     for (addr, comb_raw) in combination {
-        match winner_storage_read(&deps.storage, last_lottery_counter_round)
-            .may_load(addr.as_slice())?
+        match PREFIXED_WINNER.may_load(deps.storage, (&last_lottery_counter_round.to_be_bytes(), addr.as_slice()))?
         {
             None => {
                 for combo in comb_raw {
@@ -400,7 +378,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
 
                     if rank > 0 {
                         save_winner(
-                            &mut deps.storage,
+                            deps.storage,
                             last_lottery_counter_round,
                             addr.clone(),
                             rank,
@@ -414,19 +392,14 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     }
 
     if some_winner == 0 {
-        return Err(StdError::NotFound {
-            kind: "No winning combination or already claimed".to_string(),
-            backtrace: None,
-        });
+        return Err(StdError::generic_err("No winning combination or already claimed"));
     }
 
-    Ok(HandleResponse {
+    Ok(Response {
+        submessages: vec![],
         messages: vec![],
-        log: vec![LogAttribute {
-            key: "action".to_string(),
-            value: "claim".to_string(),
-        }],
         data: None,
+        attributes: vec![attr("action", "claim")]
     })
 }
 // Players claim the jackpot
