@@ -3,7 +3,7 @@ use crate::helpers::{
     user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand,
 };
 use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse, InstantiateMsg, ExecuteMsg};
-use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_state, read_state, WINNING_COMBINATION, JACKPOT, ALL_USER_COMBINATION, PREFIXED_USER_COMBINATION, PREFIXED_WINNER};
+use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_state, read_state, WINNING_COMBINATION, JACKPOT, ALL_USER_COMBINATION, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, WinnerRewardClaims};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, Response, MessageInfo, DepsMut, Addr, attr, Deps, WasmMsg};
 use std::ops::{Add, Mul, Sub};
@@ -403,21 +403,21 @@ pub fn handle_claim(
     })
 }
 // Players claim the jackpot
-pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_collect(
+    deps: DepsMut,
     env: Env,
-    address: Option<HumanAddr>,
-) -> StdResult<HandleResponse> {
+    info: MessageInfo,
+    address: Option<StdError>,
+) -> StdResult<Response> {
     // Ensure the sender is not sending funds
-    if !env.message.sent_funds.is_empty() {
+    if !info.funds.is_empty() {
         return Err(StdError::generic_err("Do not send funds with jackpot"));
     }
 
     // Load state
-    let state = config(&mut deps.storage).load()?;
+    let state = read_state(deps.storage)?;
     let last_lottery_counter_round = state.lottery_counter - 1;
-    let jackpot_reward =
-        jackpot_storage(&mut deps.storage).load(&last_lottery_counter_round.to_be_bytes())?;
+    let jackpot_reward = JACKPOT.load(deps.storage,&last_lottery_counter_round.to_be_bytes())?;
 
     if state.safe_lock {
         return Err(StdError::generic_err(
@@ -432,30 +432,27 @@ pub fn handle_collect<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("No jackpot reward"));
     }
     let addr = match address {
-        None => env.message.sender.clone(),
+        None => info.sender.clone(),
         Some(addr) => addr,
     };
 
     // Get the contract balance
     let balance = deps
         .querier
-        .query_balance(&env.contract.address, &state.denom_stable)
-        .unwrap();
+        .query_balance(&env.contract.address, &state.denom_stable)?;
     // Ensure the contract have the balance
     if balance.amount.is_zero() {
         return Err(StdError::generic_err("Empty contract balance"));
     }
 
-    let canonical_addr = deps.api.canonical_address(&addr)?;
+    let canonical_addr = deps.api.addr_canonicalize(&addr.as_str())?;
     // Load winner
-    let may_claim = winner_storage_read(&deps.storage, last_lottery_counter_round)
-        .may_load(canonical_addr.as_slice())?;
-
-    if may_claim.is_none() {
-        return Err(StdError::generic_err("Address is not a winner"));
-    }
-
-    let mut rewards = may_claim.unwrap();
+    let mut rewards = match PREFIXED_WINNER.may_load(deps.storage, (&last_lottery_counter_round.to_be_bytes(), canonical_addr.as_slice()))?{
+        None => {
+            return Err(StdError::generic_err("Address is not a winner"));
+        }
+        Some(rewards) => Ok(rewards)?
+    };
 
     if rewards.claimed {
         return Err(StdError::generic_err("Already claimed"));
