@@ -1,9 +1,5 @@
-use crate::msg::QueryMsg;
-use crate::query::{
-    GetHolderResponse, GetHoldersResponse, LoterraBalanceResponse, TerrandResponse,
-};
-use crate::state::{poll_storage, PollStatus, State, POLL, PollInfoState};
-use cosmwasm_std::{to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Querier, QueryRequest, StdResult, Storage, Uint128, WasmMsg, WasmQuery, DepsMut, Response, StdError, attr};
+use crate::state::{PollStatus, State, POLL};
+use cosmwasm_std::{to_binary, Api, CanonicalAddr, StdResult, Uint128, WasmQuery, DepsMut, Response, StdError, attr};
 
 pub fn count_match(x: &str, y: &str) -> usize {
     let mut count = 0;
@@ -28,50 +24,6 @@ pub fn is_lower_hex(combination: &str, len: u8) -> bool {
     true
 }
 
-pub fn encode_msg_execute(
-    msg: QueryMsg,
-    address: HumanAddr,
-    coin: Vec<Coin>,
-) -> StdResult<CosmosMsg> {
-    Ok(WasmMsg::Execute {
-        contract_addr: address,
-        msg: to_binary(&msg)?,
-        send: coin,
-    }
-    .into())
-}
-pub fn encode_msg_query(msg: QueryMsg, address: HumanAddr) -> StdResult<QueryRequest<Empty>> {
-    Ok(WasmQuery::Smart {
-        contract_addr: address,
-        msg: to_binary(&msg)?,
-    }
-    .into())
-}
-pub fn wrapper_msg_terrand<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<TerrandResponse> {
-    let res: TerrandResponse = deps.querier.query(&query)?;
-    Ok(res)
-}
-
-pub fn wrapper_msg_loterra_staking<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<GetHolderResponse> {
-    let res: GetHolderResponse = deps.querier.query(&query)?;
-
-    Ok(res)
-}
-pub fn wrapper_msg_loterra_all_staking<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<GetHoldersResponse> {
-    let res: GetHoldersResponse = deps.querier.query(&query)?;
-
-    Ok(res)
-}
-
 pub fn user_total_weight(
     deps: &DepsMut,
     state: &State,
@@ -86,14 +38,14 @@ pub fn user_total_weight(
 
     let loterra_human = deps
         .api
-        .addr_humanize(&state.loterra_staking_contract_address.clone())?;
+        .addr_humanize(&state.loterra_staking_contract_address.clone()).unwrap();
 
     let query = WasmQuery::Smart {
         contract_addr: loterra_human.to_string(),
-        msg: to_binary(&msg)?,
+        msg: to_binary(&msg).unwrap(),
     }
         .into();
-    let loterra_balance: loterra_staking_contract::msg::HolderResponse = deps.querier.query(&query)?;
+    let loterra_balance: loterra_staking_contract::msg::HolderResponse = deps.querier.query(&query).unwrap();
 
     if !loterra_balance.balance.is_zero() {
         weight += loterra_balance.balance;
@@ -102,20 +54,24 @@ pub fn user_total_weight(
     weight
 }
 
-pub fn total_weight<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+pub fn total_weight(
+    deps: &DepsMut,
     state: &State,
 ) -> Uint128 {
     let mut weight = Uint128::zero();
 
     // Ensure sender have some reward tokens
-    let msg = QueryMsg::Holders {};
+    let msg = loterra_staking_contract::msg::QueryMsg::Holders { start_after: None, limit: None };
+
     let loterra_human = deps
         .api
-        .human_address(&state.loterra_staking_contract_address.clone())
-        .unwrap();
-    let res = encode_msg_query(msg, loterra_human).unwrap();
-    let loterra_balance = wrapper_msg_loterra_all_staking(&deps, res).unwrap();
+        .addr_humanize(&state.loterra_staking_contract_address.clone()).unwrap();
+    let query = WasmQuery::Smart {
+        contract_addr: loterra_human.to_string(),
+        msg: to_binary(&msg).unwrap(),
+    }
+        .into();
+    let loterra_balance: loterra_staking_contract::msg::HoldersResponse = deps.querier.query(&query).unwrap();
 
     for holder in loterra_balance.holders {
         if !holder.balance.is_zero() {
@@ -124,15 +80,6 @@ pub fn total_weight<S: Storage, A: Api, Q: Querier>(
     }
 
     weight
-}
-
-pub fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<LoterraBalanceResponse> {
-    let res: LoterraBalanceResponse = deps.querier.query(&query)?;
-
-    Ok(res)
 }
 
 pub fn reject_proposal(

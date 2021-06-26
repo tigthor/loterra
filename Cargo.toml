@@ -38,7 +38,7 @@ schemars = "0.8.1"
 serde = { version = "1.0.125", default-features = false, features = ["derive"] }
 thiserror = { version = "1.0.24" }
 hex = "0.4.2"
-terra-cosmwasm = { version = "1.2" }
+terra-cosmwasm = "2.0.0"
 terrand = "2.0.0"
 loterra-staking-contract = "2.0.0"
 cw20 = "0.6.2"

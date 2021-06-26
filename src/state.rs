@@ -1,15 +1,15 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Order, StdResult, Storage, Uint128};
-use cw_storage_plus::{Bound, Item, Map};
+use cosmwasm_std::{CanonicalAddr, Order, StdResult, Storage, Uint128, Timestamp, Deps};
+use cw_storage_plus::{Item, Map};
 use std::ops::Add;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub admin: CanonicalAddr,
-    pub block_time_play: u64,
-    pub every_block_time_play: u64,
+    pub block_time_play: Timestamp,
+    pub every_block_time_play: Timestamp,
     pub denom_stable: String,
     pub combination_len: u8,
     pub jackpot_percentage_reward: u8,
@@ -24,7 +24,7 @@ pub struct State {
     pub loterra_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
     pub lottery_counter: u64,
-    pub holders_bonus_block_time_end: u64,
+    pub holders_bonus_block_time_end: Timestamp,
 }
 pub const STATE: Item<State> = Item::new("state");
 pub fn store_state(storage: &mut dyn Storage, state: &State) -> StdResult<()> {
@@ -164,11 +164,11 @@ pub fn save_winner(
         .map(|_| ())
 }
 
-pub fn all_winners<T: Storage>(
-    storage: &T,
+pub fn all_winners(
+    deps: &Deps,
     lottery_id: u64,
 ) -> StdResult<Vec<(CanonicalAddr, WinnerRewardClaims)>> {
-    PREFIXED_WINNER.prefix(&lottery_id.to_be_bytes()).range( storage,None, None, Order::Ascending)
+    PREFIXED_WINNER.prefix(&lottery_id.to_be_bytes()).range( deps.storage,None, None, Order::Ascending)
         .map(|item| {
             let (addr, claim) = item?;
             Ok((CanonicalAddr::from(addr), claim))

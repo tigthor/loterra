@@ -2,18 +2,18 @@ use crate::state::{PollStatus, Proposal, State, WinnerRewardClaims};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Uint128};
+use cosmwasm_std::{Uint128, Timestamp};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub denom_stable: String,
-    pub block_time_play: u64,
-    pub every_block_time_play: u64,
+    pub block_time_play: Timestamp,
+    pub every_block_time_play: Timestamp,
     pub poll_default_end_height: u64,
     pub terrand_contract_address: String,
     pub loterra_cw20_contract_address: String,
     pub loterra_staking_contract_address: String,
-    pub holders_bonus_block_time_end: u64,
+    pub holders_bonus_block_time_end: Timestamp,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

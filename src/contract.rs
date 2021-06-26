@@ -1,13 +1,12 @@
 use crate::helpers::{
-    count_match, encode_msg_execute, encode_msg_query, is_lower_hex, reject_proposal, total_weight,
-    user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand,
+    count_match, is_lower_hex, reject_proposal, total_weight,
+    user_total_weight,
 };
-use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse, InstantiateMsg, ExecuteMsg};
-use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_state, read_state, WINNING_COMBINATION, JACKPOT, ALL_USER_COMBINATION, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, WinnerRewardClaims, POLL, PREFIXED_POLL_VOTE};
+use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, QueryMsg, RoundResponse, WinnerResponse, InstantiateMsg, ExecuteMsg};
+use crate::state::{all_winners, combination_save, save_winner, PollInfoState, PollStatus, Proposal, State, STATE, store_state, read_state, WINNING_COMBINATION, JACKPOT, ALL_USER_COMBINATION, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, POLL, PREFIXED_POLL_VOTE, PREFIXED_RANK, COUNT_TICKETS, COUNT_PLAYERS};
 use crate::taxation::deduct_tax;
-use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, Response, MessageInfo, DepsMut, Addr, attr, Deps, WasmMsg, WasmQuery};
-use std::ops::{Add, Mul, Sub};
-use crate::error::ContractError;
+use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, StdError, StdResult, Uint128, Response, MessageInfo, DepsMut, Addr, attr, Deps, WasmMsg, WasmQuery, entry_point};
+use std::ops::{Add, Mul};
 use terrand;
 use cw20::{Cw20QueryMsg, BalanceResponse, Cw20ExecuteMsg};
 
@@ -26,11 +25,11 @@ const DIV_BLOCK_TIME_BY_X: u64 = 2;
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
     let state = State {
-        admin: deps.api.canonical_address(&env.message.sender)?,
+        admin: deps.api.addr_canonicalize(&info.sender.as_str())?,
         block_time_play: msg.block_time_play,
         every_block_time_play: msg.every_block_time_play,
         denom_stable: msg.denom_stable,
@@ -42,13 +41,13 @@ pub fn instantiate(
         prize_rank_winner_percentage: vec![87, 10, 2, 1],
         poll_count: 0,
         price_per_ticket_to_register: Uint128(1_000_000),
-        terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
+        terrand_contract_address: deps.api.addr_canonicalize(&msg.terrand_contract_address)?,
         loterra_cw20_contract_address: deps
             .api
-            .canonical_address(&msg.loterra_cw20_contract_address)?,
+            .addr_canonicalize(&msg.loterra_cw20_contract_address)?,
         loterra_staking_contract_address: deps
             .api
-            .canonical_address(&msg.loterra_staking_contract_address)?,
+            .addr_canonicalize(&msg.loterra_staking_contract_address)?,
         safe_lock: false,
         lottery_counter: 1,
         holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
@@ -62,14 +61,14 @@ pub fn instantiate(
 #[entry_point]
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
-        HandleMsg::Register {
+        ExecuteMsg::Register {
             address,
             combination,
         } => handle_register(deps, env, info, address, combination),
-        HandleMsg::Play {} => handle_play(deps, env, info),
-        HandleMsg::Claim { addresses } => handle_claim(deps, env, info, addresses),
-        HandleMsg::Collect { address } => handle_collect(deps, env, info, address),
-        HandleMsg::Poll {
+        ExecuteMsg::Play {} => handle_play(deps, env, info),
+        ExecuteMsg::Claim { addresses } => handle_claim(deps, env, info, addresses),
+        ExecuteMsg::Collect { address } => handle_collect(deps, env, info, address),
+        ExecuteMsg::Poll {
             description,
             proposal,
             amount,
@@ -85,11 +84,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             prize_per_rank,
             recipient,
         ),
-        HandleMsg::Vote { poll_id, approve } => handle_vote(deps, env, info, poll_id, approve),
-        HandleMsg::PresentPoll { poll_id } => handle_present_proposal(deps, env, info, poll_id),
-        HandleMsg::RejectPoll { poll_id } => handle_reject_proposal(deps, env, info, poll_id),
-        HandleMsg::SafeLock {} => handle_safe_lock(deps,info),
-        HandleMsg::Renounce {} => handle_renounce(deps, env, info),
+        ExecuteMsg::Vote { poll_id, approve } => handle_vote(deps, env, info, poll_id, approve),
+        ExecuteMsg::PresentPoll { poll_id } => handle_present_proposal(deps, env, info, poll_id),
+        ExecuteMsg::RejectPoll { poll_id } => handle_reject_proposal(deps, env, info, poll_id),
+        ExecuteMsg::SafeLock {} => handle_safe_lock(deps,info),
+        ExecuteMsg::Renounce {} => handle_renounce(deps, env, info),
     }
 }
 
@@ -97,15 +96,19 @@ pub fn handle_renounce(
     deps: DepsMut,
     env: Env,
     info: MessageInfo
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // Load the state
     let mut state = read_state(deps.storage)?;
     let sender = deps.api.addr_canonicalize(info.sender.as_str())?;
     if state.admin != sender {
-        return Err(ContractError::Unauthorized {});
+        return Err(StdError::generic_err(
+            "Unauthorized",
+        ));
     }
     if state.safe_lock {
-        return  Err(ContractError::Locked {});
+        return Err(StdError::generic_err(
+            "Locked",
+        ));
     }
 
     state.admin = deps.api.addr_canonicalize(env.contract.address.as_str())?;
@@ -117,12 +120,14 @@ pub fn handle_renounce(
 pub fn handle_safe_lock(
     deps: DepsMut,
     info: MessageInfo
-) -> Result<Response, ContractError> {
+) -> StdResult<Response> {
     // Load the state
     let mut state = read_state(deps.storage)?;
     let sender = deps.api.addr_canonicalize(info.sender.as_str())?;
     if state.admin != sender {
-        return Err(ContractError::Unauthorized {});
+        return Err(StdError::generic_err(
+            "Unauthorized",
+        ));
     }
 
     state.safe_lock = !state.safe_lock;
@@ -137,15 +142,19 @@ pub fn handle_register(
     info: MessageInfo,
     address: Option<String>,
     combination: Vec<String>,
-) -> Result<Response, ContractError>  {
+) -> StdResult<Response>  {
     // Load the state
     let state = read_state(deps.storage)?;
     if state.safe_lock {
-        return Err(ContractError::Deactivated{});
+        return Err(StdError::generic_err(
+            "Deactivated",
+        ));
     }
     // Check if the lottery is about to play and cancel new ticket to enter until play
     if env.block.time > state.block_time_play {
-        return Err(ContractError::LotteryStart{});
+        return Err(StdError::generic_err(
+            "Lottery about to start",
+        ));
     }
 
     // Check if address filled as param
@@ -157,30 +166,32 @@ pub fn handle_register(
     for combo in combination.clone() {
         // Regex to check if the combination is allowed
         if !is_lower_hex(&combo, state.combination_len) {
-            return Err(ContractError::CombinationFormatError(state.combination_len));
+            return Err(StdError::generic_err(
+                format!("Not authorized use combination of [a-f] and [0-9] with length {}", state.combination_len)
+            ));
         }
     }
 
     // Check if some funds are sent
     let sent = match info.funds.len() {
-        0 => Err(ContractError::RegisteredAmount(&state.price_per_ticket_to_register, &state.denom_stable)),
+        0 => Err(StdError::generic_err(format!("you need to send {} {} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable))),
         1 => {
             if info.funds[0].denom == state.denom_stable {
                 Ok(info.funds[0].amount)
             } else {
-                Err(ContractError::RegisteredAmount(&state.price_per_ticket_to_register, &state.denom_stable))
+                Err(StdError::generic_err(format!("you need to send {} {} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable)))
             }
         }
-        _ => Err(ContractError::RegisterRequireAmount(&state.denom_stable)),
+        _ => Err(StdError::generic_err(format!("Only send {0} to register", &state.denom_stable))),
     }?;
 
     if sent.is_zero() {
-        return Err(ContractError::RegisteredAmount(state.price_per_ticket_to_register.clone(), &state.denom_stable));
+        return Err(StdError::generic_err(format!("you need to send {} {} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable)));
     }
     // Handle the player is not sending too much or too less
     if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
-        return Err(ContractError::SendRequiredAmount(&state.price_per_ticket_to_register.u128() * combination.len() as u128,
-                                                     state.denom_stable));
+        return Err(StdError::generic_err(format!("send {} {}", &state.price_per_ticket_to_register.u128() * combination.len() as u128,
+                                                 state.denom_stable)));
     }
 
     // save combination
@@ -207,7 +218,7 @@ pub fn handle_play(
     info: MessageInfo
 ) -> StdResult<Response> {
     // Ensure the sender not sending funds accidentally
-    if !env.message.sent_funds.is_empty() {
+    if !info.funds.is_empty() {
         return Err(StdError::generic_err("Do not send funds with play"));
     }
 
@@ -221,13 +232,14 @@ pub fn handle_play(
     }
 
     // calculate next round randomness
-    let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
+    let from_genesis = state.block_time_play.nanos().checked_sub(DRAND_GENESIS_TIME)?;
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     // Make the contract callable for everyone every x blocks
+
     if env.block.time > state.block_time_play {
         // Update the state
-        state.block_time_play = env.block.time + state.every_block_time_play;
+        state.block_time_play = env.block.time.plus_nanos(state.every_block_time_play.nanos());
     } else {
         return Err(StdError::generic_err(format!(
             "Lottery registration is still in progress... Retry after block time {}",
@@ -237,13 +249,11 @@ pub fn handle_play(
 
     let msg = terrand::msg::QueryMsg::GetRandomness {round: next_round};
     let terrand_human = deps.api.addr_humanize(&state.terrand_contract_address)?;
-    let wasm =  WasmMsg::Execute {
-        contract_addr: address,
-        msg: to_binary(&msg)?,
-        send: vec![]
-    }
-        .into();
-    let res :terrand::msg::LatestRandomResponse = deps.querier.query(&wasm)?;
+    let wasm = WasmQuery::Smart {
+        contract_addr: terrand_human.to_string(),
+        msg: to_binary(&msg)?
+    };
+    let res :terrand::msg::LatestRandomResponse = deps.querier.query(&wasm.into())?;
     let randomness_hash = hex::encode(res.randomness.as_slice());
 
     let n = randomness_hash
@@ -277,12 +287,12 @@ pub fn handle_play(
         ));
 
     // The jackpot after worker fee applied
-    let jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
+    let jackpot_after = jackpot.checked_sub(fee_for_drand_worker)?;
 
     let msg_fee_worker = BankMsg::Send {
         to_address: res.worker.clone(),
         amount: vec![deduct_tax(
-            &deps,
+            &deps.querier,
             Coin {
                 denom: state.denom_stable.clone(),
                 amount: fee_for_drand_worker,
@@ -323,7 +333,7 @@ pub fn handle_claim(
         ));
     }
 
-    if env.block.time > state.block_time_play - state.every_block_time_play / DIV_BLOCK_TIME_BY_X {
+    if env.block.time > state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X {
         return Err(StdError::generic_err("Claiming is closed"));
     }
     let last_lottery_counter_round = state.lottery_counter - 1;
@@ -334,7 +344,7 @@ pub fn handle_claim(
         None => {
             return Err(StdError::generic_err("No winning combination"));
         }
-    }?;
+    };
     let addr = deps.api.addr_canonicalize(&info.sender.as_str())?;
 
     let mut combination: Vec<(CanonicalAddr, Vec<String>)> = vec![];
@@ -408,7 +418,7 @@ pub fn handle_collect(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    address: Option<StdError>,
+    address: Option<String>,
 ) -> StdResult<Response> {
     // Ensure the sender is not sending funds
     if !info.funds.is_empty() {
@@ -425,7 +435,7 @@ pub fn handle_collect(
             "Contract deactivated for update or/and preventing security issue",
         ));
     }
-    if env.block.time < state.block_time_play - state.every_block_time_play / DIV_BLOCK_TIME_BY_X {
+    if env.block.time < state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X {
         return Err(StdError::generic_err("Collecting jackpot is closed"));
     }
     // Ensure there is jackpot reward to claim
@@ -434,7 +444,7 @@ pub fn handle_collect(
     }
     let addr = match address {
         None => info.sender.clone(),
-        Some(addr) => addr,
+        Some(addr) => Addr::unchecked(addr),
     };
 
     // Get the contract balance
@@ -466,8 +476,7 @@ pub fn handle_collect(
 
     let mut total_prize: u128 = 0;
     for rank in rewards.clone().ranks {
-        let rank_count = winner_count_by_rank_read(&deps.storage, last_lottery_counter_round)
-            .load(&rank.to_be_bytes())?;
+        let rank_count = PREFIXED_RANK.load(deps.storage, (&last_lottery_counter_round.to_be_bytes(), &rank.to_be_bytes()))?;
         let prize = jackpot_reward
             .mul(Decimal::percent(
                 state.prize_rank_winner_percentage[rank as usize - 1] as u64,
@@ -487,29 +496,32 @@ pub fn handle_collect(
         state.token_holder_percentage_fee_reward as u64,
     ));
 
-    let total_prize_after = total_prize.sub(token_holder_fee_reward).unwrap();
+    let total_prize_after = total_prize.checked_sub(token_holder_fee_reward)?;
 
     let loterra_human = deps
         .api
-        .human_address(&state.loterra_staking_contract_address)?;
+        .addr_humanize(&state.loterra_staking_contract_address)?;
     let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
-    let res_update_global_index = encode_msg_execute(
-        msg_update_global_index,
-        loterra_human,
-        vec![deduct_tax(
-            &deps,
-            Coin {
-                denom: state.denom_stable.clone(),
-                amount: token_holder_fee_reward,
-            },
-        )?],
-    )?;
+
+    let res_update_global_index =
+        WasmMsg::Execute {
+            contract_addr: loterra_human.to_string(),
+            msg: to_binary(&msg_update_global_index)?,
+            send: vec![deduct_tax(
+                &deps.querier,
+                Coin {
+                    denom: state.denom_stable.clone(),
+                    amount: token_holder_fee_reward,
+                },
+            )?],
+        }
+            .into();
 
     // Build the amount transaction
     let msg = BankMsg::Send {
         to_address: addr.to_string(),
         amount: vec![deduct_tax(
-            &deps,
+            &deps.querier,
             Coin {
                 denom: state.denom_stable,
                 amount: total_prize_after,
@@ -536,7 +548,7 @@ pub fn handle_proposal(
     prize_per_rank: Option<Vec<u8>>,
     recipient: Option<String>,
 ) -> StdResult<Response> {
-    let mut state = read_state(deps.storage)?;);
+    let mut state = read_state(deps.storage)?;
     // Increment and get the new poll id for bucket key
     let poll_id = state.poll_count + 1;
     // Set the new counter
@@ -702,13 +714,11 @@ pub fn handle_proposal(
                 let loterra_human =  deps
                     .api.addr_humanize(&state.loterra_cw20_contract_address)?;
 
-                let res_balance = WasmQuery::Execute {
+                let res_balance = WasmQuery::Smart {
                     contract_addr: loterra_human.to_string(),
                     msg: to_binary(&msg_balance)?,
-                    send: vec![],
-                }
-                    .into();
-                let loterra_balance: BalanceResponse = deps.querier.query(&res_balance)?;
+                };
+                let loterra_balance: BalanceResponse = deps.querier.query(&res_balance.into())?;
 
                 if loterra_balance.balance.is_zero() {
                     return Err(StdError::generic_err(
@@ -867,7 +877,7 @@ pub fn handle_reject_proposal(
     let sender = deps.api.addr_canonicalize(&info.sender.as_str())?;
 
     // Ensure the sender not sending funds accidentally
-    if !env.message.sent_funds.is_empty() {
+    if !info.funds.is_empty() {
         return Err(StdError::generic_err(
             "Do not send funds with reject proposal",
         ));
@@ -900,7 +910,7 @@ pub fn handle_reject_proposal(
         messages: vec![],
         data: None,
         attributes: vec![
-            attr("action", "creator reject the proposal")
+            attr("action", "creator reject the proposal"),
             attr("poll_id", poll_id)
         ]
     })
@@ -987,7 +997,7 @@ pub fn handle_present_proposal(
             let msg = BankMsg::Send {
                 to_address: poll.migration_address.unwrap(),
                 amount: vec![deduct_tax(
-                    &deps,
+                    &deps.querier,
                     Coin {
                         denom: state.denom_stable.to_string(),
                         amount: contract_balance.amount,
@@ -999,7 +1009,7 @@ pub fn handle_present_proposal(
         Proposal::DaoFunding => {
             let recipient = match poll.migration_address {
                 None => deps.api.addr_humanize(&poll.creator)?,
-                Some(address) => address,
+                Some(address) => Addr::unchecked(address),
             };
 
             // Get the contract balance prepare the tx
@@ -1026,7 +1036,7 @@ pub fn handle_present_proposal(
                 .addr_humanize(&state.loterra_cw20_contract_address)?;
             let res_transfer = WasmMsg::Execute {
                 contract_addr: loterra_human.to_string(),
-                msg: msg_transfer.into(),
+                msg: to_binary(&msg_transfer)?,
                 send: vec![]
             };
 
@@ -1096,7 +1106,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 fn query_config(
     deps: Deps,
 ) -> StdResult<ConfigResponse> {
-    let state = config_read(&deps.storage).load()?;
+    let state = read_state(deps.storage)?;
     Ok(state)
 }
 fn query_winner_rank(
@@ -1104,11 +1114,10 @@ fn query_winner_rank(
     lottery_id: u64,
     rank: u8,
 ) -> StdResult<Uint128> {
-    let amount =
-        match winner_count_by_rank_read(&deps.storage, lottery_id).may_load(&rank.to_be_bytes())? {
-            None => Uint128::zero(),
-            Some(winners) => winners,
-        };
+    let amount = match PREFIXED_RANK.may_load(deps.storage, (&lottery_id.to_be_bytes(), &rank.to_be_bytes()))?{
+        None => Uint128::zero(),
+        Some(winners) => winners,
+    };
     Ok(amount)
 }
 
@@ -1117,25 +1126,25 @@ fn query_all_players(
     lottery_id: u64,
 ) -> StdResult<Vec<String>> {
     let players =
-        match all_players_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
+        match ALL_USER_COMBINATION.may_load(deps.storage, &lottery_id.to_be_bytes())?{
             None => {
-                return Err(StdError::NotFound {
-                    kind: "not found".to_string(),
-                    backtrace: None,
-                })
+                return Err(StdError::generic_err(
+                    "Not found",
+                ));
             }
             Some(players) => players
                 .iter()
-                .map(|e| deps.api.human_address(&e).unwrap())
+                .map(|e| deps.api.addr_humanize(&e)?)
                 .collect(),
         };
+
     Ok(players)
 }
 fn query_jackpot(
     deps: Deps,
     lottery_id: u64,
 ) -> StdResult<Uint128> {
-    let amount = match jackpot_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
+    let amount = match JACKPOT.may_load(deps.storage, &lottery_id.to_be_bytes())?{
         None => Uint128::zero(),
         Some(jackpot) => jackpot,
     };
@@ -1145,9 +1154,7 @@ fn query_count_ticket(
     deps: Deps,
     lottery_id: u64,
 ) -> StdResult<Uint128> {
-    let amount = match count_total_ticket_by_lottery_read(&deps.storage)
-        .may_load(&lottery_id.to_be_bytes())?
-    {
+    let amount = match COUNT_TICKETS.may_load(deps.storage, &lottery_id.to_be_bytes())?{
         None => Uint128::zero(),
         Some(ticket) => ticket,
     };
@@ -1157,28 +1164,26 @@ fn query_count_player(
     deps: Deps,
     lottery_id: u64,
 ) -> StdResult<Uint128> {
-    let amount =
-        match count_player_by_lottery_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
-            None => Uint128::zero(),
-            Some(players) => players,
-        };
+    let amount = match COUNT_PLAYERS.may_load(deps.storage, &lottery_id.to_be_bytes())?{
+        None => Uint128::zero(),
+        Some(players) => players,
+    };
+
     Ok(amount)
 }
 fn query_winning_combination(
     deps: Deps,
     lottery_id: u64,
 ) -> StdResult<String> {
-    let combination = match lottery_winning_combination_storage_read(&deps.storage)
-        .may_load(&lottery_id.to_be_bytes())?
-    {
+    let combination = match WINNING_COMBINATION.may_load(deps.storage, &lottery_id.to_be_bytes())?{
         None => {
-            return Err(StdError::NotFound {
-                kind: "not found".to_string(),
-                backtrace: None,
-            })
+            return Err(StdError::generic_err(
+                "Not found",
+            ));
         }
         Some(combo) => combo,
     };
+
     Ok(combination)
 }
 fn query_all_combination(
@@ -1188,12 +1193,11 @@ fn query_all_combination(
 ) -> StdResult<AllCombinationResponse> {
     let addr = deps.api.addr_canonicalize(&address)?;
     let combo =
-        match user_combination_bucket_read(&deps.storage, lottery_id).may_load(addr.as_slice())? {
+        match PREFIXED_USER_COMBINATION.may_load(deps.storage, (&lottery_id.to_be_bytes(), &addr.as_slice()))?{
             None => {
-                return Err(StdError::NotFound {
-                    kind: "not found".to_string(),
-                    backtrace: None,
-                })
+                return Err(StdError::generic_err(
+                    "Not found",
+                ));
             }
             Some(combination) => combination,
         };
@@ -1205,7 +1209,7 @@ fn query_all_winner(
     deps: Deps,
     lottery_id: u64,
 ) -> StdResult<AllWinnersResponse> {
-    let winners = all_winners(&deps.storage, lottery_id)?;
+    let winners = all_winners(&deps, lottery_id)?;
     let res: StdResult<Vec<WinnerResponse>> = winners
         .into_iter()
         .map(|(can_addr, claims)| {
@@ -1226,16 +1230,14 @@ fn query_poll(
     let poll = match POLL.may_load(deps.storage,&poll_id.to_be_bytes())? {
         Some(poll) => Some(poll),
         None => {
-            return Err(StdError::NotFound {
-                kind: "not found".to_string(),
-                backtrace: None,
-            })
+            return Err(StdError::generic_err(
+                "Not found",
+            ));
         }
-    }
-    .unwrap();
+    }.unwrap();
 
     Ok(GetPollResponse {
-        creator: deps.api.human_address(&poll.creator).unwrap(),
+        creator: deps.api.addr_humanize(&poll.creator)?.to_string(),
         status: poll.status,
         end_height: poll.end_height,
         start_height: poll.start_height,
@@ -1251,9 +1253,9 @@ fn query_poll(
     })
 }
 
-fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdResult<RoundResponse> {
-    let state = config_read(&deps.storage).load()?;
-    let from_genesis = state.block_time_play - DRAND_GENESIS_TIME;
+fn query_round(deps: Deps) -> StdResult<RoundResponse> {
+    let state = read_state(deps.storage)?;
+    let from_genesis = state.block_time_play.nanos().checked_sub(DRAND_GENESIS_TIME)?;
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     Ok(RoundResponse { next_round })
@@ -1602,13 +1604,6 @@ mod tests {
             let res = query(&deps, msg_query).unwrap();
             let formated_binary = String::from_utf8(res.into()).unwrap();
             println!("sdsds {:?}", formated_binary);
-
-            /*let store_three = all_players_storage_read(&deps.storage, 1u64)
-                .load(&1u64.to_be_bytes())
-                .unwrap();
-            assert_eq!(store_three.len(), 1);
-            assert_eq!(store_three[0], addr);
-            */
 
             // Play 2 more combination
             let msg = HandleMsg::Register {
