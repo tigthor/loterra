@@ -462,8 +462,8 @@ pub fn handle_collect(
         None => {
             return Err(StdError::generic_err("Address is not a winner"));
         }
-        Some(rewards) => Ok(rewards)
-    }?;
+        Some(rewards) => Some(rewards)
+    }.unwrap();
 
     if rewards.claimed {
         return Err(StdError::generic_err("Already claimed"));
@@ -965,7 +965,7 @@ pub fn handle_present_proposal(
     // Based on the recommendation of security audit
     // We recommend to not reject votes based on the number of votes, but rather by the stake of the voters.
     if total_yes_weight_percentage < 50 || total_no_weight_percentage > 33 {
-        return reject_proposal(&deps, poll_id);
+        return reject_proposal(deps.storage, poll_id);
     }
 
     let mut msgs = vec![];
@@ -1027,7 +1027,7 @@ pub fn handle_present_proposal(
             let loterra_balance: BalanceResponse = deps.querier.query(&res_balance)?;
 
             if loterra_balance.balance.u128() < poll.amount.u128() {
-                return reject_proposal(&deps, poll_id);
+                return reject_proposal(deps.storage, poll_id);
             }
             let msg_transfer = Cw20ExecuteMsg::Transfer { recipient: recipient.to_string(), amount: poll.amount };
 

@@ -1,5 +1,7 @@
 use crate::state::{PollStatus, State, POLL};
-use cosmwasm_std::{to_binary, CanonicalAddr, StdResult, Uint128, WasmQuery, DepsMut, Response, StdError, attr};
+use cosmwasm_std::{to_binary, CanonicalAddr, StdResult, Uint128, WasmQuery, DepsMut, Response, StdError, attr, Storage};
+use loterra_staking_contract::msg::QueryMsg::{Holder, Holders};
+use loterra_staking_contract::msg::{HolderResponse, HoldersResponse};
 
 pub fn count_match(x: &str, y: &str) -> usize {
     let mut count = 0;
@@ -34,7 +36,7 @@ pub fn user_total_weight(
     let human_address = deps.api.addr_humanize(&address).unwrap();
 
     // Ensure sender have some reward tokens
-    let msg = loterra_staking_contract::msg::QueryMsg::Holder { address: human_address.to_string() };
+    let msg = Holder { address: human_address.to_string() };
 
     let loterra_human = deps
         .api
@@ -45,7 +47,7 @@ pub fn user_total_weight(
         msg: to_binary(&msg).unwrap(),
     }
         .into();
-    let loterra_balance: loterra_staking_contract::msg::HolderResponse = deps.querier.query(&query).unwrap();
+    let loterra_balance: HolderResponse = deps.querier.query(&query).unwrap();
 
     if !loterra_balance.balance.is_zero() {
         weight += loterra_balance.balance;
@@ -61,7 +63,7 @@ pub fn total_weight(
     let mut weight = Uint128::zero();
 
     // Ensure sender have some reward tokens
-    let msg = loterra_staking_contract::msg::QueryMsg::Holders { start_after: None, limit: None };
+    let msg = Holders { start_after: None, limit: None };
 
     let loterra_human = deps
         .api
@@ -71,7 +73,7 @@ pub fn total_weight(
         msg: to_binary(&msg).unwrap(),
     }
         .into();
-    let loterra_balance: loterra_staking_contract::msg::HoldersResponse = deps.querier.query(&query).unwrap();
+    let loterra_balance: HoldersResponse = deps.querier.query(&query).unwrap();
 
     for holder in loterra_balance.holders {
         if !holder.balance.is_zero() {
@@ -83,10 +85,10 @@ pub fn total_weight(
 }
 
 pub fn reject_proposal(
-    deps: &DepsMut,
+    storage:  &mut dyn Storage,
     poll_id: u64,
 ) -> StdResult<Response> {
-    POLL.update(deps.storage, &poll_id.to_be_bytes(), |poll| match poll {
+    POLL.update(storage, &poll_id.to_be_bytes(), |poll| match poll {
         None => Err(StdError::generic_err("Proposal still in progress")),
         Some(poll_info) => {
             let mut poll = poll_info;
