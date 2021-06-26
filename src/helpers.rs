@@ -1,5 +1,5 @@
 use crate::state::{PollStatus, State, POLL};
-use cosmwasm_std::{to_binary, Api, CanonicalAddr, StdResult, Uint128, WasmQuery, DepsMut, Response, StdError, attr};
+use cosmwasm_std::{to_binary, CanonicalAddr, StdResult, Uint128, WasmQuery, DepsMut, Response, StdError, attr};
 
 pub fn count_match(x: &str, y: &str) -> usize {
     let mut count = 0;
@@ -31,7 +31,7 @@ pub fn user_total_weight(
 ) -> Uint128 {
 
     let mut weight = Uint128::zero();
-    let human_address = deps.api.addr_humanize(&address)?;
+    let human_address = deps.api.addr_humanize(&address).unwrap();
 
     // Ensure sender have some reward tokens
     let msg = loterra_staking_contract::msg::QueryMsg::Holder { address: human_address.to_string() };

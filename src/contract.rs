@@ -5,7 +5,7 @@ use crate::helpers::{
 use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, QueryMsg, RoundResponse, WinnerResponse, InstantiateMsg, ExecuteMsg};
 use crate::state::{all_winners, combination_save, save_winner, PollInfoState, PollStatus, Proposal, State, STATE, store_state, read_state, WINNING_COMBINATION, JACKPOT, ALL_USER_COMBINATION, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, POLL, PREFIXED_POLL_VOTE, PREFIXED_RANK, COUNT_TICKETS, COUNT_PLAYERS};
 use crate::taxation::deduct_tax;
-use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, StdError, StdResult, Uint128, Response, MessageInfo, DepsMut, Addr, attr, Deps, WasmMsg, WasmQuery, entry_point};
+use cosmwasm_std::{to_binary, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, StdError, StdResult, Uint128, Response, MessageInfo, DepsMut, Addr, attr, Deps, WasmMsg, WasmQuery, entry_point, Timestamp};
 use std::ops::{Add, Mul};
 use terrand;
 use cw20::{Cw20QueryMsg, BalanceResponse, Cw20ExecuteMsg};
@@ -232,7 +232,7 @@ pub fn handle_play(
     }
 
     // calculate next round randomness
-    let from_genesis = state.block_time_play.nanos().checked_sub(DRAND_GENESIS_TIME)?;
+    let from_genesis = state.block_time_play.nanos().checked_sub(DRAND_GENESIS_TIME).unwrap();
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     // Make the contract callable for everyone every x blocks
@@ -333,7 +333,7 @@ pub fn handle_claim(
         ));
     }
 
-    if env.block.time > state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X {
+    if env.block.time.nanos() > state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()).unwrap() / DIV_BLOCK_TIME_BY_X {
         return Err(StdError::generic_err("Claiming is closed"));
     }
     let last_lottery_counter_round = state.lottery_counter - 1;
@@ -344,7 +344,7 @@ pub fn handle_claim(
         None => {
             return Err(StdError::generic_err("No winning combination"));
         }
-    };
+    }.unwrap();
     let addr = deps.api.addr_canonicalize(&info.sender.as_str())?;
 
     let mut combination: Vec<(CanonicalAddr, Vec<String>)> = vec![];
@@ -435,7 +435,7 @@ pub fn handle_collect(
             "Contract deactivated for update or/and preventing security issue",
         ));
     }
-    if env.block.time < state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X {
+    if env.block.time.nanos() < state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()).unwrap() / DIV_BLOCK_TIME_BY_X {
         return Err(StdError::generic_err("Collecting jackpot is closed"));
     }
     // Ensure there is jackpot reward to claim
@@ -462,8 +462,8 @@ pub fn handle_collect(
         None => {
             return Err(StdError::generic_err("Address is not a winner"));
         }
-        Some(rewards) => Ok(rewards)?
-    };
+        Some(rewards) => Ok(rewards)
+    }?;
 
     if rewards.claimed {
         return Err(StdError::generic_err("Already claimed"));
@@ -972,7 +972,7 @@ pub fn handle_present_proposal(
     // Valid the proposal
     match poll.proposal {
         Proposal::LotteryEveryBlockTime => {
-            state.every_block_time_play = poll.amount.u128() as u64;
+            state.every_block_time_play = Timestamp::from_nanos(poll.amount.u128() as u64);
         }
         Proposal::DrandWorkerFeePercentage => {
             state.fee_for_drand_worker_in_percentage = poll.amount.u128() as u8;
@@ -1134,7 +1134,7 @@ fn query_all_players(
             }
             Some(players) => players
                 .iter()
-                .map(|e| deps.api.addr_humanize(&e)?)
+                .map(|e| deps.api.addr_humanize(&e).unwrap().to_string())
                 .collect(),
         };
 
@@ -1255,7 +1255,7 @@ fn query_poll(
 
 fn query_round(deps: Deps) -> StdResult<RoundResponse> {
     let state = read_state(deps.storage)?;
-    let from_genesis = state.block_time_play.nanos().checked_sub(DRAND_GENESIS_TIME)?;
+    let from_genesis = state.block_time_play.nanos().checked_sub(DRAND_GENESIS_TIME).unwrap();
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     Ok(RoundResponse { next_round })
