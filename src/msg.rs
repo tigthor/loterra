@@ -80,17 +80,10 @@ pub enum QueryMsg {
     /// Query Terrand smart contract to get the needed randomness to play the lottery
     GetRandomness { round: u64 },
     /// Not used to be called directly
-    /// Query Loterra smart contract to get the balance
-    Balance { address: String },
     /// Get specific holder, address and balance from loterra staking contract
     Holder { address: String },
     /// Get all holders from loterra staking contract
     Holders {},
-    /// Query Loterra send
-    Transfer {
-        recipient: String,
-        amount: Uint128,
-    },
     /// Update balance of the staking contract with rewards
     UpdateGlobalIndex {},
 }
