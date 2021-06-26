@@ -3,12 +3,13 @@ use crate::helpers::{
     user_total_weight, wrapper_msg_loterra, wrapper_msg_terrand,
 };
 use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse, InstantiateMsg, ExecuteMsg};
-use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_state, read_state, WINNING_COMBINATION, JACKPOT, ALL_USER_COMBINATION, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, WinnerRewardClaims};
+use crate::state::{all_players_storage_read, all_winners, combination_save, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage, jackpot_storage_read, lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State, STATE, store_state, read_state, WINNING_COMBINATION, JACKPOT, ALL_USER_COMBINATION, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, WinnerRewardClaims, POLL, PREFIXED_POLL_VOTE};
 use crate::taxation::deduct_tax;
-use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, Response, MessageInfo, DepsMut, Addr, attr, Deps, WasmMsg};
+use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, Response, MessageInfo, DepsMut, Addr, attr, Deps, WasmMsg, WasmQuery};
 use std::ops::{Add, Mul, Sub};
 use crate::error::ContractError;
 use terrand;
+use cw20::{Cw20QueryMsg, BalanceResponse, Cw20ExecuteMsg};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -478,8 +479,7 @@ pub fn handle_collect(
 
     // update the winner to claimed true
     rewards.claimed = true;
-    winner_storage(&mut deps.storage, last_lottery_counter_round)
-        .save(canonical_addr.as_slice(), &rewards)?;
+    PREFIXED_WINNER.save(deps.storage, (&last_lottery_counter_round.to_be_bytes(), canonical_addr.as_slice()), &rewards)?;
 
     let total_prize = Uint128::from(total_prize);
     // Amount token holders can claim of the reward as fee
@@ -507,11 +507,7 @@ pub fn handle_collect(
 
     // Build the amount transaction
     let msg = BankMsg::Send {
-        from_address: env.contract.address,
-        to_address: deps
-            .api
-            .human_address(&deps.api.canonical_address(&addr).unwrap())
-            .unwrap(),
+        to_address: addr.to_string(),
         amount: vec![deduct_tax(
             &deps,
             Coin {
@@ -522,47 +518,32 @@ pub fn handle_collect(
     };
 
     // Send the jackpot
-    Ok(HandleResponse {
+    Ok(Response {
+        submessages: vec![],
         messages: vec![msg.into(), res_update_global_index],
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "handle_collect".to_string(),
-            },
-            LogAttribute {
-                key: "by".to_string(),
-                value: env.message.sender.to_string(),
-            },
-            LogAttribute {
-                key: "to".to_string(),
-                value: addr.to_string(),
-            },
-            LogAttribute {
-                key: "collecting_jackpot_prize".to_string(),
-                value: "yes".to_string(),
-            },
-        ],
         data: None,
+        attributes: vec![attr("action", "handle_collect"), attr("by", info.sender), attr("to", addr), attr("prize_collect", "true")]
     })
 }
 
-pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_proposal(
+    deps: DepsMut,
     env: Env,
+    info: MessageInfo,
     description: String,
     proposal: Proposal,
     amount: Option<Uint128>,
     prize_per_rank: Option<Vec<u8>>,
-    recipient: Option<HumanAddr>,
-) -> StdResult<HandleResponse> {
-    let mut state = config(&mut deps.storage).load().unwrap();
+    recipient: Option<String>,
+) -> StdResult<Response> {
+    let mut state = read_state(deps.storage)?;);
     // Increment and get the new poll id for bucket key
     let poll_id = state.poll_count + 1;
     // Set the new counter
     state.poll_count = poll_id;
 
     //Handle sender is not sending funds
-    if !env.message.sent_funds.is_empty() {
+    if !info.funds.is_empty() {
         return Err(StdError::generic_err("Do not send funds with proposal"));
     }
 
@@ -581,7 +562,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
 
     let mut proposal_amount: Uint128 = Uint128::zero();
     let mut proposal_prize_rank: Vec<u8> = vec![];
-    let mut proposal_human_address: Option<HumanAddr> = None;
+    let mut proposal_human_address: Option<String> = None;
 
     let proposal_type = if let Proposal::HolderFeePercentage = proposal {
         match amount {
@@ -689,13 +670,13 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     } else if let Proposal::SecurityMigration = proposal {
         match recipient {
             Some(migration_address) => {
-                let sender = deps.api.canonical_address(&env.message.sender)?;
-                let contract_address = deps.api.canonical_address(&env.contract.address)?;
+                let sender = deps.api.addr_canonicalize(info.sender.as_str())?;
+                let contract_address = deps.api.addr_canonicalize(&env.contract.address.as_str())?;
                 if state.admin != contract_address && state.admin != sender {
-                    return Err(StdError::Unauthorized { backtrace: None });
+                    return Err(StdError::generic_err("Unauthorized"));
                 }
 
-                proposal_human_address = Option::from(migration_address);
+                proposal_human_address = Some(migration_address);
             }
             None => {
                 return Err(StdError::generic_err(
@@ -707,24 +688,27 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     } else if let Proposal::DaoFunding = proposal {
         match amount {
             Some(amount) => {
-                let sender = deps.api.canonical_address(&env.message.sender)?;
-                let contract_address = deps.api.canonical_address(&env.contract.address)?;
+                let sender = deps.api.addr_canonicalize(&info.sender.as_str())?;
+                let contract_address = deps.api.addr_canonicalize(&env.contract.address.as_str())?;
                 if state.admin != contract_address && state.admin != sender {
-                    return Err(StdError::Unauthorized { backtrace: None });
+                    return Err(StdError::generic_err("Unauthorized"));
                 }
                 if amount.is_zero() {
                     return Err(StdError::generic_err("Amount be higher than 0".to_string()));
                 }
 
                 // Get the contract balance prepare the tx
-                let msg_balance = QueryMsg::Balance {
-                    address: env.contract.address,
-                };
-                let loterra_human = deps
-                    .api
-                    .human_address(&state.loterra_cw20_contract_address)?;
-                let res_balance = encode_msg_query(msg_balance, loterra_human)?;
-                let loterra_balance = wrapper_msg_loterra(&deps, res_balance)?;
+                let msg_balance = Cw20QueryMsg::Balance { address: env.contract.address.to_string() };
+                let loterra_human =  deps
+                    .api.addr_humanize(&state.loterra_cw20_contract_address)?;
+
+                let res_balance = WasmQuery::Execute {
+                    contract_addr: loterra_human.to_string(),
+                    msg: to_binary(&msg_balance)?,
+                    send: vec![],
+                }
+                    .into();
+                let loterra_balance: BalanceResponse = deps.querier.query(&res_balance)?;
 
                 if loterra_balance.balance.is_zero() {
                     return Err(StdError::generic_err(
@@ -741,7 +725,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
                 proposal_amount = amount;
                 proposal_human_address = match recipient {
                     None => None,
-                    Some(address) => Option::from(address),
+                    Some(address) => Some(address),
                 }
             }
             None => {
@@ -752,12 +736,12 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     } else if let Proposal::StakingContractMigration = proposal {
         match recipient {
             Some(migration_address) => {
-                let sender = deps.api.canonical_address(&env.message.sender)?;
-                let contract_address = deps.api.canonical_address(&env.contract.address)?;
+                let sender = deps.api.addr_canonicalize(&info.sender.as_str())?;
+                let contract_address = deps.api.addr_canonicalize(&env.contract.address.as_str())?;
                 if state.admin != contract_address && state.admin != sender {
-                    return Err(StdError::Unauthorized { backtrace: None });
+                    return Err(StdError::generic_err("Unauthorized"));
                 }
-                proposal_human_address = Option::from(migration_address);
+                proposal_human_address = Some(migration_address);
             }
             None => {
                 return Err(StdError::generic_err(
@@ -774,7 +758,7 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
         ));
     };
 
-    let sender_to_canonical = deps.api.canonical_address(&env.message.sender).unwrap();
+    let sender_to_canonical = deps.api.addr_canonicalize(&info.sender.as_str())?;
 
     let new_poll = PollInfoState {
         creator: sender_to_canonical,
@@ -793,49 +777,38 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     };
 
     // Save poll
-    poll_storage(&mut deps.storage).save(&state.poll_count.to_be_bytes(), &new_poll)?;
+    POLL.save(deps.storage, &state.poll_count.to_be_bytes(), &new_poll)?;
 
     // Save state
-    config(&mut deps.storage).save(&state)?;
+    store_state(deps.storage, &state)?;
 
-    Ok(HandleResponse {
+    Ok(Response {
+        submessages: vec![],
         messages: vec![],
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "create a proposal".to_string(),
-            },
-            LogAttribute {
-                key: "proposal_id".to_string(),
-                value: poll_id.to_string(),
-            },
-            LogAttribute {
-                key: "proposal_creator".to_string(),
-                value: env.message.sender.to_string(),
-            },
-            LogAttribute {
-                key: "proposal_creation_result".to_string(),
-                value: "success".to_string(),
-            },
-        ],
         data: None,
+        attributes: vec![
+            attr("action", "create poll"),
+            attr("poll_id", poll_id),
+            attr("poll_creation_result", "success")
+        ]
     })
 }
 
-pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_vote(
+    deps: DepsMut,
     env: Env,
+    info: MessageInfo,
     poll_id: u64,
     approve: bool,
-) -> StdResult<HandleResponse> {
+) -> StdResult<Response> {
     // Ensure the sender not sending funds accidentally
-    if !env.message.sent_funds.is_empty() {
+    if !info.funds.is_empty() {
         return Err(StdError::generic_err("Do not send funds with vote"));
     }
 
-    let sender = deps.api.canonical_address(&env.message.sender)?;
-    let state = config(&mut deps.storage).load()?;
-    let mut poll_info = poll_storage_read(&deps.storage).load(&poll_id.to_be_bytes())?;
+    let sender = deps.api.addr_canonicalize(&info.sender.as_str())?;
+    let state = read_state(deps.storage)?;
+    let mut poll_info = POLL.load(deps.storage, &poll_id.to_be_bytes())?;
 
     // Ensure the poll is still valid
     if env.block.height > poll_info.end_height {
@@ -847,13 +820,10 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
     }
 
     // if user voted fail, else store the vote
-    poll_vote_storage(&mut deps.storage, poll_id).update(
-        &sender.as_slice(),
-        |exists| match exists {
-            None => Ok(approve),
-            Some(_) => Err(StdError::generic_err("Already voted")),
-        },
-    )?;
+    PREFIXED_POLL_VOTE.update(deps.storage, (&poll_id.to_be_bytes(), &sender.as_slice()), |exist| match exist  {
+        None => Ok(approve),
+        Some(_) => Err(StdError::generic_err("Already voted"))
+    })?;
 
     // Get the sender weight
     let weight = user_total_weight(&deps, &state, &sender);
@@ -873,35 +843,28 @@ pub fn handle_vote<S: Storage, A: Api, Q: Querier>(
         poll_info.weight_no_vote = poll_info.weight_no_vote.add(weight);
     }
     // overwrite poll info
-    poll_storage(&mut deps.storage).save(&poll_id.to_be_bytes(), &poll_info)?;
+    POLL.save(deps.storage, &poll_id.to_be_bytes(), &poll_info)?;
 
-    Ok(HandleResponse {
+    Ok(Response {
+        submessages: vec![],
         messages: vec![],
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "vote".to_string(),
-            },
-            LogAttribute {
-                key: "proposalId".to_string(),
-                value: poll_id.to_string(),
-            },
-            LogAttribute {
-                key: "voting_result".to_string(),
-                value: "success".to_string(),
-            },
-        ],
         data: None,
+        attributes: vec![
+            attr("action", "vote"),
+            attr("poll_id", poll_id),
+            attr("voting_result", "success")
+        ]
     })
 }
 
-pub fn handle_reject_proposal<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_reject_proposal(
+    deps: DepsMut,
     env: Env,
+    info: MessageInfo,
     poll_id: u64,
-) -> StdResult<HandleResponse> {
-    let store = poll_storage_read(&deps.storage).load(&poll_id.to_be_bytes())?;
-    let sender = deps.api.canonical_address(&env.message.sender).unwrap();
+) -> StdResult<Response> {
+    let store = POLL.load(deps.storage, &poll_id.to_be_bytes())?;
+    let sender = deps.api.addr_canonicalize(&info.sender.as_str())?;
 
     // Ensure the sender not sending funds accidentally
     if !env.message.sent_funds.is_empty() {
@@ -915,74 +878,75 @@ pub fn handle_reject_proposal<S: Storage, A: Api, Q: Querier>(
     }
     // Ensure only the creator can reject a proposal OR the status of the proposal is still in progress
     if store.creator != sender || store.status != PollStatus::InProgress {
-        return Err(StdError::Unauthorized { backtrace: None });
+        return Err(StdError::generic_err(
+            "Unauthorized",
+        ));
     }
 
-    poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-        let mut poll_data = poll.unwrap();
-        // Update the status to rejected by the creator
-        poll_data.status = PollStatus::RejectedByCreator;
-        // Update the end eight to now
-        poll_data.end_height = env.block.height;
-        Ok(poll_data)
+    POLL.update(deps.storage, &poll_id.to_be_bytes(), |poll| match poll {
+        None => Err(StdError::generic_err(
+            "Poll not found",
+        )),
+        Some(poll_info) => {
+            let mut poll = poll_info;
+            poll.status = PollStatus::RejectedByCreator;
+            poll.end_height = env.block.height;
+            Ok(poll)
+        }
     })?;
 
-    Ok(HandleResponse {
+    Ok(Response {
+        submessages: vec![],
         messages: vec![],
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "creator reject the proposal".to_string(),
-            },
-            LogAttribute {
-                key: "proposal_id".to_string(),
-                value: poll_id.to_string(),
-            },
-        ],
         data: None,
+        attributes: vec![
+            attr("action", "creator reject the proposal")
+            attr("poll_id", poll_id)
+        ]
     })
 }
 
-pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn handle_present_proposal(
+    deps: DepsMut,
     env: Env,
+    info: MessageInfo,
     poll_id: u64,
-) -> StdResult<HandleResponse> {
+) -> StdResult<Response> {
     // Load storage
-    let mut state = config(&mut deps.storage).load().unwrap();
-    let store = poll_storage_read(&deps.storage)
-        .load(&poll_id.to_be_bytes())
-        .unwrap();
+    let mut state = read_state(deps.storage)?;
+    let poll = POLL.load(deps.storage, &poll_id.to_be_bytes())?;
 
     // Ensure the sender not sending funds accidentally
-    if !env.message.sent_funds.is_empty() {
+    if !info.funds.is_empty() {
         return Err(StdError::generic_err(
             "Do not send funds with present proposal",
         ));
     }
     // Ensure the proposal is still in Progress
-    if store.status != PollStatus::InProgress {
-        return Err(StdError::Unauthorized { backtrace: None });
+    if poll.status != PollStatus::InProgress {
+        return Err(StdError::generic_err(
+            "Unauthorized",
+        ));
     }
 
     let total_weight_bonded = total_weight(&deps, &state);
-    let total_vote_weight = store.weight_yes_vote.add(store.weight_no_vote);
-    let total_yes_weight_percentage = if !store.weight_yes_vote.is_zero() {
-        store.weight_yes_vote.u128() * 100 / total_vote_weight.u128()
+    let total_vote_weight = poll.weight_yes_vote.add(poll.weight_no_vote);
+    let total_yes_weight_percentage = if !poll.weight_yes_vote.is_zero() {
+        poll.weight_yes_vote.u128() * 100 / total_vote_weight.u128()
     } else {
         0
     };
-    let total_no_weight_percentage = if !store.weight_no_vote.is_zero() {
-        store.weight_no_vote.u128() * 100 / total_vote_weight.u128()
+    let total_no_weight_percentage = if !poll.weight_no_vote.is_zero() {
+        poll.weight_no_vote.u128() * 100 / total_vote_weight.u128()
     } else {
         0
     };
 
-    if store.weight_yes_vote.add(store.weight_no_vote).u128() * 100 / total_weight_bonded.u128()
+    if poll.weight_yes_vote.add(poll.weight_no_vote).u128() * 100 / total_weight_bonded.u128()
         < 50
     {
         // Ensure the proposal is ended
-        if store.end_height > env.block.height {
+        if poll.end_height > env.block.height {
             return Err(StdError::generic_err("Proposal still in progress"));
         }
     }
@@ -991,29 +955,29 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     // Based on the recommendation of security audit
     // We recommend to not reject votes based on the number of votes, but rather by the stake of the voters.
     if total_yes_weight_percentage < 50 || total_no_weight_percentage > 33 {
-        return reject_proposal(deps, poll_id);
+        return reject_proposal(&deps, poll_id);
     }
 
     let mut msgs = vec![];
     // Valid the proposal
-    match store.proposal {
+    match poll.proposal {
         Proposal::LotteryEveryBlockTime => {
-            state.every_block_time_play = store.amount.u128() as u64;
+            state.every_block_time_play = poll.amount.u128() as u64;
         }
         Proposal::DrandWorkerFeePercentage => {
-            state.fee_for_drand_worker_in_percentage = store.amount.u128() as u8;
+            state.fee_for_drand_worker_in_percentage = poll.amount.u128() as u8;
         }
         Proposal::JackpotRewardPercentage => {
-            state.jackpot_percentage_reward = store.amount.u128() as u8;
+            state.jackpot_percentage_reward = poll.amount.u128() as u8;
         }
         Proposal::AmountToRegister => {
-            state.price_per_ticket_to_register = store.amount;
+            state.price_per_ticket_to_register = poll.amount;
         }
         Proposal::PrizePerRank => {
-            state.prize_rank_winner_percentage = store.prize_rank;
+            state.prize_rank_winner_percentage = poll.prize_rank;
         }
         Proposal::HolderFeePercentage => {
-            state.token_holder_percentage_fee_reward = store.amount.u128() as u8
+            state.token_holder_percentage_fee_reward = poll.amount.u128() as u8
         }
         Proposal::SecurityMigration => {
             let contract_balance = deps
@@ -1021,8 +985,7 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
                 .query_balance(&env.contract.address, &state.denom_stable)?;
 
             let msg = BankMsg::Send {
-                from_address: env.contract.address,
-                to_address: store.migration_address.unwrap(),
+                to_address: poll.migration_address.unwrap(),
                 amount: vec![deduct_tax(
                     &deps,
                     Coin {
@@ -1034,40 +997,45 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
             msgs.push(msg.into())
         }
         Proposal::DaoFunding => {
-            let recipient = match store.migration_address {
-                None => deps.api.human_address(&store.creator)?,
+            let recipient = match poll.migration_address {
+                None => deps.api.addr_humanize(&poll.creator)?,
                 Some(address) => address,
             };
 
             // Get the contract balance prepare the tx
-            let msg_balance = QueryMsg::Balance {
-                address: env.contract.address,
-            };
+            let msg_balance = Cw20QueryMsg::Balance { address: env.contract.address.to_string() };
+
             let loterra_human = deps
                 .api
-                .human_address(&state.loterra_cw20_contract_address)?;
-            let res_balance = encode_msg_query(msg_balance, loterra_human)?;
-            let loterra_balance = wrapper_msg_loterra(&deps, res_balance)?;
+                .addr_humanize(&state.loterra_cw20_contract_address)?;
 
-            if loterra_balance.balance.u128() < store.amount.u128() {
-                return reject_proposal(deps, poll_id);
+            let res_balance = WasmQuery::Smart {
+                contract_addr: loterra_human.to_string(),
+                msg: to_binary(&msg_balance)?,
             }
+                .into();
+            let loterra_balance: BalanceResponse = deps.querier.query(&res_balance)?;
 
-            let msg_transfer = QueryMsg::Transfer {
-                recipient,
-                amount: store.amount,
-            };
+            if loterra_balance.balance.u128() < poll.amount.u128() {
+                return reject_proposal(&deps, poll_id);
+            }
+            let msg_transfer = Cw20ExecuteMsg::Transfer { recipient: recipient.to_string(), amount: poll.amount };
+
             let loterra_human = deps
                 .api
-                .human_address(&state.loterra_cw20_contract_address)?;
-            let res_transfer = encode_msg_execute(msg_transfer, loterra_human, vec![])?;
+                .addr_humanize(&state.loterra_cw20_contract_address)?;
+            let res_transfer = WasmMsg::Execute {
+                contract_addr: loterra_human.to_string(),
+                msg: msg_transfer.into(),
+                send: vec![]
+            };
 
-            msgs.push(res_transfer)
+            msgs.push(res_transfer.into())
         }
         Proposal::StakingContractMigration => {
             state.loterra_staking_contract_address = deps
                 .api
-                .canonical_address(&store.migration_address.unwrap())?;
+                .addr_canonicalize(&poll.migration_address.unwrap())?;
         }
         Proposal::PollSurvey => {}
         _ => {
@@ -1076,39 +1044,31 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
     }
 
     // Save to storage
-    poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-        let mut poll_data = poll.unwrap();
-        // Update the status to passed
-        poll_data.status = PollStatus::Passed;
-        Ok(poll_data)
+    POLL.update(deps.storage, &poll_id.to_be_bytes(), |poll| match poll{
+        None => Err(StdError::generic_err("Not found")),
+        Some(poll_info) => {
+            let mut poll = poll_info;
+            poll.status = PollStatus::Passed;
+            Ok(poll)
+        }
     })?;
 
-    config(&mut deps.storage).save(&state)?;
+    store_state(deps.storage, &state)?;
 
-    Ok(HandleResponse {
+    Ok(Response {
+        submessages: vec![],
         messages: msgs,
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "present the proposal".to_string(),
-            },
-            LogAttribute {
-                key: "proposal_id".to_string(),
-                value: poll_id.to_string(),
-            },
-            LogAttribute {
-                key: "proposal_result".to_string(),
-                value: "approved".to_string(),
-            },
-        ],
         data: None,
+        attributes: vec![
+            attr("action", "present poll"),
+            attr("poll_id", poll_id),
+            attr("poll_result", "approved")
+        ]
     })
 }
 
-pub fn query<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    msg: QueryMsg,
-) -> StdResult<Binary> {
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
         QueryMsg::Combination {
@@ -1133,14 +1093,14 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
     Ok(response)
 }
 
-fn query_config<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_config(
+    deps: Deps,
 ) -> StdResult<ConfigResponse> {
     let state = config_read(&deps.storage).load()?;
     Ok(state)
 }
-fn query_winner_rank<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_winner_rank(
+    deps: Deps,
     lottery_id: u64,
     rank: u8,
 ) -> StdResult<Uint128> {
@@ -1152,10 +1112,10 @@ fn query_winner_rank<S: Storage, A: Api, Q: Querier>(
     Ok(amount)
 }
 
-fn query_all_players<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_all_players(
+    deps: Deps,
     lottery_id: u64,
-) -> StdResult<Vec<HumanAddr>> {
+) -> StdResult<Vec<String>> {
     let players =
         match all_players_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
             None => {
@@ -1171,8 +1131,8 @@ fn query_all_players<S: Storage, A: Api, Q: Querier>(
         };
     Ok(players)
 }
-fn query_jackpot<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_jackpot(
+    deps: Deps,
     lottery_id: u64,
 ) -> StdResult<Uint128> {
     let amount = match jackpot_storage_read(&deps.storage).may_load(&lottery_id.to_be_bytes())? {
@@ -1181,8 +1141,8 @@ fn query_jackpot<S: Storage, A: Api, Q: Querier>(
     };
     Ok(amount)
 }
-fn query_count_ticket<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_count_ticket(
+    deps: Deps,
     lottery_id: u64,
 ) -> StdResult<Uint128> {
     let amount = match count_total_ticket_by_lottery_read(&deps.storage)
@@ -1193,8 +1153,8 @@ fn query_count_ticket<S: Storage, A: Api, Q: Querier>(
     };
     Ok(amount)
 }
-fn query_count_player<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_count_player(
+    deps: Deps,
     lottery_id: u64,
 ) -> StdResult<Uint128> {
     let amount =
@@ -1204,8 +1164,8 @@ fn query_count_player<S: Storage, A: Api, Q: Querier>(
         };
     Ok(amount)
 }
-fn query_winning_combination<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_winning_combination(
+    deps: Deps,
     lottery_id: u64,
 ) -> StdResult<String> {
     let combination = match lottery_winning_combination_storage_read(&deps.storage)
@@ -1221,12 +1181,12 @@ fn query_winning_combination<S: Storage, A: Api, Q: Querier>(
     };
     Ok(combination)
 }
-fn query_all_combination<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_all_combination(
+    deps: Deps,
     lottery_id: u64,
-    address: HumanAddr,
+    address: String,
 ) -> StdResult<AllCombinationResponse> {
-    let addr = deps.api.canonical_address(&address)?;
+    let addr = deps.api.addr_canonicalize(&address)?;
     let combo =
         match user_combination_bucket_read(&deps.storage, lottery_id).may_load(addr.as_slice())? {
             None => {
@@ -1241,8 +1201,8 @@ fn query_all_combination<S: Storage, A: Api, Q: Querier>(
     Ok(AllCombinationResponse { combination: combo })
 }
 
-fn query_all_winner<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_all_winner(
+    deps: Deps,
     lottery_id: u64,
 ) -> StdResult<AllWinnersResponse> {
     let winners = all_winners(&deps.storage, lottery_id)?;
@@ -1250,7 +1210,7 @@ fn query_all_winner<S: Storage, A: Api, Q: Querier>(
         .into_iter()
         .map(|(can_addr, claims)| {
             Ok(WinnerResponse {
-                address: deps.api.human_address(&can_addr)?,
+                address: deps.api.addr_humanize(&can_addr)?.to_string(),
                 claims,
             })
         })
@@ -1259,13 +1219,11 @@ fn query_all_winner<S: Storage, A: Api, Q: Querier>(
     Ok(AllWinnersResponse { winners: res? })
 }
 
-fn query_poll<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+fn query_poll(
+    deps: Deps,
     poll_id: u64,
 ) -> StdResult<GetPollResponse> {
-    let store = poll_storage_read(&deps.storage);
-
-    let poll = match store.may_load(&poll_id.to_be_bytes())? {
+    let poll = match POLL.may_load(deps.storage,&poll_id.to_be_bytes())? {
         Some(poll) => Some(poll),
         None => {
             return Err(StdError::NotFound {

@@ -2,11 +2,9 @@ use crate::msg::QueryMsg;
 use crate::query::{
     GetHolderResponse, GetHoldersResponse, LoterraBalanceResponse, TerrandResponse,
 };
-use crate::state::{poll_storage, PollStatus, State};
-use cosmwasm_std::{
-    to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HandleResponse, HumanAddr,
-    LogAttribute, Querier, QueryRequest, StdResult, Storage, Uint128, WasmMsg, WasmQuery,
-};
+use crate::state::{poll_storage, PollStatus, State, POLL, PollInfoState};
+use cosmwasm_std::{to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Querier, QueryRequest, StdResult, Storage, Uint128, WasmMsg, WasmQuery, DepsMut, Response, StdError, attr};
+
 pub fn count_match(x: &str, y: &str) -> usize {
     let mut count = 0;
     for i in 0..y.len() {
@@ -74,24 +72,28 @@ pub fn wrapper_msg_loterra_all_staking<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
-pub fn user_total_weight<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+pub fn user_total_weight(
+    deps: &DepsMut,
     state: &State,
     address: &CanonicalAddr,
 ) -> Uint128 {
+
     let mut weight = Uint128::zero();
-    let human_address = deps.api.human_address(&address).unwrap();
+    let human_address = deps.api.addr_humanize(&address)?;
 
     // Ensure sender have some reward tokens
-    let msg = QueryMsg::Holder {
-        address: human_address,
-    };
+    let msg = loterra_staking_contract::msg::QueryMsg::Holder { address: human_address.to_string() };
+
     let loterra_human = deps
         .api
-        .human_address(&state.loterra_staking_contract_address.clone())
-        .unwrap();
-    let res = encode_msg_query(msg, loterra_human).unwrap();
-    let loterra_balance = wrapper_msg_loterra_staking(&deps, res).unwrap();
+        .addr_humanize(&state.loterra_staking_contract_address.clone())?;
+
+    let query = WasmQuery::Smart {
+        contract_addr: loterra_human.to_string(),
+        msg: to_binary(&msg)?,
+    }
+        .into();
+    let loterra_balance: loterra_staking_contract::msg::HolderResponse = deps.querier.query(&query)?;
 
     if !loterra_balance.balance.is_zero() {
         weight += loterra_balance.balance;
@@ -133,32 +135,27 @@ pub fn wrapper_msg_loterra<S: Storage, A: Api, Q: Querier>(
     Ok(res)
 }
 
-pub fn reject_proposal<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+pub fn reject_proposal(
+    deps: &DepsMut,
     poll_id: u64,
-) -> StdResult<HandleResponse> {
-    poll_storage(&mut deps.storage).update::<_>(&poll_id.to_be_bytes(), |poll| {
-        let mut poll_data = poll.unwrap();
-        // Update the status to rejected
-        poll_data.status = PollStatus::Rejected;
-        Ok(poll_data)
+) -> StdResult<Response> {
+    POLL.update(deps.storage, &poll_id.to_be_bytes(), |poll| match poll {
+        None => Err(StdError::generic_err("Proposal still in progress")),
+        Some(poll_info) => {
+            let mut poll = poll_info;
+            poll.status = PollStatus::Rejected;
+            Ok(poll)
+        }
     })?;
-    Ok(HandleResponse {
+
+    Ok(Response {
+        submessages: vec![],
         messages: vec![],
-        log: vec![
-            LogAttribute {
-                key: "action".to_string(),
-                value: "present the proposal".to_string(),
-            },
-            LogAttribute {
-                key: "proposal_id".to_string(),
-                value: poll_id.to_string(),
-            },
-            LogAttribute {
-                key: "proposal_result".to_string(),
-                value: "rejected".to_string(),
-            },
-        ],
         data: None,
+        attributes: vec![
+            attr("action", "present poll"),
+            attr("poll_id", poll_id),
+            attr("poll_result", "rejected")
+        ]
     })
 }
