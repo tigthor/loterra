@@ -482,9 +482,9 @@ dependencies = [
 
 [[package]]
 name = "loterra-staking-contract"
-version = "2.0.0"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "028702f85d0dadebe0dd791a2513811ec4dd7d687c3e4e3e85d49a6a991a558c"
+checksum = "0d59771b58dacad0930a22bc283ad8bbd0af2d156b560c3585ad6148f0ed8b8f"
 dependencies = [
  "cosmwasm-bignumber",
  "cosmwasm-std",
