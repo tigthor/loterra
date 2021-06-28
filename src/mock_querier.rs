@@ -1,8 +1,8 @@
 use crate::query::{GetHoldersResponse, HoldersInfo};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{from_slice, to_binary, Api, Binary, Coin, Decimal, Empty, Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, OwnedDeps, SystemResult};
+use cosmwasm_std::{ContractResult,from_slice, to_binary, Binary, Coin, Decimal, Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, OwnedDeps, SystemResult};
 use serde::Serialize;
-use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
+use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper};
 
 pub fn mock_dependencies_custom(
     contract_balance: &[Coin],
@@ -98,7 +98,7 @@ impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<TerraQueryWrapper>) -> QuerierResult {
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
-                if contract_addr == "terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20".to_string()
+                if contract_addr == &"cw20".to_string()
                 {
                     println!("{:?}", request);
                     let msg_balance = LotteraBalanceResponse {
@@ -106,7 +106,7 @@ impl WasmMockQuerier {
                     };
                     return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
                 } else if contract_addr
-                    == "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand".to_string()
+                    == &"terrand".to_string()
                 {
                     let msg_terrand = TerrandResponse {
                         randomness: Binary::from(
@@ -116,7 +116,7 @@ impl WasmMockQuerier {
                     };
                     return SystemResult::Ok(ContractResult::from(to_binary(&msg_terrand)));
                 } else if contract_addr
-                    =="terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking".to_string()
+                    == &"staking".to_string()
                 {
                     if msg == &Binary::from(r#"{"get_all_bonded":{}}"#.as_bytes()) {
                         let msg_balance = GetAllBondedResponse {
