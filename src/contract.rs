@@ -1266,26 +1266,24 @@ mod tests {
     use super::*;
     use crate::mock_querier::mock_dependencies_custom;
     use crate::msg::{HandleMsg, InitMsg};
-    use cosmwasm_std::testing::{mock_dependencies, mock_env};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
     use cosmwasm_std::StdError::GenericErr;
-    use cosmwasm_std::{Api, CosmosMsg, HumanAddr, Storage, Uint128, WasmMsg};
+    use cosmwasm_std::{Api, CosmosMsg, Storage, Uint128, WasmMsg};
 
     struct BeforeAll {
-        default_length: usize,
-        default_sender: HumanAddr,
-        default_sender_two: HumanAddr,
-        default_sender_owner: HumanAddr,
+        default_sender: String,
+        default_sender_two: String,
+        default_sender_owner: String,
     }
     fn before_all() -> BeforeAll {
         BeforeAll {
-            default_length: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k").len(),
-            default_sender: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"),
-            default_sender_two: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q008"),
-            default_sender_owner: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"),
+            default_sender: "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007".to_string(),
+            default_sender_two: "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q008".to_string(),
+            default_sender_owner: "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k".to_string(),
         }
     }
 
-    fn default_init<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>) {
+    fn default_init(deps: DepsMut) {
         const DENOM_STABLE: &str = "ust";
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
@@ -1309,13 +1307,7 @@ mod tests {
             ),
             holders_bonus_block_time_end: BONUS_BLOCK_TIME_END,
         };
-
-        init(
-            &mut deps,
-            mock_env("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k", &[]),
-            init_msg,
-        )
-        .unwrap();
+        instantiate(deps, mock_env(), mock_info("addr0000", &[]), init_msg).unwrap();
     }
 
     #[test]
@@ -1323,14 +1315,14 @@ mod tests {
         let before_all = before_all();
         let mut deps = mock_dependencies(before_all.default_length, &[]);
 
-        default_init(&mut deps);
+        default_init(deps.as_mut());
     }
     #[test]
     fn get_round_play() {
         let before_all = before_all();
         let mut deps = mock_dependencies(before_all.default_length, &[]);
-        default_init(&mut deps);
-        let res = query_round(&deps).unwrap();
+        default_init(deps.as_mut());
+        let res = query_round(deps.as_ref()).unwrap();
         println!("{:?}", res.next_round);
     }
 
