@@ -174,23 +174,23 @@ pub fn handle_register(
 
     // Check if some funds are sent
     let sent = match info.funds.len() {
-        0 => Err(StdError::generic_err(format!("you need to send {} {} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable))),
+        0 => Err(StdError::generic_err(format!("you need to send {}{} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable))),
         1 => {
             if info.funds[0].denom == state.denom_stable {
                 Ok(info.funds[0].amount)
             } else {
-                Err(StdError::generic_err(format!("you need to send {} {} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable)))
+                Err(StdError::generic_err(format!("you need to send {}{} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable)))
             }
         }
         _ => Err(StdError::generic_err(format!("Only send {0} to register", &state.denom_stable))),
     }?;
 
     if sent.is_zero() {
-        return Err(StdError::generic_err(format!("you need to send {} {} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable)));
+        return Err(StdError::generic_err(format!("you need to send {}{} per combination in order to register", &state.price_per_ticket_to_register, &state.denom_stable)));
     }
     // Handle the player is not sending too much or too less
     if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
-        return Err(StdError::generic_err(format!("send {} {}", &state.price_per_ticket_to_register.u128() * combination.len() as u128,
+        return Err(StdError::generic_err(format!("send {}{}", &state.price_per_ticket_to_register.u128() * combination.len() as u128,
                                                  state.denom_stable)));
     }
 
@@ -227,7 +227,7 @@ pub fn handle_play(
 
     if state.safe_lock {
         return Err(StdError::generic_err(
-            "Contract deactivated for update or/and preventing security issue",
+            "Deactivated",
         ));
     }
 
@@ -329,7 +329,7 @@ pub fn handle_claim(
     let state = read_state(deps.storage)?;
     if state.safe_lock {
         return Err(StdError::generic_err(
-            "Contract deactivated for update or/and preventing security issue",
+            "Deactivated",
         ));
     }
 
@@ -432,7 +432,7 @@ pub fn handle_collect(
 
     if state.safe_lock {
         return Err(StdError::generic_err(
-            "Contract deactivated for update or/and preventing security issue",
+            "Deactivated",
         ));
     }
     if env.block.time.nanos() < state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()).unwrap() / DIV_BLOCK_TIME_BY_X {
@@ -1267,8 +1267,7 @@ mod tests {
     use crate::mock_querier::mock_dependencies_custom;
     use crate::msg::{ExecuteMsg, InstantiateMsg};
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::StdError::GenericErr;
-    use cosmwasm_std::{Api, CosmosMsg, Storage, Uint128, WasmMsg};
+    use cosmwasm_std::{Uint128, Api};
 
     struct BeforeAll {
         default_sender: String,
@@ -1277,9 +1276,9 @@ mod tests {
     }
     fn before_all() -> BeforeAll {
         BeforeAll {
-            default_sender: "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007".to_string(),
-            default_sender_two: "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q008".to_string(),
-            default_sender_owner: "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k".to_string(),
+            default_sender: "addr0000".to_string(),
+            default_sender_two: "addr0001".to_string(),
+            default_sender_owner: "addr0002".to_string(),
         }
     }
 
@@ -1296,15 +1295,13 @@ mod tests {
             block_time_play: BLOCK_TIME_PLAY,
             every_block_time_play: EVERY_BLOCK_TIME_PLAY,
             poll_default_end_height: POLL_DEFAULT_END_HEIGHT,
-            terrand_contract_address: HumanAddr::from(
-                "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand",
-            ),
-            loterra_cw20_contract_address: HumanAddr::from(
-                "terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20",
-            ),
-            loterra_staking_contract_address: HumanAddr::from(
-                "terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking",
-            ),
+            terrand_contract_address:
+                "terrand".to_string(),
+            loterra_cw20_contract_address:
+                "cw20".to_string()
+            ,
+            loterra_staking_contract_address:
+                "staking".to_string(),
             holders_bonus_block_time_end: BONUS_BLOCK_TIME_END,
         };
         instantiate(deps, mock_env(), mock_info("addr0000", &[]), init_msg).unwrap();
@@ -1313,14 +1310,14 @@ mod tests {
     #[test]
     fn proper_init() {
         let before_all = before_all();
-        let mut deps = mock_dependencies(before_all.default_length, &[]);
+        let mut deps = mock_dependencies(&[]);
 
         default_init(deps.as_mut());
     }
     #[test]
     fn get_round_play() {
         let before_all = before_all();
-        let mut deps = mock_dependencies(before_all.default_length, &[]);
+        let mut deps = mock_dependencies( &[]);
         default_init(deps.as_mut());
         let res = query_round(deps.as_ref()).unwrap();
         println!("{:?}", res.next_round);
@@ -1339,11 +1336,11 @@ mod tests {
 
         let winner_address = deps
             .api
-            .canonical_address(&HumanAddr::from("address".to_string()))
+            .addr_canonicalize(&"address".to_string())
             .unwrap();
         let winner_address2 = deps
             .api
-            .canonical_address(&HumanAddr::from("address2".to_string()))
+            .addr_canonicalize(&"address2".to_string())
             .unwrap();
         save_winner(&mut deps.storage, 1u64, winner_address, 2).unwrap();
         save_winner(&mut deps.storage, 1u64, winner_address2, 2).unwrap();
@@ -1357,16 +1354,17 @@ mod tests {
         #[test]
         fn claim_is_closed() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            let mut deps = mock_dependencies( &[]);
             default_init(deps.as_mut());
             let msg = ExecuteMsg::Claim { addresses: None };
 
-            let mut state = config(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(before_all.default_sender, &[]);
+            let mut state = read_state(deps.as_ref().storage).unwrap();
+            let info = mock_info(before_all.default_sender.as_str(), &[]);
+            let mut env = mock_env();
             env.block.time = state.block_time_play;
-            let res = handle(&mut deps, env, msg.clone());
+            let res = execute(deps.as_mut(), env, info, msg);
             match res {
-                Err(GenericErr { msg, .. }) => assert_eq!(msg, "Claiming is closed"),
+                Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Claiming is closed"),
                 _ => panic!("Unexpected error"),
             }
         }
@@ -1374,70 +1372,66 @@ mod tests {
         #[test]
         fn no_winning_combination() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
 
             let msg = ExecuteMsg::Claim { addresses: None };
-            let res = handle(
-                &mut deps,
-                mock_env(before_all.default_sender, &[]),
-                msg.clone(),
-            );
+            let state = read_state(deps.as_ref().storage).unwrap();
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos((state.block_time_play.nanos() - state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X);
+            println!("{:?}", env.block.time);
+            println!("{:?}", state.block_time_play.nanos());
+            let res = execute(deps.as_mut(), env, mock_info(before_all.default_sender.as_str(), &[]), msg);
             match res {
-                Err(StdError::NotFound {
-                    kind,
-                    backtrace: None,
-                }) => assert_eq!(kind, "No winning combination"),
+                Err(StdError::GenericErr {
+                    msg,
+                    ..
+                }) => assert_eq!(msg, "No winning combination"),
                 _ => panic!("Unexpected error"),
             }
         }
         #[test]
         fn no_combination() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let addr = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
-            let mut state = config(&mut deps.storage).load().unwrap();
+            let mut state = read_state(deps.as_ref().storage).unwrap();
             state.lottery_counter = 2;
-            config(&mut deps.storage).save(&state).unwrap();
+            store_state(deps.as_mut().storage, &state).unwrap();
             let last_lottery_counter_round = state.lottery_counter - 1;
             // Save winning combination
-            lottery_winning_combination_storage(&mut deps.storage)
-                .save(
-                    &last_lottery_counter_round.to_be_bytes(),
-                    &"123456".to_string(),
-                )
-                .unwrap();
+            WINNING_COMBINATION.save(deps.as_mut().storage,&last_lottery_counter_round.to_be_bytes(),&"123456".to_string()).unwrap();
             let msg = ExecuteMsg::Claim { addresses: None };
-            let res = handle(
-                &mut deps,
-                mock_env(before_all.default_sender, &[]),
-                msg.clone(),
-            );
+
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos((state.block_time_play.nanos() - state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X);
+            let res = execute(deps.as_mut(), env, mock_info( before_all.default_sender.as_str(),&[]), msg);
             match res {
-                Err(StdError::NotFound {
-                    kind,
-                    backtrace: None,
-                }) => assert_eq!(kind, "No combination found"),
+                Err(StdError::GenericErr {
+                    msg,
+                    ..
+                }) => assert_eq!(msg, "No combination found"),
                 _ => panic!("Unexpected error"),
             }
         }
         #[test]
         fn success() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let addr = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
-            let mut state = config(&mut deps.storage).load().unwrap();
+            let mut state = read_state(deps.as_ref().storage).unwrap();
             // Save combination by senders
+
             combination_save(
-                &mut deps.storage,
+                deps.as_mut().storage,
                 state.lottery_counter,
                 addr.clone(),
                 vec![
@@ -1450,49 +1444,38 @@ mod tests {
             .unwrap();
 
             // Save winning combination
-            lottery_winning_combination_storage(&mut deps.storage)
-                .save(&state.lottery_counter.to_be_bytes(), &"123456".to_string())
-                .unwrap();
+            WINNING_COMBINATION.save(deps.as_mut().storage, &state.lottery_counter.to_be_bytes(), &"123456".to_string()).unwrap();
             state.lottery_counter = 2;
-            config(&mut deps.storage).save(&state).unwrap();
+            store_state(deps.as_mut().storage, &state).unwrap();
 
             let msg = ExecuteMsg::Claim { addresses: None };
-            let res = handle(
-                &mut deps,
-                mock_env(before_all.default_sender.clone(), &[]),
-                msg.clone(),
-            )
-            .unwrap();
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos((state.block_time_play.nanos() - state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X);
+            let res = execute(deps.as_mut(), env.clone(), mock_info(before_all.default_sender.as_str().clone(), &[]), msg.clone()).unwrap();
+
             println!("{:?}", res);
             assert_eq!(
                 res,
-                HandleResponse {
+                Response {
+                    submessages: vec![],
                     messages: vec![],
-                    log: vec![LogAttribute {
-                        key: "action".to_string(),
-                        value: "claim".to_string()
-                    }],
-                    data: None
+                    data: None,
+                    attributes: vec![attr("action", "claim")]
                 }
             );
             // Claim again is not possible
-            let res = handle(
-                &mut deps,
-                mock_env(before_all.default_sender, &[]),
-                msg.clone(),
-            );
+            let res = execute(deps.as_mut(), env, mock_info(before_all.default_sender.as_str().clone(), &[]), msg.clone());
             match res {
-                Err(StdError::NotFound {
-                    kind,
-                    backtrace: None,
-                }) => assert_eq!(kind, "No winning combination or already claimed"),
+                Err(StdError::GenericErr {
+                    msg,
+                    ..
+                }) => assert_eq!(msg, "No winning combination or already claimed"),
                 _ => panic!("Unexpected error"),
             }
 
             let last_lottery_counter_round = state.lottery_counter - 1;
-            let winners = winner_storage_read(&deps.storage, last_lottery_counter_round)
-                .load(&addr.as_slice())
-                .unwrap();
+            let winners = PREFIXED_WINNER.load(deps.as_ref().storage, (&last_lottery_counter_round.to_be_bytes(), &addr.as_slice())).unwrap();
+
             println!("{:?}", winners);
             assert!(!winners.claimed);
             assert_eq!(winners.ranks.len(), 3);
@@ -1501,47 +1484,42 @@ mod tests {
             assert_eq!(winners.ranks[2], 2);
         }
     }
+
     mod register {
         // handle_register
         use super::*;
+        use cosmwasm_std::from_binary;
+
         #[test]
         fn security_active() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
-            //let r = CanonicalAddr(&"DZuks7zPRv9wp2lJTEKdihcInQc=");
-            let f = deps
-                .api
-                .canonical_address(&HumanAddr::from(
-                    "terra1umd70qd4jv686wjrsnk92uxgewca3805dxd46p",
-                ))
-                .unwrap();
-            println!("{}", f);
-            let mut state = config(&mut deps.storage).load().unwrap();
+            let mut deps = mock_dependencies(&[]);
+            default_init(deps.as_mut());
+
+            let mut state = read_state(deps.as_ref().storage).unwrap();
             state.safe_lock = true;
-            config(&mut deps.storage).save(&state).unwrap();
+            store_state(deps.as_mut().storage, &state).unwrap();
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
-                    }],
-                ),
-                msg.clone(),
+            let res = execute(deps.as_mut(), mock_env(),
+            mock_info(
+                before_all.default_sender.as_str(),
+                &[Coin {
+                    denom: "ust".to_string(),
+                    amount: Uint128(1_000_000),
+                }],
+            ),
+                msg
             );
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(
                     msg,
-                    "Contract deactivated for update or/and preventing security issue"
+                    "Deactivated"
                 ),
                 _ => panic!("Unexpected error"),
             }
@@ -1549,8 +1527,8 @@ mod tests {
         #[test]
         fn register_success() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec![
@@ -1559,40 +1537,39 @@ mod tests {
                     "123456".to_string(),
                 ],
             };
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender.clone(),
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(3_000_000),
-                    }],
-                ),
-                msg.clone(),
-            )
-            .unwrap();
+            let mut env = mock_env();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            let res = execute(deps.as_mut(), env.clone(),
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[Coin {
+                                      denom: "ust".to_string(),
+                                      amount: Uint128(3_000_000),
+                                  }],
+                              ),
+                              msg
+            ).unwrap();
+
             assert_eq!(
                 res,
-                HandleResponse {
+                Response {
+                    submessages: vec![],
                     messages: vec![],
-                    log: vec![LogAttribute {
-                        key: "action".to_string(),
-                        value: "register".to_string()
-                    }],
-                    data: None
+                    data: None,
+                    attributes: vec![attr("action", "register")]
                 }
             );
             // Check combination added with success
             let addr = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
-            let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
-                .load(&addr.as_slice())
-                .unwrap();
+            let store_two =
+                PREFIXED_USER_COMBINATION.load(deps.as_mut().storage, (&1u64.to_be_bytes(), &addr.as_slice())).unwrap();
             assert_eq!(3, store_two.len());
             let msg_query = QueryMsg::Players { lottery_id: 1 };
-            let res = query(&deps, msg_query).unwrap();
+            let res = query(deps.as_ref(), mock_env(), msg_query).unwrap();
             let formated_binary = String::from_utf8(res.into()).unwrap();
             println!("sdsds {:?}", formated_binary);
 
@@ -1601,26 +1578,26 @@ mod tests {
                 address: None,
                 combination: vec!["affe3b".to_string(), "098765".to_string()],
             };
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender.clone(),
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(2_000_000),
-                    }],
-                ),
-                msg.clone(),
-            )
-            .unwrap();
+
+            let res = execute(deps.as_mut(), env.clone(),
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[Coin {
+                                      denom: "ust".to_string(),
+                                      amount: Uint128(2_000_000),
+                                  }],
+                              ),
+                              msg
+            ).unwrap();
+
             // Check combination added with success
             let addr = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
-            let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
-                .load(addr.as_slice())
-                .unwrap();
+            let store_two =
+                PREFIXED_USER_COMBINATION.load(deps.as_mut().storage, (&1u64.to_be_bytes(), &addr.as_slice())).unwrap();
+
             assert_eq!(5, store_two.len());
             assert_eq!(store_two[3], "affe3b".to_string());
             assert_eq!(store_two[4], "098765".to_string());
@@ -1631,61 +1608,61 @@ mod tests {
                 combination: vec!["aaaaaa".to_string(), "bbbbbb".to_string()],
             };
             // default_sender_two sending combination for default_sender
-            let _res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender.clone(),
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(2_000_000),
-                    }],
-                ),
-                msg.clone(),
-            )
-            .unwrap();
+            let res = execute(deps.as_mut(), env,
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[Coin {
+                                      denom: "ust".to_string(),
+                                      amount: Uint128(2_000_000),
+                                  }],
+                              ),
+                              msg
+            ).unwrap();
 
             // Check combination added with success
             let addr = deps
                 .api
-                .canonical_address(&before_all.default_sender_two)
+                .addr_canonicalize(&before_all.default_sender_two)
                 .unwrap();
-            let store_two = user_combination_bucket_read(&mut deps.storage, 1u64)
-                .load(addr.as_slice())
-                .unwrap();
+            let store_two =
+                PREFIXED_USER_COMBINATION.load(deps.as_mut().storage, (&1u64.to_be_bytes(), &addr.as_slice())).unwrap();
             assert_eq!(2, store_two.len());
             assert_eq!(store_two[0], "aaaaaa".to_string());
             assert_eq!(store_two[1], "bbbbbb".to_string());
 
             let msg = QueryMsg::CountPlayer { lottery_id: 1 };
-            let res = query(&deps, msg).unwrap();
-            let r = String::from_utf8(res.into()).unwrap();
-
-            assert_eq!("\"2\"", r);
+            let res = query(deps.as_ref(), mock_env(), msg).unwrap();
+            let r: Uint128 = from_binary(&res).unwrap();
+            //let r = String::from_utf8(res.into()).unwrap();
+            assert_eq!(Uint128(2), r);
         }
         #[test]
         fn register_fail_if_sender_sent_empty_funds() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(0),
-                    }],
-                ),
-                msg.clone(),
+            let mut env = mock_env();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            let res = execute(deps.as_mut(), env,
+                    mock_info(
+                        before_all.default_sender.as_str(),
+                        &[Coin {
+                            denom: "ust".to_string(),
+                            amount: Uint128::zero(),
+                        }],
+                    ),
+                    msg
             );
+
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(
                     msg,
                     "you need to send 1000000ust per combination in order to register"
@@ -1696,34 +1673,36 @@ mod tests {
         #[test]
         fn register_fail_if_sender_sent_multiple_denom() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[
-                        Coin {
-                            denom: "ust".to_string(),
-                            amount: Uint128(1_000_000),
-                        },
-                        Coin {
-                            denom: "wrong".to_string(),
-                            amount: Uint128(10),
-                        },
-                    ],
-                ),
-                msg.clone(),
+            let mut env = mock_env();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            let res = execute(deps.as_mut(), env,
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[
+                                      Coin {
+                                          denom: "ust".to_string(),
+                                          amount: Uint128(1_000_000),
+                                      },
+                                      Coin {
+                                          denom: "wrong".to_string(),
+                                          amount: Uint128(10),
+                                      },
+                                  ],
+                              ),
+                              msg
             );
 
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(msg, "Only send ust to register"),
                 _ => panic!("Unexpected error"),
             }
@@ -1731,31 +1710,36 @@ mod tests {
         #[test]
         fn register_fail_if_sender_sent_wrong_denom() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "wrong".to_string(),
-                        amount: Uint128(1_000_000),
-                    }],
-                ),
-                msg.clone(),
+
+            let mut env = mock_env();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            let res = execute(deps.as_mut(), env,
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[
+                                      Coin {
+                                          denom: "wrong".to_string(),
+                                          amount: Uint128(1_000_000),
+                                      },
+                                  ],
+                              ),
+                              msg
             );
 
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(
                     msg,
-                    "To register you need to send 1000000ust per combination"
+                    "you need to send 1000000ust per combination in order to register"
                 ),
                 _ => panic!("Unexpected error"),
             }
@@ -1763,27 +1747,32 @@ mod tests {
         #[test]
         fn register_fail_wrong_combination() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3far".to_string()],
             };
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
-                    }],
-                ),
-                msg.clone(),
+            let mut env = mock_env();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            let res = execute(deps.as_mut(), env,
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[
+                                      Coin {
+                                          denom: "ust".to_string(),
+                                          amount: Uint128(1_000_000),
+                                      },
+                                  ],
+                              ),
+                              msg
             );
+
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(
                     msg,
                     "Not authorized use combination of [a-f] and [0-9] with length 6"
@@ -1794,27 +1783,32 @@ mod tests {
         #[test]
         fn register_fail_multiple_wrong_combination() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3far".to_string(), "1e3fac".to_string()],
             };
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
-                    }],
-                ),
-                msg.clone(),
+            let mut env = mock_env();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            let res = execute(deps.as_mut(), env,
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[
+                                      Coin {
+                                          denom: "ust".to_string(),
+                                          amount: Uint128(2_000_000),
+                                      },
+                                  ],
+                              ),
+                              msg
             );
+
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(
                     msg,
                     "Not authorized use combination of [a-f] and [0-9] with length 6"
@@ -1825,47 +1819,53 @@ mod tests {
         #[test]
         fn register_fail_sent_too_much_or_less() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies( &[]);
+            default_init(deps.as_mut());
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fae".to_string(), "1e3fa2".to_string()],
             };
+
+            let mut env = mock_env();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
             // Fail sending less than required (1_000_000)
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender.clone(),
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
-                    }],
-                ),
-                msg.clone(),
+            let res = execute(deps.as_mut(), env.clone(),
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[
+                                      Coin {
+                                          denom: "ust".to_string(),
+                                          amount: Uint128(1_000_000),
+                                      },
+                                  ],
+                              ),
+                              msg.clone()
             );
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(msg, "send 2000000ust"),
                 _ => panic!("Unexpected error"),
             }
             // Fail sending more than required (2_000_000)
-            let res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender,
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(3_000_000),
-                    }],
-                ),
-                msg.clone(),
+            let res = execute(deps.as_mut(), env,
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[
+                                      Coin {
+                                          denom: "ust".to_string(),
+                                          amount: Uint128(3_000_000),
+                                      },
+                                  ],
+                              ),
+                              msg
             );
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(msg, "send 2000000ust"),
                 _ => panic!("Unexpected error"),
             }
@@ -1873,35 +1873,43 @@ mod tests {
         #[test]
         fn register_fail_lottery_about_to_start() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
+            let mut deps = mock_dependencies(&[]);
+            default_init(deps.as_mut());
             let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fae".to_string()],
             };
-            let state = config(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(
-                before_all.default_sender,
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(1_000_000),
-                }],
-            );
+            let state = read_state(deps.as_ref().storage).unwrap();
+
+            let mut env = mock_env();
+            let state = read_state(deps.as_ref().storage).unwrap();
             // Block time is superior to block_time_play so the lottery is about to start
-            env.block.time = state.block_time_play + 1000;
-            let res = handle(&mut deps, env, msg.clone());
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() + 1000);
+            let res = execute(deps.as_mut(), env,
+                              mock_info(
+                                  before_all.default_sender.as_str(),
+                                  &[
+                                      Coin {
+                                          denom: "ust".to_string(),
+                                          amount: Uint128(3_000_000),
+                                      },
+                                  ],
+                              ),
+                              msg
+            );
             match res {
-                Err(GenericErr {
+                Err(StdError::GenericErr {
                     msg,
-                    backtrace: None,
+                    ..
                 }) => assert_eq!(
                     msg,
-                    "Lottery is about to start wait until the end before register"
+                    "Lottery about to start"
                 ),
                 _ => panic!("Unexpected error"),
             }
         }
     }
+/*
     mod play {
         use super::*;
         use crate::state::lottery_winning_combination_storage_read;
@@ -1922,7 +1930,7 @@ mod tests {
                     backtrace: None,
                 }) => assert_eq!(
                     msg,
-                    "Contract deactivated for update or/and preventing security issue"
+                    "Deactivated"
                 ),
                 _ => panic!("Unexpected error"),
             }
@@ -2276,7 +2284,7 @@ mod tests {
                     backtrace: None,
                 }) => assert_eq!(
                     msg,
-                    "Contract deactivated for update or/and preventing security issue"
+                    "Deactivated"
                 ),
                 _ => panic!("Unexpected error"),
             }
@@ -3831,7 +3839,7 @@ mod tests {
                 res.messages[0],
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: deps.api.human_address(&state_before.loterra_cw20_contract_address).unwrap(),
-                    msg: Binary::from(r#"{"transfer":{"recipient":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007","amount":"22"}}"#.as_bytes()),
+                    msg: Binary::from(r#"{"transfer":{"recipient":"addr0000","amount":"22"}}"#.as_bytes()),
                     send: vec![]
                 })
             );
@@ -4192,4 +4200,6 @@ mod tests {
             );
         }
     }
+
+     */
 }
