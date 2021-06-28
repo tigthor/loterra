@@ -1,10 +1,10 @@
 use crate::query::{GetHoldersResponse, HoldersInfo};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{from_slice, to_binary, Api, Binary, Coin, Decimal, Empty, Extern, HumanAddr, Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, OwnedDeps, SystemResult};
+use cosmwasm_std::{from_slice, to_binary, Api, Binary, Coin, Decimal, Empty, Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, OwnedDeps, SystemResult};
 use serde::Serialize;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
 
-pub fn mock_dependencies(
+pub fn mock_dependencies_custom(
     contract_balance: &[Coin],
 ) -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
     let custom_querier =

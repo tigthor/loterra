@@ -1265,7 +1265,7 @@ fn query_round(deps: Deps) -> StdResult<RoundResponse> {
 mod tests {
     use super::*;
     use crate::mock_querier::mock_dependencies_custom;
-    use crate::msg::{HandleMsg, InitMsg};
+    use crate::msg::{ExecuteMsg, InstantiateMsg};
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
     use cosmwasm_std::StdError::GenericErr;
     use cosmwasm_std::{Api, CosmosMsg, Storage, Uint128, WasmMsg};
@@ -1285,13 +1285,13 @@ mod tests {
 
     fn default_init(deps: DepsMut) {
         const DENOM_STABLE: &str = "ust";
-        const BLOCK_TIME_PLAY: u64 = 1610566920;
-        const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
+        const BLOCK_TIME_PLAY: Timestamp = Timestamp::from_nanos(1610566920);
+        const EVERY_BLOCK_TIME_PLAY: Timestamp = Timestamp::from_nanos(50000);
         const PUBLIC_SALE_END_BLOCK_TIME: u64 = 1610566920;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
-        const BONUS_BLOCK_TIME_END: u64 = 1610567920;
+        const BONUS_BLOCK_TIME_END: Timestamp = Timestamp::from_nanos(1610567920);
 
-        let init_msg = InitMsg {
+        let init_msg = InstantiateMsg {
             denom_stable: DENOM_STABLE.to_string(),
             block_time_play: BLOCK_TIME_PLAY,
             every_block_time_play: EVERY_BLOCK_TIME_PLAY,
@@ -1330,13 +1330,12 @@ mod tests {
     fn testing_saved_address_winner() {
         let before_all = before_all();
         let mut deps = mock_dependencies(
-            before_all.default_length,
             &[Coin {
                 denom: "uscrt".to_string(),
                 amount: Uint128(100_000_000),
             }],
         );
-        default_init(&mut deps);
+        default_init(deps.as_mut());
 
         let winner_address = deps
             .api
@@ -1349,7 +1348,7 @@ mod tests {
         save_winner(&mut deps.storage, 1u64, winner_address, 2).unwrap();
         save_winner(&mut deps.storage, 1u64, winner_address2, 2).unwrap();
 
-        let res = query_all_winner(&deps, 1u64).unwrap();
+        let res = query_all_winner(deps.as_ref(), 1u64).unwrap();
         println!("{:?}", res);
     }
     mod claim {
@@ -1359,8 +1358,8 @@ mod tests {
         fn claim_is_closed() {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
-            default_init(&mut deps);
-            let msg = HandleMsg::Claim { addresses: None };
+            default_init(deps.as_mut());
+            let msg = ExecuteMsg::Claim { addresses: None };
 
             let mut state = config(&mut deps.storage).load().unwrap();
             let mut env = mock_env(before_all.default_sender, &[]);
@@ -1378,7 +1377,7 @@ mod tests {
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
 
-            let msg = HandleMsg::Claim { addresses: None };
+            let msg = ExecuteMsg::Claim { addresses: None };
             let res = handle(
                 &mut deps,
                 mock_env(before_all.default_sender, &[]),
@@ -1412,7 +1411,7 @@ mod tests {
                     &"123456".to_string(),
                 )
                 .unwrap();
-            let msg = HandleMsg::Claim { addresses: None };
+            let msg = ExecuteMsg::Claim { addresses: None };
             let res = handle(
                 &mut deps,
                 mock_env(before_all.default_sender, &[]),
@@ -1457,7 +1456,7 @@ mod tests {
             state.lottery_counter = 2;
             config(&mut deps.storage).save(&state).unwrap();
 
-            let msg = HandleMsg::Claim { addresses: None };
+            let msg = ExecuteMsg::Claim { addresses: None };
             let res = handle(
                 &mut deps,
                 mock_env(before_all.default_sender.clone(), &[]),
@@ -1521,7 +1520,7 @@ mod tests {
             let mut state = config(&mut deps.storage).load().unwrap();
             state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
@@ -1552,7 +1551,7 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec![
                     "1e3fab".to_string(),
@@ -1598,7 +1597,7 @@ mod tests {
             println!("sdsds {:?}", formated_binary);
 
             // Play 2 more combination
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["affe3b".to_string(), "098765".to_string()],
             };
@@ -1627,7 +1626,7 @@ mod tests {
             assert_eq!(store_two[4], "098765".to_string());
 
             // Someone registering combination for other player
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: Some(before_all.default_sender_two.clone()),
                 combination: vec!["aaaaaa".to_string(), "bbbbbb".to_string()],
             };
@@ -1668,7 +1667,7 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
@@ -1699,7 +1698,7 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
@@ -1734,7 +1733,7 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
@@ -1766,7 +1765,7 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3far".to_string()],
             };
@@ -1797,7 +1796,7 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3far".to_string(), "1e3fac".to_string()],
             };
@@ -1828,7 +1827,7 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fae".to_string(), "1e3fa2".to_string()],
             };
@@ -1876,7 +1875,7 @@ mod tests {
             let before_all = before_all();
             let mut deps = mock_dependencies(before_all.default_length, &[]);
             default_init(&mut deps);
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fae".to_string()],
             };
@@ -2014,7 +2013,7 @@ mod tests {
 
             default_init(&mut deps);
             // register some combination
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
@@ -2031,7 +2030,7 @@ mod tests {
             )
             .unwrap();
 
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["39493d".to_string()],
             };
@@ -2105,7 +2104,7 @@ mod tests {
 
             default_init(&mut deps);
             // register some combination
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["39498d".to_string()],
             };
@@ -2174,7 +2173,7 @@ mod tests {
 
             default_init(&mut deps);
             // register some combination
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["1e3fab".to_string()],
             };
@@ -2191,7 +2190,7 @@ mod tests {
             )
             .unwrap();
 
-            let msg = HandleMsg::Register {
+            let msg = ExecuteMsg::Register {
                 address: None,
                 combination: vec!["39493d".to_string()],
             };
@@ -2269,7 +2268,7 @@ mod tests {
             state.safe_lock = true;
             config(&mut deps.storage).save(&state).unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env, msg);
             match res {
                 Err(GenericErr {
@@ -2300,7 +2299,7 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -2327,7 +2326,7 @@ mod tests {
                 .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play;
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg);
             match res {
                 Err(GenericErr {
@@ -2354,7 +2353,7 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg);
             match res {
                 Err(GenericErr {
@@ -2386,7 +2385,7 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg);
 
             match res {
@@ -2443,7 +2442,7 @@ mod tests {
             let mut env = mock_env("address1", &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg);
 
             println!("{:?}", res);
@@ -2502,7 +2501,7 @@ mod tests {
 
             let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
             env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg);
 
             println!("{:?}", res);
@@ -2550,7 +2549,7 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
 
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.messages.len(), 2);
@@ -2581,7 +2580,7 @@ mod tests {
                 })
             );
             // Handle can't claim multiple times
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg);
 
             match res {
@@ -2651,7 +2650,7 @@ mod tests {
             let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
             env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
 
-            let msg = HandleMsg::Collect {
+            let msg = ExecuteMsg::Collect {
                 address: Some(before_all.default_sender.clone()),
             };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
@@ -2685,7 +2684,7 @@ mod tests {
                 })
             );
             // Handle can't claim multiple times
-            let msg = HandleMsg::Collect {
+            let msg = ExecuteMsg::Collect {
                 address: Some(before_all.default_sender.clone()),
             };
             let res = handle(&mut deps, env.clone(), msg);
@@ -2764,7 +2763,7 @@ mod tests {
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state.block_time_play - state.every_block_time_play / 2;
 
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
 
             assert_eq!(res.messages.len(), 2);
@@ -2795,7 +2794,7 @@ mod tests {
                 })
             );
             // Handle can't claim multiple times
-            let msg = HandleMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect { address: None };
             let res = handle(&mut deps, env.clone(), msg);
 
             match res {
@@ -2847,7 +2846,7 @@ mod tests {
             );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "This".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
@@ -2876,7 +2875,7 @@ mod tests {
             );
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "let env = mock_env(before_all.default_sender.clone(), &[]);\
                  let env = mock_env(before_all.default_sender.clone(), &[]); let env \
                  = mock_env(before_all.default_sender.clone(), &[]); let env = mock_env(before_all.default_sender.clone(), &[]);\
@@ -2915,7 +2914,7 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
@@ -2933,8 +2932,8 @@ mod tests {
             }
         }
 
-        fn msg_constructor_none(proposal: Proposal) -> HandleMsg {
-            HandleMsg::Poll {
+        fn msg_constructor_none(proposal: Proposal) -> ExecuteMsg {
+            ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: None,
@@ -2942,8 +2941,8 @@ mod tests {
                 recipient: None,
             }
         }
-        fn msg_constructor_amount_out(proposal: Proposal) -> HandleMsg {
-            HandleMsg::Poll {
+        fn msg_constructor_amount_out(proposal: Proposal) -> ExecuteMsg {
+            ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: Option::from(Uint128(250)),
@@ -2952,8 +2951,8 @@ mod tests {
             }
         }
 
-        fn msg_constructor_prize_len_out(proposal: Proposal) -> HandleMsg {
-            HandleMsg::Poll {
+        fn msg_constructor_prize_len_out(proposal: Proposal) -> ExecuteMsg {
+            ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: None,
@@ -2962,8 +2961,8 @@ mod tests {
             }
         }
 
-        fn msg_constructor_prize_sum_out(proposal: Proposal) -> HandleMsg {
-            HandleMsg::Poll {
+        fn msg_constructor_prize_sum_out(proposal: Proposal) -> ExecuteMsg {
+            ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: None,
@@ -3144,8 +3143,8 @@ mod tests {
             amount: Option<Uint128>,
             prize_per_rank: Option<Vec<u8>>,
             recipient: Option<HumanAddr>,
-        ) -> HandleMsg {
-            HandleMsg::Poll {
+        ) -> ExecuteMsg {
+            ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount,
@@ -3281,7 +3280,7 @@ mod tests {
         use super::*;
         // handle_vote
         fn create_poll<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env) {
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
@@ -3311,7 +3310,7 @@ mod tests {
                     amount: Uint128(9_000_000),
                 }],
             );
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: false,
             };
@@ -3350,7 +3349,7 @@ mod tests {
                 .unwrap();
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: false,
             };
@@ -3384,7 +3383,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
 
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: false,
             };
@@ -3420,7 +3419,7 @@ mod tests {
             create_poll(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: false,
             };
@@ -3456,7 +3455,7 @@ mod tests {
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let poll_id: u64 = 1;
             let approve = false;
-            let msg = HandleMsg::Vote { poll_id, approve };
+            let msg = ExecuteMsg::Vote { poll_id, approve };
             let res = handle(&mut deps, env.clone(), msg.clone()).unwrap();
             let poll_state = poll_storage(&mut deps.storage)
                 .load(&poll_id.to_be_bytes())
@@ -3491,7 +3490,7 @@ mod tests {
         use super::*;
         // handle_reject
         fn create_poll<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env) {
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
@@ -3520,7 +3519,7 @@ mod tests {
                     amount: Uint128(1_000),
                 }],
             );
-            let msg = HandleMsg::RejectPoll { poll_id: 1 };
+            let msg = ExecuteMsg::RejectPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3550,7 +3549,7 @@ mod tests {
                 .load(&1_u64.to_be_bytes())
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
-            let msg = HandleMsg::RejectPoll { poll_id: 1 };
+            let msg = ExecuteMsg::RejectPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3574,7 +3573,7 @@ mod tests {
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
-            let msg = HandleMsg::RejectPoll { poll_id: 1 };
+            let msg = ExecuteMsg::RejectPoll { poll_id: 1 };
             let env = mock_env(before_all.default_sender_two.clone(), &[]);
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
@@ -3596,7 +3595,7 @@ mod tests {
             default_init(&mut deps);
             let env = mock_env(before_all.default_sender.clone(), &[]);
             create_poll(&mut deps, env.clone());
-            let msg = HandleMsg::RejectPoll { poll_id: 1 };
+            let msg = ExecuteMsg::RejectPoll { poll_id: 1 };
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
             let res = handle(&mut deps, env.clone(), msg).unwrap();
@@ -3612,7 +3611,7 @@ mod tests {
         use super::*;
         // handle_present
         fn create_poll<S: Storage, A: Api, Q: Querier>(mut deps: &mut Extern<S, A, Q>, env: Env) {
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::LotteryEveryBlockTime,
                 amount: Option::from(Uint128(22)),
@@ -3625,7 +3624,7 @@ mod tests {
             mut deps: &mut Extern<S, A, Q>,
             env: Env,
         ) {
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::SecurityMigration,
                 amount: None,
@@ -3639,7 +3638,7 @@ mod tests {
             mut deps: &mut Extern<S, A, Q>,
             env: Env,
         ) {
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::DaoFunding,
                 amount: Option::from(Uint128(22)),
@@ -3652,7 +3651,7 @@ mod tests {
             mut deps: &mut Extern<S, A, Q>,
             env: Env,
         ) {
-            let msg = HandleMsg::Poll {
+            let msg = ExecuteMsg::Poll {
                 description: "This is my first proposal".to_string(),
                 proposal: Proposal::StakingContractMigration,
                 amount: None,
@@ -3683,7 +3682,7 @@ mod tests {
                     amount: Uint128(9_000_000),
                 }],
             );
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3717,7 +3716,7 @@ mod tests {
                 })
                 .unwrap();
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3740,7 +3739,7 @@ mod tests {
             create_poll(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -3772,7 +3771,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
 
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             assert_eq!(res.log.len(), 3);
             assert_eq!(res.messages.len(), 0);
@@ -3809,7 +3808,7 @@ mod tests {
             create_poll_dao_funding(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: true,
             };
@@ -3823,7 +3822,7 @@ mod tests {
             env.block.height = poll_state.end_height + 1;
             let state_before = config(&mut deps.storage).load().unwrap();
 
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.log.len(), 3);
@@ -3864,7 +3863,7 @@ mod tests {
             create_poll_statking_contract_migration(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: true,
             };
@@ -3878,7 +3877,7 @@ mod tests {
             env.block.height = poll_state.end_height + 1;
             let state_before = config(&mut deps.storage).load().unwrap();
 
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.log.len(), 3);
@@ -3923,7 +3922,7 @@ mod tests {
             create_poll_security_migration(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: true,
             };
@@ -3937,7 +3936,7 @@ mod tests {
             env.block.height = poll_state.end_height + 1;
             config(&mut deps.storage).load().unwrap();
 
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             println!("{:?}", res);
         }
@@ -3963,7 +3962,7 @@ mod tests {
             create_poll(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: true,
             };
@@ -3976,7 +3975,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height + 1;
 
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             assert_eq!(res.log.len(), 3);
             assert_eq!(res.messages.len(), 0);
@@ -3988,7 +3987,7 @@ mod tests {
 
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
             create_poll_security_migration(&mut deps, env.clone());
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 2,
                 approve: true,
             };
@@ -4017,7 +4016,7 @@ mod tests {
             create_poll(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: true,
             };
@@ -4030,7 +4029,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height - 1000;
 
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg).unwrap();
             assert_eq!(res.log.len(), 3);
             assert_eq!(res.messages.len(), 0);
@@ -4042,7 +4041,7 @@ mod tests {
 
             let env = mock_env(before_all.default_sender_owner.clone(), &[]);
             create_poll_security_migration(&mut deps, env.clone());
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 2,
                 approve: true,
             };
@@ -4071,7 +4070,7 @@ mod tests {
             create_poll(&mut deps, env.clone());
 
             let env = mock_env(before_all.default_sender.clone(), &[]);
-            let msg = HandleMsg::Vote {
+            let msg = ExecuteMsg::Vote {
                 poll_id: 1,
                 approve: true,
             };
@@ -4084,7 +4083,7 @@ mod tests {
                 .unwrap();
             env.block.height = poll_state.end_height - 1000;
 
-            let msg = HandleMsg::PresentPoll { poll_id: 1 };
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = handle(&mut deps, env.clone(), msg);
             match res {
                 Err(GenericErr {
