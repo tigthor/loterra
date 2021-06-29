@@ -1,4 +1,0 @@
-[toolchain]
-channel = "1.44.1"
-targets = [ "wasm32-unknown-unknown" ]
-profile = "default"

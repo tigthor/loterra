@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "InitMsg",
+  "title": "InstantiateMsg",
   "type": "object",
   "required": [
     "block_time_play",
@@ -32,10 +32,10 @@
       "minimum": 0.0
     },
     "loterra_cw20_contract_address": {
-      "$ref": "#/definitions/HumanAddr"
+      "type": "string"
     },
     "loterra_staking_contract_address": {
-      "$ref": "#/definitions/HumanAddr"
+      "type": "string"
     },
     "poll_default_end_height": {
       "type": "integer",
@@ -43,11 +43,6 @@
       "minimum": 0.0
     },
     "terrand_contract_address": {
-      "$ref": "#/definitions/HumanAddr"
-    }
-  },
-  "definitions": {
-    "HumanAddr": {
       "type": "string"
     }
   }

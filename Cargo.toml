@@ -1,6 +1,6 @@
 [package]
 name = "loterra"
-version = "0.1.0"
+version = "2.0.0"
 authors = ["0xantman <antho74830@gmail.com>"]
 edition = "2018"
 
@@ -29,15 +29,21 @@ overflow-checks = true
 [features]
 # for more explicit tests, cargo test --features=backtraces
 backtraces = ["cosmwasm-std/backtraces"]
+library = []
 
 [dependencies]
-cosmwasm-std = { version = "0.10.1", features = ["iterator"]  }
-cosmwasm-storage = { version = "0.10.1", features = ["iterator"]}
-schemars = "0.7"
-serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-thiserror = { version = "1.0.23" }
+cosmwasm-std = { version = "0.14.0", features = ["iterator"]  }
+cosmwasm-storage = { version = "0.14.0", features = ["iterator"]}
+cw-storage-plus = { version = "0.6.0", features = ["iterator"] }
+schemars = "0.8.1"
+serde = { version = "1.0.125", default-features = false, features = ["derive"] }
+thiserror = { version = "1.0.24" }
 hex = "0.4.2"
-terra-cosmwasm = { version = "1.2" }
+terra-cosmwasm = "2.0.0"
+terrand = "2.0.0"
+loterra-staking-contract = { version= "2.0.2", features = ["library"]}
+cw20 = "0.6.2"
 
 [dev-dependencies]
-cosmwasm-schema = { version = "0.10.1" }
+cosmwasm-schema = { version = "0.14.0" }
+cw-multi-test = "0.6.1"

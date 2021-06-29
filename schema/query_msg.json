@@ -12,7 +12,8 @@
         "config": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Combination lottery numbers and address",
@@ -29,7 +30,7 @@
           ],
           "properties": {
             "address": {
-              "$ref": "#/definitions/HumanAddr"
+              "type": "string"
             },
             "lottery_id": {
               "type": "integer",
@@ -38,7 +39,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Winner lottery rank and address",
@@ -60,7 +62,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Get specific poll",
@@ -82,7 +85,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Count players by lottery id",
@@ -104,7 +108,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Count ticket sold by lottery id",
@@ -126,7 +131,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Count winner by rank and lottery id",
@@ -154,7 +160,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Get winning combination by lottery id",
@@ -176,7 +183,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Get the jackpot by lottery id",
@@ -198,7 +206,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Get all players by lottery id",
@@ -220,7 +229,8 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Get the needed round for workers adding randomness to Terrand",
@@ -232,7 +242,8 @@
         "get_round": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Query Terrand smart contract to get the needed randomness to play the lottery",
@@ -254,30 +265,11 @@
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
-      "description": "Not used to be called directly Query Loterra smart contract to get the balance",
-      "type": "object",
-      "required": [
-        "balance"
-      ],
-      "properties": {
-        "balance": {
-          "type": "object",
-          "required": [
-            "address"
-          ],
-          "properties": {
-            "address": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
-    },
-    {
-      "description": "Get specific holder, address and balance from loterra staking contract",
+      "description": "Not used to be called directly Get specific holder, address and balance from loterra staking contract",
       "type": "object",
       "required": [
         "holder"
@@ -290,11 +282,12 @@
           ],
           "properties": {
             "address": {
-              "$ref": "#/definitions/HumanAddr"
+              "type": "string"
             }
           }
         }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Get all holders from loterra staking contract",
@@ -306,31 +299,8 @@
         "holders": {
           "type": "object"
         }
-      }
-    },
-    {
-      "description": "Query Loterra send",
-      "type": "object",
-      "required": [
-        "transfer"
-      ],
-      "properties": {
-        "transfer": {
-          "type": "object",
-          "required": [
-            "amount",
-            "recipient"
-          ],
-          "properties": {
-            "amount": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "recipient": {
-              "$ref": "#/definitions/HumanAddr"
-            }
-          }
-        }
-      }
+      },
+      "additionalProperties": false
     },
     {
       "description": "Update balance of the staking contract with rewards",
@@ -342,15 +312,8 @@
         "update_global_index": {
           "type": "object"
         }
-      }
+      },
+      "additionalProperties": false
     }
-  ],
-  "definitions": {
-    "HumanAddr": {
-      "type": "string"
-    },
-    "Uint128": {
-      "type": "string"
-    }
-  }
+  ]
 }
