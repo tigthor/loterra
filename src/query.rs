@@ -1,16 +1,16 @@
-use cosmwasm_std::{Binary, Decimal, HumanAddr, Uint128};
+use cosmwasm_std::{Binary, Decimal, Uint128};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, JsonSchema, Debug)]
 pub struct TerrandResponse {
     pub randomness: Binary,
-    pub worker: HumanAddr,
+    pub worker: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetHolderResponse {
-    pub address: HumanAddr,
+    pub address: String,
     pub balance: Uint128,
     pub index: Decimal,
     pub pending_rewards: Decimal,
@@ -18,7 +18,7 @@ pub struct GetHolderResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct HoldersInfo {
-    pub address: HumanAddr,
+    pub address: String,
     pub balance: Uint128,
     pub index: Decimal,
     pub pending_rewards: Decimal,

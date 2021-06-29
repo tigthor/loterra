@@ -1,26 +1,20 @@
 use crate::query::{GetHoldersResponse, HoldersInfo};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_slice, to_binary, Api, Binary, Coin, Decimal, Empty, Extern, HumanAddr, Querier,
-    QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery,
+    from_slice, to_binary, Binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
+    QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use serde::Serialize;
-use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
+use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper};
 
 pub fn mock_dependencies_custom(
-    canonical_length: usize,
     contract_balance: &[Coin],
-) -> Extern<MockStorage, MockApi, WasmMockQuerier> {
-    let contract_addr = HumanAddr::from(MOCK_CONTRACT_ADDR);
-    let custom_querier: WasmMockQuerier = WasmMockQuerier::new(
-        MockQuerier::new(&[(&contract_addr, contract_balance)]),
-        canonical_length,
-        MockApi::new(canonical_length),
-    );
-
-    Extern {
+) -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
+    let custom_querier =
+        WasmMockQuerier::new(MockQuerier::new(&[(MOCK_CONTRACT_ADDR, contract_balance)]));
+    OwnedDeps {
         storage: MockStorage::default(),
-        api: MockApi::new(canonical_length),
+        api: MockApi::default(),
         querier: custom_querier,
     }
 }
@@ -35,11 +29,11 @@ pub struct WasmMockQuerier {
 #[derive(Clone, Default, Serialize)]
 pub struct TerrandResponse {
     pub randomness: Binary,
-    pub worker: HumanAddr,
+    pub worker: String,
 }
 
 impl TerrandResponse {
-    pub fn new(randomness: Binary, worker: HumanAddr) -> Self {
+    pub fn new(randomness: Binary, worker: String) -> Self {
         TerrandResponse { randomness, worker }
     }
 }
@@ -66,7 +60,7 @@ impl GetAllBondedResponse {
 }
 #[derive(Clone, Default, Serialize)]
 pub struct GetHolderResponse {
-    pub address: HumanAddr,
+    pub address: String,
     pub balance: Uint128,
     pub index: Decimal,
     pub pending_rewards: Decimal,
@@ -74,7 +68,7 @@ pub struct GetHolderResponse {
 
 impl GetHolderResponse {
     pub fn new(
-        address: HumanAddr,
+        address: String,
         balance: Uint128,
         index: Decimal,
         pending_rewards: Decimal,
@@ -90,11 +84,10 @@ impl GetHolderResponse {
 
 impl Querier for WasmMockQuerier {
     fn raw_query(&self, bin_request: &[u8]) -> QuerierResult {
-        // MockQuerier doesn't support Custom, so we ignore it completely here
         let request: QueryRequest<TerraQueryWrapper> = match from_slice(bin_request) {
             Ok(v) => v,
             Err(e) => {
-                return Err(SystemError::InvalidRequest {
+                return SystemResult::Err(SystemError::InvalidRequest {
                     error: format!("Parsing query request: {}", e),
                     request: bin_request.into(),
                 })
@@ -103,80 +96,75 @@ impl Querier for WasmMockQuerier {
         self.handle_query(&request)
     }
 }
+
 impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<TerraQueryWrapper>) -> QuerierResult {
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
-                println!("{:?} {}", request, msg);
-                if contract_addr == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zloterracw20")
-                {
+                println!("{:?}", msg);
+                if contract_addr == &"cw20".to_string() {
                     println!("{:?}", request);
                     let msg_balance = LotteraBalanceResponse {
                         balance: self.lottery_balance_response.balance,
                     };
-                    return Ok(to_binary(&msg_balance));
-                } else if contract_addr
-                    == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5terrand")
-                {
+                    return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
+                } else if contract_addr == &"terrand".to_string() {
                     let msg_terrand = TerrandResponse {
                         randomness: Binary::from(
                             "OdRl+j6PHnN84dy12n4Oq1BrGktD73FW4SKPihxfB9I=".as_bytes(),
                         ),
-                        worker: HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
+                        worker: "terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker".to_string(),
                     };
-                    return Ok(to_binary(&msg_terrand));
-                } else if contract_addr
-                    == &HumanAddr::from("terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking")
-                {
+                    return SystemResult::Ok(ContractResult::from(to_binary(&msg_terrand)));
+                } else if contract_addr == &"staking".to_string() {
                     if msg == &Binary::from(r#"{"get_all_bonded":{}}"#.as_bytes()) {
                         let msg_balance = GetAllBondedResponse {
                             total_bonded: self.lottery_balance_response.balance.clone(),
                         };
-                        return Ok(to_binary(&msg_balance));
-                    } else if msg == &Binary::from(
-                        r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#
-                            .as_bytes(),
-                    ) {
+                        return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
+                    } else if msg
+                        == &Binary::from(r#"{"holder":{"address":"addr0000"}}"#.as_bytes())
+                    {
                         let msg_balance = GetHolderResponse {
-                            address: HumanAddr::from(
-                                "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007",
-                            ),
+                            address: "addr0000".to_string(),
                             balance: self.holder_response.balance,
                             index: self.holder_response.index,
                             pending_rewards: self.holder_response.pending_rewards,
                         };
-                        return Ok(to_binary(&msg_balance));
-                    } else if msg == &Binary::from(r#"{"holders":{}}"#.as_bytes()) {
+                        return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
+                    } else if msg
+                        == &Binary::from(
+                            r#"{"holders":{"start_after":null,"limit":null}}"#.as_bytes(),
+                        )
+                    {
                         let msg_holders = GetHoldersResponse {
                             holders: vec![
                                 HoldersInfo {
-                                    address: HumanAddr::default(),
+                                    address: "addr0000".to_string(),
                                     balance: Uint128(15_000),
                                     index: Decimal::zero(),
                                     pending_rewards: Decimal::zero(),
                                 },
                                 HoldersInfo {
-                                    address: HumanAddr::default(),
+                                    address: "addr0001".to_string(),
                                     balance: Uint128(10_000),
                                     index: Decimal::zero(),
                                     pending_rewards: Decimal::zero(),
                                 },
                             ],
                         };
-                        return Ok(to_binary(&msg_holders));
+                        return SystemResult::Ok(ContractResult::from(to_binary(&msg_holders)));
                     } else if msg == &Binary::from(
                         r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#
                             .as_bytes(),
                     ) {
                         let msg_balance = GetHolderResponse {
-                            address: HumanAddr::from(
-                                "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007",
-                            ),
+                            address: "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007".to_string(),
                             balance: self.holder_response.balance,
                             index: self.holder_response.index,
                             pending_rewards: self.holder_response.pending_rewards,
                         };
-                        return Ok(to_binary(&msg_balance));
+                        return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
                     }
                 }
                 panic!("DO NOT ENTER HERE")
@@ -186,12 +174,12 @@ impl WasmMockQuerier {
                     let res = TaxRateResponse {
                         rate: Decimal::percent(1),
                     };
-                    Ok(to_binary(&res))
+                    SystemResult::Ok(ContractResult::from(to_binary(&res)))
                 }
                 TerraQuery::TaxCap { denom: _ } => {
-                    let cap = Uint128(1u128);
+                    let cap = Uint128(1000000u128);
                     let res = TaxCapResponse { cap };
-                    Ok(to_binary(&res))
+                    SystemResult::Ok(ContractResult::from(to_binary(&res)))
                 }
                 _ => panic!("DO NOT ENTER HERE"),
             },
@@ -199,12 +187,9 @@ impl WasmMockQuerier {
         }
     }
 }
+
 impl WasmMockQuerier {
-    pub fn new<A: Api>(
-        base: MockQuerier<TerraQueryWrapper>,
-        _canonical_length: usize,
-        _api: A,
-    ) -> Self {
+    pub fn new(base: MockQuerier<TerraQueryWrapper>) -> Self {
         WasmMockQuerier {
             base,
             terrand_response: TerrandResponse::default(),
@@ -221,7 +206,7 @@ impl WasmMockQuerier {
     // configure the mint whitelist mock querier
     pub fn with_holder(
         &mut self,
-        address: HumanAddr,
+        address: String,
         balance: Uint128,
         index: Decimal,
         pending_rewards: Decimal,
