@@ -2253,9 +2253,10 @@ mod tests {
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
     }
-/*
+
     mod collect {
         use super::*;
+        use cosmwasm_std::CosmosMsg;
 
         #[test]
         fn security_active() {
@@ -2263,13 +2264,14 @@ mod tests {
             let mut deps = mock_dependencies(&[]);
             default_init(deps.as_mut());
             let mut state = read_state(deps.as_ref().storage).unwrap();
-            jackpot_storage(&mut deps.storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
+            JACKPOT.save(deps.as_mut().storage, &(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero()).unwrap();
             state.safe_lock = true;
             store_state(deps.as_mut().storage, &state).unwrap();
-            let env = mock_env(before_all.default_sender.clone(), &[]);
+
+            let env = mock_env();
+            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env, msg);
+            let res = execute(deps.as_mut(), env, info, msg);
             match res {
                 Err(StdError::GenericErr {
                     msg,
@@ -2285,22 +2287,21 @@ mod tests {
         fn do_not_send_funds() {
             let before_all = before_all();
             let mut deps = mock_dependencies(
-                before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
                 }],
             );
             default_init(deps.as_mut());
-            let env = mock_env(
-                before_all.default_sender.clone(),
+            let info = mock_info(
+                before_all.default_sender.as_str().clone(),
                 &[Coin {
                     denom: "uluna".to_string(),
                     amount: Uint128(1_000),
                 }],
             );
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg);
+            let res = execute(deps.as_mut(), mock_env(), info, msg);
             println!("{:?}", res);
             match res {
                 Err(StdError::GenericErr {
@@ -2314,20 +2315,19 @@ mod tests {
         fn collect_jackpot_is_closed() {
             let before_all = before_all();
             let mut deps = mock_dependencies(
-                before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
                 }],
             );
             default_init(deps.as_mut());
-            let state = config_read(&mut deps.storage).load().unwrap();
-            jackpot_storage(&mut deps.storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
-            env.block.time = state.block_time_play - state.every_block_time_play;
+            let state = read_state(deps.as_ref().storage).unwrap();
+            JACKPOT.save(deps.as_mut().storage,&(state.lottery_counter - 1).to_be_bytes(),  &Uint128::zero()).unwrap();
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()).unwrap());
+            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg);
+            let res = execute(deps.as_mut(), env, info, msg);
             match res {
                 Err(StdError::GenericErr {
                     msg,
@@ -2340,21 +2340,20 @@ mod tests {
         fn no_jackpot_rewards() {
             let before_all = before_all();
             let mut deps = mock_dependencies(
-                before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
                 }],
             );
             default_init(deps.as_mut());
-            let state = config_read(&mut deps.storage).load().unwrap();
-            jackpot_storage(&mut deps.storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero());
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
-            env.block.time = state.block_time_play - state.every_block_time_play / 2;
-
+            let state = read_state(deps.as_ref().storage).unwrap();
+            JACKPOT.save(deps.as_mut().storage, &(state.lottery_counter - 1).to_be_bytes(),  &Uint128::zero()).unwrap();
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos() / 2).unwrap() );
+            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg);
+            let res = execute(deps.as_mut(), env, info, msg);
+
             match res {
                 Err(StdError::GenericErr {
                     msg,
@@ -2368,7 +2367,6 @@ mod tests {
         fn no_winners() {
             let before_all = before_all();
             let mut deps = mock_dependencies(
-                before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
@@ -2376,18 +2374,13 @@ mod tests {
             );
             default_init(deps.as_mut());
             let mut state = read_state(deps.as_ref().storage).unwrap();
-            jackpot_storage(&mut deps.storage).save(
-                &(state.lottery_counter - 1).to_be_bytes(),
-                &Uint128(1_000_000),
-            );
-
-            let state = config_read(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
-            env.block.time = state.block_time_play - state.every_block_time_play / 2;
-
+            JACKPOT.save(deps.as_mut().storage, &(state.lottery_counter - 1).to_be_bytes(),  &Uint128(1_000_000)).unwrap();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos() / 2).unwrap() );
+            let info = mock_info(before_all.default_sender.as_str().clone(), &[] );
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg);
-
+            let res = execute(deps.as_mut(), env, info,msg);
             match res {
                 Err(StdError::GenericErr {
                     msg,
@@ -2400,7 +2393,6 @@ mod tests {
         fn contract_balance_empty() {
             let before_all = before_all();
             let mut deps = mock_dependencies(
-                before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(0),
@@ -2409,41 +2401,32 @@ mod tests {
 
             default_init(deps.as_mut());
             let mut state_before = read_state(deps.as_ref().storage).unwrap();
-            jackpot_storage(&mut deps.storage).save(
-                &(state_before.lottery_counter - 1).to_be_bytes(),
-                &Uint128(1_000_000),
-            );
+            JACKPOT.save(deps.as_mut().storage, &(state_before.lottery_counter - 1).to_be_bytes(),  &Uint128(1_000_000)).unwrap();
 
             let addr1 = deps
                 .api
-                .canonical_address(&HumanAddr("address1".to_string()))
+                .addr_canonicalize(&"address1".to_string())
                 .unwrap();
             let addr2 = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
             println!(
                 "{:?}",
                 deps.api
-                    .canonical_address(&HumanAddr("address1".to_string()))
+                    .addr_canonicalize(&"address1".to_string())
                     .unwrap()
             );
 
-            save_winner(&mut deps.storage, 1u64, addr1.clone(), 1).unwrap();
-            println!(
-                "{:?}",
-                winner_storage_read(&deps.storage, 1u64)
-                    .load(addr1.as_slice())
-                    .unwrap()
-            );
+            save_winner(deps.as_mut().storage, 1u64, addr1.clone(), 1).unwrap();
 
-            save_winner(&mut deps.storage, 1u64, addr2, 1).unwrap();
-            let state = config_read(&mut deps.storage).load().unwrap();
-            let mut env = mock_env("address1", &[]);
-            env.block.time = state.block_time_play - state.every_block_time_play / 2;
-
+            save_winner(deps.as_mut().storage, 1u64, addr2, 1).unwrap();
+            let state = read_state(deps.as_ref().storage).unwrap();
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos() / 2).unwrap() );
+            let info = mock_info("address1", &[]);
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg);
+            let res = execute(deps.as_mut(), env, info, msg);
 
             println!("{:?}", res);
             match res {
@@ -2471,7 +2454,6 @@ mod tests {
         fn some_winner_sender_excluded() {
             let before_all = before_all();
             let mut deps = mock_dependencies(
-                before_all.default_length,
                 &[Coin {
                     denom: "ust".to_string(),
                     amount: Uint128(9_000_000),
@@ -2479,30 +2461,29 @@ mod tests {
             );
             default_init(deps.as_mut());
             let mut state_before = read_state(deps.as_ref().storage).unwrap();
-            jackpot_storage(&mut deps.storage).save(
-                &(state_before.lottery_counter - 1).to_be_bytes(),
-                &Uint128(1_000_000),
-            );
+            JACKPOT.save(deps.as_mut().storage, &(state_before.lottery_counter - 1).to_be_bytes(),  &Uint128(1_000_000)).unwrap();
+
 
             let addr = deps
                 .api
-                .canonical_address(&HumanAddr("address".to_string()))
+                .addr_canonicalize(&"address".to_string())
                 .unwrap();
             let addr_default = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
 
-            save_winner(&mut deps.storage, 1u64, addr.clone(), 1).unwrap();
-            save_winner(&mut deps.storage, 1u64, addr_default.clone(), 1).unwrap();
+            save_winner(deps.as_mut().storage, 1u64, addr.clone(), 1).unwrap();
+            save_winner(deps.as_mut().storage, 1u64, addr_default.clone(), 1).unwrap();
 
-            save_winner(&mut deps.storage, 1u64, addr.clone(), 4).unwrap();
-            save_winner(&mut deps.storage, 1u64, addr_default.clone(), 4).unwrap();
+            save_winner(deps.as_mut().storage, 1u64, addr.clone(), 4).unwrap();
+            save_winner(deps.as_mut().storage, 1u64, addr_default.clone(), 4).unwrap();
 
-            let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
-            env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos(state_before.block_time_play.nanos().checked_sub(state_before.every_block_time_play.nanos() / 2).unwrap() );
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg);
+            let info = mock_info(before_all.default_sender_two.as_str().clone(), &[]);
+            let res = execute(deps.as_mut(), env, info, msg);
 
             println!("{:?}", res);
             match res {
@@ -2528,36 +2509,33 @@ mod tests {
 
             let mut state_before = read_state(deps.as_ref().storage).unwrap();
             state_before.lottery_counter = 2;
-            config(&mut deps.storage).save(&state_before).unwrap();
-            jackpot_storage(&mut deps.storage).save(
-                &(state_before.lottery_counter - 1).to_be_bytes(),
-                &Uint128(1_000_000),
-            );
+            store_state(deps.as_mut().storage, &state_before).unwrap();
+            JACKPOT.save(deps.as_mut().storage, &(state_before.lottery_counter - 1).to_be_bytes(),  &Uint128(1_000_000)).unwrap();
 
             let addr2 = deps
                 .api
-                .canonical_address(&HumanAddr("address2".to_string()))
+                .addr_canonicalize(&"address2".to_string())
                 .unwrap();
             let default_addr = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
 
-            save_winner(&mut deps.storage, 1u64, addr2.clone(), 1).unwrap();
-            save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
+            save_winner(deps.as_mut().storage, 1u64, addr2.clone(), 1).unwrap();
+            save_winner(deps.as_mut().storage, 1u64, default_addr.clone(), 1).unwrap();
 
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
-            env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos(state_before.block_time_play.nanos().checked_sub(state_before.every_block_time_play.nanos() / 2).unwrap() );
 
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
+            let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.messages.len(), 2);
             let amount_claimed = Uint128(217499);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
-                    from_address: env.contract.address.clone(),
                     to_address: before_all.default_sender.clone(),
                     amount: vec![Coin {
                         denom: "ust".to_string(),
@@ -2568,10 +2546,7 @@ mod tests {
             assert_eq!(
                 res.messages[1],
                 CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: deps
-                        .api
-                        .human_address(&state_before.loterra_staking_contract_address)
-                        .unwrap(),
+                    contract_addr: state_before.loterra_staking_contract_address.to_string(),
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
@@ -2581,7 +2556,7 @@ mod tests {
             );
             // Handle can't claim multiple times
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg);
+            let res = execute(deps.as_mut(), env, info, msg);
 
             match res {
                 Err(StdError::GenericErr {
@@ -2593,26 +2568,19 @@ mod tests {
 
             let claimed_address = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
-            let winner_claim = winner_storage(&mut deps.storage, 1u64)
-                .load(claimed_address.as_slice())
-                .unwrap();
-
+            let winner_claim = PREFIXED_WINNER.load(deps.as_mut().storage, (&1u64.to_be_bytes(), claimed_address.as_slice())).unwrap();
             assert_eq!(winner_claim.claimed, true);
 
-            let not_claimed = winner_storage(&mut deps.storage, 1u64)
-                .load(addr2.as_slice())
-                .unwrap();
+            let not_claimed = PREFIXED_WINNER.load(deps.as_mut().storage, (&1u64.to_be_bytes(), addr2.as_slice())).unwrap();
             assert_eq!(not_claimed.claimed, false);
 
             let state_after = read_state(deps.as_ref().storage).unwrap();
-            let jackpot_before = jackpot_storage_read(&deps.storage)
-                .load(&(state_before.lottery_counter - 1).to_be_bytes())
-                .unwrap();
-            let jackpot_after = jackpot_storage_read(&deps.storage)
-                .load(&(state_after.lottery_counter - 1).to_be_bytes())
-                .unwrap();
+            let jackpot_before = JACKPOT.load(deps.as_ref().storage, &(state_before.lottery_counter - 1).to_be_bytes()).unwrap();
+
+            let jackpot_after =
+                JACKPOT.load(deps.as_ref().storage, &(state_after.lottery_counter - 1).to_be_bytes()).unwrap();
             assert_eq!(state_after, state_before);
         }
         #[test]
@@ -2629,31 +2597,28 @@ mod tests {
 
             let mut state_before = read_state(deps.as_ref().storage).unwrap();
             state_before.lottery_counter = 2;
-            config(&mut deps.storage).save(&state_before).unwrap();
-            jackpot_storage(&mut deps.storage).save(
-                &(state_before.lottery_counter - 1).to_be_bytes(),
-                &Uint128(1_000_000),
-            );
+            store_state(deps.as_mut().storage, &&state_before).unwrap();
+            JACKPOT.save(deps.as_mut().storage, &(state_before.lottery_counter - 1).to_be_bytes(), &Uint128(1_000_000)).unwrap();
 
             let addr2 = deps
                 .api
-                .canonical_address(&HumanAddr("address2".to_string()))
+                .addr_canonicalize(&"address2".to_string())
                 .unwrap();
             let default_addr = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
 
             save_winner(&mut deps.storage, 1u64, addr2.clone(), 1).unwrap();
             save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
 
-            let mut env = mock_env(before_all.default_sender_two.clone(), &[]);
-            env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
-
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos(state_before.block_time_play.nanos().checked_sub(state_before.every_block_time_play.nanos() / 2).unwrap() );
+            let info = mock_info(before_all.default_sender_two.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect {
                 address: Some(before_all.default_sender.clone()),
             };
-            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             println!("{:?}", res);
 
             assert_eq!(res.messages.len(), 2);
@@ -2661,7 +2626,6 @@ mod tests {
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
-                    from_address: env.contract.address.clone(),
                     to_address: before_all.default_sender.clone(),
                     amount: vec![Coin {
                         denom: "ust".to_string(),
@@ -2674,8 +2638,8 @@ mod tests {
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: deps
                         .api
-                        .human_address(&state_before.loterra_staking_contract_address)
-                        .unwrap(),
+                        .addr_humanize(&state_before.loterra_staking_contract_address)
+                        .unwrap().to_string(),
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
@@ -2687,7 +2651,7 @@ mod tests {
             let msg = ExecuteMsg::Collect {
                 address: Some(before_all.default_sender.clone()),
             };
-            let res = handle(&mut deps, env.clone(), msg);
+            let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
             match res {
                 Err(StdError::GenericErr {
@@ -2699,26 +2663,17 @@ mod tests {
 
             let claimed_address = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
-            let winner_claim = winner_storage(&mut deps.storage, 1u64)
-                .load(claimed_address.as_slice())
-                .unwrap();
-
+            let winner_claim = PREFIXED_WINNER.load(deps.as_ref().storage, (&1u64.to_be_bytes(), claimed_address.as_slice())).unwrap();
             assert_eq!(winner_claim.claimed, true);
 
-            let not_claimed = winner_storage(&mut deps.storage, 1u64)
-                .load(addr2.as_slice())
-                .unwrap();
+            let not_claimed = PREFIXED_WINNER.load(deps.as_ref().storage, (&1u64.to_be_bytes(), addr2.as_slice())).unwrap();
             assert_eq!(not_claimed.claimed, false);
 
             let state_after = read_state(deps.as_ref().storage).unwrap();
-            let jackpot_before = jackpot_storage_read(&deps.storage)
-                .load(&(state_before.lottery_counter - 1).to_be_bytes())
-                .unwrap();
-            let jackpot_after = jackpot_storage_read(&deps.storage)
-                .load(&(state_after.lottery_counter - 1).to_be_bytes())
-                .unwrap();
+            let jackpot_before =JACKPOT.load(deps.as_ref().storage, &(state_before.lottery_counter - 1).to_be_bytes()).unwrap();
+            let jackpot_after =JACKPOT.load(deps.as_ref().storage, &(state_after.lottery_counter - 1).to_be_bytes()).unwrap();
             assert_eq!(state_after, state_before);
         }
         #[test]
@@ -2735,19 +2690,16 @@ mod tests {
 
             let mut state_before = read_state(deps.as_ref().storage).unwrap();
             state_before.lottery_counter = 2;
-            config(&mut deps.storage).save(&state_before).unwrap();
-            jackpot_storage(&mut deps.storage).save(
-                &(state_before.lottery_counter - 1).to_be_bytes(),
-                &Uint128(1_000_000),
-            );
+            store_state(deps.as_mut().storage, &state_before).unwrap();
+            JACKPOT.save(deps.as_mut().storage, &(state_before.lottery_counter - 1).to_be_bytes(), &Uint128(1_000_000)).unwrap();
 
             let addr2 = deps
                 .api
-                .canonical_address(&HumanAddr("address2".to_string()))
+                .addr_canonicalize(&"address2".to_string())
                 .unwrap();
             let default_addr = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
 
             // rank 1
@@ -2759,19 +2711,17 @@ mod tests {
             save_winner(&mut deps.storage, 1u64, default_addr.clone(), 2).unwrap();
             save_winner(&mut deps.storage, 1u64, default_addr.clone(), 2).unwrap();
 
-            let state = config_read(&mut deps.storage).load().unwrap();
-            let mut env = mock_env(before_all.default_sender.clone(), &[]);
-            env.block.time = state.block_time_play - state.every_block_time_play / 2;
-
+            let state = read_state(deps.as_ref().storage).unwrap();
+            let mut env = mock_env();
+            env.block.time = Timestamp::from_nanos(state_before.block_time_play.nanos().checked_sub(state_before.every_block_time_play.nanos() / 2).unwrap() );
+            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg).unwrap();
-
+            let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             assert_eq!(res.messages.len(), 2);
             let amount_claimed = Uint128(250832);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
-                    from_address: env.contract.address.clone(),
                     to_address: before_all.default_sender.clone(),
                     amount: vec![Coin {
                         denom: "ust".to_string(),
@@ -2784,8 +2734,8 @@ mod tests {
                 CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: deps
                         .api
-                        .human_address(&state_before.loterra_staking_contract_address)
-                        .unwrap(),
+                        .addr_humanize(&state_before.loterra_staking_contract_address)
+                        .unwrap().to_string(),
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
@@ -2795,7 +2745,7 @@ mod tests {
             );
             // Handle can't claim multiple times
             let msg = ExecuteMsg::Collect { address: None };
-            let res = handle(&mut deps, env.clone(), msg);
+            let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
             match res {
                 Err(StdError::GenericErr {
@@ -2807,30 +2757,22 @@ mod tests {
 
             let claimed_address = deps
                 .api
-                .canonical_address(&before_all.default_sender)
+                .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
 
-            let claimed = winner_storage(&mut deps.storage, 1u64)
-                .load(claimed_address.as_slice())
-                .unwrap();
+            let claimed = PREFIXED_WINNER.load(deps.as_ref().storage, (&1u64.to_be_bytes(), claimed_address.as_slice())).unwrap();
             assert_eq!(claimed.claimed, true);
 
-            let not_claimed = winner_storage(&mut deps.storage, 1u64)
-                .load(addr2.as_slice())
-                .unwrap();
+            let not_claimed = PREFIXED_WINNER.load(deps.as_ref().storage, (&1u64.to_be_bytes(), addr2.as_slice())).unwrap();
             assert_eq!(not_claimed.claimed, false);
 
             let state_after = read_state(deps.as_ref().storage).unwrap();
-            let jackpot_before = jackpot_storage_read(&deps.storage)
-                .load(&(state_before.lottery_counter - 1).to_be_bytes())
-                .unwrap();
-            let jackpot_after = jackpot_storage_read(&deps.storage)
-                .load(&(state_after.lottery_counter - 1).to_be_bytes())
-                .unwrap();
+            let jackpot_before =JACKPOT.load(deps.as_ref().storage, &(state_before.lottery_counter - 1).to_be_bytes()).unwrap();
+            let jackpot_after =JACKPOT.load(deps.as_ref().storage, &(state_after.lottery_counter - 1).to_be_bytes()).unwrap();
             assert_eq!(state_after, state_before);
         }
     }
-
+/*
     mod proposal {
         use super::*;
         // handle_proposal
