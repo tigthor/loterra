@@ -17,7 +17,6 @@ use cosmwasm_std::{
 };
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg};
 use std::ops::{Add, Mul};
-use terrand;
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
