@@ -4,7 +4,7 @@ use std::fs::create_dir_all;
 use cosmwasm_schema::{export_schema, export_schema_with_title, remove_schemas, schema_for};
 
 use loterra::msg::{
-    AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, ExecuteMsg,
+    AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, GetPollResponse,
     InstantiateMsg, QueryMsg, RoundResponse,
 };
 

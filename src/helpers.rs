@@ -1,5 +1,8 @@
 use crate::state::{PollStatus, State, POLL};
-use cosmwasm_std::{to_binary, CanonicalAddr, StdResult, Uint128, WasmQuery, DepsMut, Response, StdError, attr, Storage};
+use cosmwasm_std::{
+    attr, to_binary, CanonicalAddr, DepsMut, Response, StdError, StdResult, Storage, Uint128,
+    WasmQuery,
+};
 use loterra_staking_contract::msg::QueryMsg::{Holder, Holders};
 use loterra_staking_contract::msg::{HolderResponse, HoldersResponse};
 
@@ -26,27 +29,25 @@ pub fn is_lower_hex(combination: &str, len: u8) -> bool {
     true
 }
 
-pub fn user_total_weight(
-    deps: &DepsMut,
-    state: &State,
-    address: &CanonicalAddr,
-) -> Uint128 {
-
+pub fn user_total_weight(deps: &DepsMut, state: &State, address: &CanonicalAddr) -> Uint128 {
     let mut weight = Uint128::zero();
     let human_address = deps.api.addr_humanize(&address).unwrap();
 
     // Ensure sender have some reward tokens
-    let msg = Holder { address: human_address.to_string() };
+    let msg = Holder {
+        address: human_address.to_string(),
+    };
 
     let loterra_human = deps
         .api
-        .addr_humanize(&state.loterra_staking_contract_address.clone()).unwrap();
+        .addr_humanize(&state.loterra_staking_contract_address.clone())
+        .unwrap();
 
     let query = WasmQuery::Smart {
         contract_addr: loterra_human.to_string(),
         msg: to_binary(&msg).unwrap(),
     }
-        .into();
+    .into();
     let loterra_balance: HolderResponse = deps.querier.query(&query).unwrap();
 
     if !loterra_balance.balance.is_zero() {
@@ -56,23 +57,24 @@ pub fn user_total_weight(
     weight
 }
 
-pub fn total_weight(
-    deps: &DepsMut,
-    state: &State,
-) -> Uint128 {
+pub fn total_weight(deps: &DepsMut, state: &State) -> Uint128 {
     let mut weight = Uint128::zero();
 
     // Ensure sender have some reward tokens
-    let msg = Holders { start_after: None, limit: None };
+    let msg = Holders {
+        start_after: None,
+        limit: None,
+    };
 
     let loterra_human = deps
         .api
-        .addr_humanize(&state.loterra_staking_contract_address.clone()).unwrap();
+        .addr_humanize(&state.loterra_staking_contract_address.clone())
+        .unwrap();
     let query = WasmQuery::Smart {
         contract_addr: loterra_human.to_string(),
         msg: to_binary(&msg).unwrap(),
     }
-        .into();
+    .into();
     let loterra_balance: HoldersResponse = deps.querier.query(&query).unwrap();
 
     for holder in loterra_balance.holders {
@@ -84,10 +86,7 @@ pub fn total_weight(
     weight
 }
 
-pub fn reject_proposal(
-    storage:  &mut dyn Storage,
-    poll_id: u64,
-) -> StdResult<Response> {
+pub fn reject_proposal(storage: &mut dyn Storage, poll_id: u64) -> StdResult<Response> {
     POLL.update(storage, &poll_id.to_be_bytes(), |poll| match poll {
         None => Err(StdError::generic_err("Proposal still in progress")),
         Some(poll_info) => {
@@ -104,7 +103,7 @@ pub fn reject_proposal(
         attributes: vec![
             attr("action", "present poll"),
             attr("poll_id", poll_id),
-            attr("poll_result", "rejected")
-        ]
+            attr("poll_result", "rejected"),
+        ],
     })
 }
