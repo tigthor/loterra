@@ -150,7 +150,7 @@ pub fn handle_register(
 
     // Check if address filled as param
     let addr = match address {
-        None => info.sender,
+        None => info.sender.clone(),
         Some(addr) => Addr::unchecked(addr),
     };
 
@@ -204,13 +204,23 @@ pub fn handle_register(
     // save combination
     let addr_raw = deps.api.addr_canonicalize(&addr.as_str())?;
 
-    combination_save(deps.storage, state.lottery_counter, addr_raw, combination)?;
+    combination_save(
+        deps.storage,
+        state.lottery_counter,
+        addr_raw,
+        combination.clone(),
+    )?;
 
     Ok(Response {
         submessages: vec![],
         messages: vec![],
         data: None,
-        attributes: vec![attr("action", "register")],
+        attributes: vec![
+            attr("action", "register"),
+            attr("price_per_ticket", state.price_per_ticket_to_register),
+            attr("amount_ticket_purchased", combination.len()),
+            attr("buyer", info.sender),
+        ],
     })
 }
 
@@ -1623,7 +1633,12 @@ mod tests {
                     submessages: vec![],
                     messages: vec![],
                     data: None,
-                    attributes: vec![attr("action", "register")]
+                    attributes: vec![
+                        attr("action", "register"),
+                        attr("price_per_ticket", "1000000"),
+                        attr("amount_ticket_purchased", "3"),
+                        attr("buyer", "addr0000")
+                    ]
                 }
             );
             // Check combination added with success
