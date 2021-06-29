@@ -795,7 +795,7 @@ pub fn handle_proposal(
                 }
 
                 proposal_amount = amount;
-                proposal_human_address = recipient.map(|address| address)
+                proposal_human_address = recipient;
             }
             None => {
                 return Err(StdError::generic_err("Amount required".to_string()));
