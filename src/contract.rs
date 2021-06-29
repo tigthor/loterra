@@ -196,7 +196,7 @@ pub fn handle_register(
     if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
         return Err(StdError::generic_err(format!(
             "send {}{}",
-            &state.price_per_ticket_to_register.u128() * combination.len() as u128,
+            state.price_per_ticket_to_register.u128() * combination.len() as u128,
             state.denom_stable
         )));
     }
@@ -594,7 +594,7 @@ pub fn handle_collect(
         ],
     })
 }
-
+#[allow(clippy::too_many_arguments)]
 pub fn handle_proposal(
     deps: DepsMut,
     env: Env,
@@ -795,10 +795,7 @@ pub fn handle_proposal(
                 }
 
                 proposal_amount = amount;
-                proposal_human_address = match recipient {
-                    None => None,
-                    Some(address) => Some(address),
-                }
+                proposal_human_address = recipient.map(|address| address)
             }
             None => {
                 return Err(StdError::generic_err("Amount required".to_string()));
