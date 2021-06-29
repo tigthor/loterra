@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Order, StdResult, Storage, Uint128, Timestamp, Deps};
+use cosmwasm_std::{CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
 use cw_storage_plus::{Item, Map};
 use std::ops::Add;
 
@@ -100,46 +100,62 @@ pub fn combination_save(
 ) -> StdResult<()> {
     let mut exist = true;
     // Save combination by senders
-    PREFIXED_USER_COMBINATION.update(storage, (&lottery_id.to_be_bytes(), address.as_slice()),
-         |exists| -> StdResult<Vec<String>> {
-             match exists {
-                 Some(combinations) => {
-                     let mut modified = combinations;
-                     modified.extend(combination.clone());
-                     Ok(modified)
-                 }
-                 None => {
-                     exist = false;
-                     Ok(combination.clone())
-                 }
-             }
-         },
-    )?;
-    if !exist {
-        ALL_USER_COMBINATION.update(storage, &lottery_id.to_be_bytes(), |exist| -> StdResult<Vec<CanonicalAddr>>{
-            match exist {
-                None => Ok(vec![address]),
-                Some(players) => {
-                    let mut data = players;
-                    data.push(address);
-                    Ok(data)
+    PREFIXED_USER_COMBINATION.update(
+        storage,
+        (&lottery_id.to_be_bytes(), address.as_slice()),
+        |exists| -> StdResult<Vec<String>> {
+            match exists {
+                Some(combinations) => {
+                    let mut modified = combinations;
+                    modified.extend(combination.clone());
+                    Ok(modified)
+                }
+                None => {
+                    exist = false;
+                    Ok(combination.clone())
                 }
             }
-        })?;
-        COUNT_PLAYERS.update(storage, &lottery_id.to_be_bytes(),|exists| -> StdResult<Uint128>{
-            match exists {
-                None => Ok(Uint128(1)),
-                Some(p) => Ok(p.add(Uint128(1))),
-            }
-        })
+        },
+    )?;
+    if !exist {
+        ALL_USER_COMBINATION.update(
+            storage,
+            &lottery_id.to_be_bytes(),
+            |exist| -> StdResult<Vec<CanonicalAddr>> {
+                match exist {
+                    None => Ok(vec![address]),
+                    Some(players) => {
+                        let mut data = players;
+                        data.push(address);
+                        Ok(data)
+                    }
+                }
+            },
+        )?;
+        COUNT_PLAYERS
+            .update(
+                storage,
+                &lottery_id.to_be_bytes(),
+                |exists| -> StdResult<Uint128> {
+                    match exists {
+                        None => Ok(Uint128(1)),
+                        Some(p) => Ok(p.add(Uint128(1))),
+                    }
+                },
+            )
             .map(|_| ())?
     }
-    COUNT_TICKETS.update(storage, &lottery_id.to_be_bytes(), |exists| -> StdResult<Uint128>{
-        match exists {
-            None => Ok(Uint128(combination.len() as u128)),
-            Some(p) => Ok(p.add(Uint128(combination.len() as u128))),
-        }
-    })
+    COUNT_TICKETS
+        .update(
+            storage,
+            &lottery_id.to_be_bytes(),
+            |exists| -> StdResult<Uint128> {
+                match exists {
+                    None => Ok(Uint128(combination.len() as u128)),
+                    Some(p) => Ok(p.add(Uint128(combination.len() as u128))),
+                }
+            },
+        )
         .map(|_| ())
 }
 
@@ -150,31 +166,38 @@ pub fn save_winner(
     addr: CanonicalAddr,
     rank: u8,
 ) -> StdResult<()> {
-
-    PREFIXED_WINNER.update(storage, (&lottery_id.to_be_bytes(), addr.as_slice()),|exists|
-        -> StdResult<WinnerRewardClaims>{
-        match exists {
-            None => Ok(WinnerRewardClaims {
-                claimed: false,
-                ranks: vec![rank],
-            }),
-            Some(claims) => {
-                let mut ranks = claims.ranks;
-                ranks.push(rank);
-                Ok(WinnerRewardClaims {
+    PREFIXED_WINNER.update(
+        storage,
+        (&lottery_id.to_be_bytes(), addr.as_slice()),
+        |exists| -> StdResult<WinnerRewardClaims> {
+            match exists {
+                None => Ok(WinnerRewardClaims {
                     claimed: false,
-                    ranks,
-                })
+                    ranks: vec![rank],
+                }),
+                Some(claims) => {
+                    let mut ranks = claims.ranks;
+                    ranks.push(rank);
+                    Ok(WinnerRewardClaims {
+                        claimed: false,
+                        ranks,
+                    })
+                }
             }
-        }
-    })?;
+        },
+    )?;
 
-    PREFIXED_RANK.update(storage, (&lottery_id.to_be_bytes(), &rank.to_be_bytes()), |exists| -> StdResult<Uint128>{
-        match exists {
-            None => Ok(Uint128(1)),
-            Some(r) => Ok(r.add(Uint128(1))),
-        }
-    })
+    PREFIXED_RANK
+        .update(
+            storage,
+            (&lottery_id.to_be_bytes(), &rank.to_be_bytes()),
+            |exists| -> StdResult<Uint128> {
+                match exists {
+                    None => Ok(Uint128(1)),
+                    Some(r) => Ok(r.add(Uint128(1))),
+                }
+            },
+        )
         .map(|_| ())
 }
 
@@ -182,13 +205,12 @@ pub fn all_winners(
     deps: &Deps,
     lottery_id: u64,
 ) -> StdResult<Vec<(CanonicalAddr, WinnerRewardClaims)>> {
-    PREFIXED_WINNER.prefix(&lottery_id.to_be_bytes()).range( deps.storage,None, None, Order::Ascending)
+    PREFIXED_WINNER
+        .prefix(&lottery_id.to_be_bytes())
+        .range(deps.storage, None, None, Order::Ascending)
         .map(|item| {
             let (addr, claim) = item?;
             Ok((CanonicalAddr::from(addr), claim))
         })
         .collect()
 }
-
-
-

@@ -1,6 +1,9 @@
 use crate::query::{GetHoldersResponse, HoldersInfo};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{ContractResult,from_slice, to_binary, Binary, Coin, Decimal, Querier, QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, OwnedDeps, SystemResult};
+use cosmwasm_std::{
+    from_slice, to_binary, Binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
+    QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
+};
 use serde::Serialize;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper};
 
@@ -98,17 +101,14 @@ impl WasmMockQuerier {
     pub fn handle_query(&self, request: &QueryRequest<TerraQueryWrapper>) -> QuerierResult {
         match &request {
             QueryRequest::Wasm(WasmQuery::Smart { contract_addr, msg }) => {
-                println!("{:?}", contract_addr);
-                if contract_addr == &"cw20".to_string()
-                {
+                println!("{:?}", msg);
+                if contract_addr == &"cw20".to_string() {
                     println!("{:?}", request);
                     let msg_balance = LotteraBalanceResponse {
                         balance: self.lottery_balance_response.balance,
                     };
                     return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
-                } else if contract_addr
-                    == &"terrand".to_string()
-                {
+                } else if contract_addr == &"terrand".to_string() {
                     let msg_terrand = TerrandResponse {
                         randomness: Binary::from(
                             "OdRl+j6PHnN84dy12n4Oq1BrGktD73FW4SKPihxfB9I=".as_bytes(),
@@ -116,36 +116,37 @@ impl WasmMockQuerier {
                         worker: "terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker".to_string(),
                     };
                     return SystemResult::Ok(ContractResult::from(to_binary(&msg_terrand)));
-                } else if contract_addr
-                    == &"staking".to_string()
-                {
+                } else if contract_addr == &"staking".to_string() {
                     if msg == &Binary::from(r#"{"get_all_bonded":{}}"#.as_bytes()) {
                         let msg_balance = GetAllBondedResponse {
                             total_bonded: self.lottery_balance_response.balance.clone(),
                         };
                         return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
-                    } else if msg == &Binary::from(
-                        r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#
-                            .as_bytes(),
-                    ) {
+                    } else if msg
+                        == &Binary::from(r#"{"holder":{"address":"addr0000"}}"#.as_bytes())
+                    {
                         let msg_balance = GetHolderResponse {
-                            address: "terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007".to_string(),
+                            address: "addr0000".to_string(),
                             balance: self.holder_response.balance,
                             index: self.holder_response.index,
                             pending_rewards: self.holder_response.pending_rewards,
                         };
                         return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
-                    } else if msg == &Binary::from(r#"{"holders":{}}"#.as_bytes()) {
+                    } else if msg
+                        == &Binary::from(
+                            r#"{"holders":{"start_after":null,"limit":null}}"#.as_bytes(),
+                        )
+                    {
                         let msg_holders = GetHoldersResponse {
                             holders: vec![
                                 HoldersInfo {
-                                    address: "Addr9999".to_string(),
+                                    address: "addr0000".to_string(),
                                     balance: Uint128(15_000),
                                     index: Decimal::zero(),
                                     pending_rewards: Decimal::zero(),
                                 },
                                 HoldersInfo {
-                                    address: "Addr9999".to_string(),
+                                    address: "addr0001".to_string(),
                                     balance: Uint128(10_000),
                                     index: Decimal::zero(),
                                     pending_rewards: Decimal::zero(),
@@ -188,9 +189,7 @@ impl WasmMockQuerier {
 }
 
 impl WasmMockQuerier {
-    pub fn new(
-        base: MockQuerier<TerraQueryWrapper>
-    ) -> Self {
+    pub fn new(base: MockQuerier<TerraQueryWrapper>) -> Self {
         WasmMockQuerier {
             base,
             terrand_response: TerrandResponse::default(),

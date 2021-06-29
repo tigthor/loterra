@@ -24,4 +24,3 @@ pub fn deduct_tax(querier: &QuerierWrapper, coin: Coin) -> StdResult<Coin> {
         amount: (coin.amount.checked_sub(tax_amount))?,
     })
 }
-
