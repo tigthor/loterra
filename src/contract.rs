@@ -9,6 +9,7 @@ use cosmwasm_std::{to_binary, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env
 use std::ops::{Add, Mul};
 use terrand;
 use cw20::{Cw20QueryMsg, BalanceResponse, Cw20ExecuteMsg};
+use std::sync::mpsc::RecvTimeoutError::Timeout;
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -151,7 +152,7 @@ pub fn handle_register(
         ));
     }
     // Check if the lottery is about to play and cancel new ticket to enter until play
-    if env.block.time > state.block_time_play {
+    if env.block.time > Timestamp::from_seconds(state.block_time_play) {
         return Err(StdError::generic_err(
             "Lottery about to start",
         ));
@@ -232,14 +233,14 @@ pub fn handle_play(
     }
 
     // calculate next round randomness
-    let from_genesis = state.block_time_play.nanos().checked_sub(DRAND_GENESIS_TIME).unwrap();
+    let from_genesis = state.block_time_play.checked_sub(DRAND_GENESIS_TIME).unwrap();
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     // Make the contract callable for everyone every x blocks
 
-    if env.block.time > state.block_time_play {
+    if env.block.time > Timestamp::from_seconds(state.block_time_play) {
         // Update the state
-        state.block_time_play = env.block.time.plus_nanos(state.every_block_time_play.nanos());
+        state.block_time_play = env.block.time.plus_seconds(state.every_block_time_play).nanos() / 1_000_000_000;
     } else {
         return Err(StdError::generic_err(format!(
             "Lottery registration is still in progress... Retry after block time {}",
@@ -299,7 +300,7 @@ pub fn handle_play(
             },
         )?],
     };
-    if env.block.time > state.holders_bonus_block_time_end
+    if env.block.time > Timestamp::from_seconds(state.holders_bonus_block_time_end)
         && state.token_holder_percentage_fee_reward > HOLDERS_MAX_REWARD
     {
         state.token_holder_percentage_fee_reward = 20;
@@ -333,7 +334,7 @@ pub fn handle_claim(
         ));
     }
 
-    if env.block.time.nanos() > state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()).unwrap() / DIV_BLOCK_TIME_BY_X {
+    if env.block.time > Timestamp::from_seconds(state.block_time_play.checked_sub(state.every_block_time_play / DIV_BLOCK_TIME_BY_X).unwrap() ) {
         return Err(StdError::generic_err("Claiming is closed"));
     }
     let last_lottery_counter_round = state.lottery_counter - 1;
@@ -435,7 +436,7 @@ pub fn handle_collect(
             "Deactivated",
         ));
     }
-    if env.block.time.nanos() < state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()).unwrap() / DIV_BLOCK_TIME_BY_X {
+    if env.block.time < Timestamp::from_seconds(state.block_time_play.checked_sub(state.every_block_time_play / DIV_BLOCK_TIME_BY_X ).unwrap()) {
         return Err(StdError::generic_err("Collecting jackpot is closed"));
     }
     // Ensure there is jackpot reward to claim
@@ -972,7 +973,7 @@ pub fn handle_present_proposal(
     // Valid the proposal
     match poll.proposal {
         Proposal::LotteryEveryBlockTime => {
-            state.every_block_time_play = Timestamp::from_nanos(poll.amount.u128() as u64);
+            state.every_block_time_play = poll.amount.u128() as u64;
         }
         Proposal::DrandWorkerFeePercentage => {
             state.fee_for_drand_worker_in_percentage = poll.amount.u128() as u8;
@@ -1255,7 +1256,7 @@ fn query_poll(
 
 fn query_round(deps: Deps) -> StdResult<RoundResponse> {
     let state = read_state(deps.storage)?;
-    let from_genesis = state.block_time_play.nanos().checked_sub(DRAND_GENESIS_TIME).unwrap();
+    let from_genesis = state.block_time_play.checked_sub(DRAND_GENESIS_TIME).unwrap();
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     Ok(RoundResponse { next_round })
@@ -1267,7 +1268,7 @@ mod tests {
     use crate::mock_querier::mock_dependencies_custom;
     use crate::msg::{ExecuteMsg, InstantiateMsg};
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{Uint128, Api};
+    use cosmwasm_std::{Uint128, Api, Uint64};
 
     struct BeforeAll {
         default_sender: String,
@@ -1284,11 +1285,10 @@ mod tests {
 
     fn default_init(deps: DepsMut) {
         const DENOM_STABLE: &str = "ust";
-        const BLOCK_TIME_PLAY: Timestamp = Timestamp::from_nanos(1610566920);
-        const EVERY_BLOCK_TIME_PLAY: Timestamp = Timestamp::from_nanos(50000);
-        const PUBLIC_SALE_END_BLOCK_TIME: u64 = 1610566920;
+        const BLOCK_TIME_PLAY: u64 =  1610566920;
+        const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
-        const BONUS_BLOCK_TIME_END: Timestamp = Timestamp::from_nanos(1610567920);
+        const BONUS_BLOCK_TIME_END: u64 = 1610567920;
 
         let init_msg = InstantiateMsg {
             denom_stable: DENOM_STABLE.to_string(),
@@ -1361,7 +1361,7 @@ mod tests {
             let mut state = read_state(deps.as_ref().storage).unwrap();
             let info = mock_info(before_all.default_sender.as_str(), &[]);
             let mut env = mock_env();
-            env.block.time = state.block_time_play;
+            env.block.time = Timestamp::from_seconds(state.block_time_play);
             let res = execute(deps.as_mut(), env, info, msg);
             match res {
                 Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Claiming is closed"),
@@ -1378,9 +1378,9 @@ mod tests {
             let msg = ExecuteMsg::Claim { addresses: None };
             let state = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos((state.block_time_play.nanos() - state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X);
+            env.block.time = Timestamp::from_seconds((state.block_time_play.checked_sub(state.every_block_time_play / DIV_BLOCK_TIME_BY_X).unwrap()));
             println!("{:?}", env.block.time);
-            println!("{:?}", state.block_time_play.nanos());
+            println!("{:?}", state.block_time_play);
             let res = execute(deps.as_mut(), env, mock_info(before_all.default_sender.as_str(), &[]), msg);
             match res {
                 Err(StdError::GenericErr {
@@ -1408,7 +1408,7 @@ mod tests {
             let msg = ExecuteMsg::Claim { addresses: None };
 
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos((state.block_time_play.nanos() - state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(state.every_block_time_play / DIV_BLOCK_TIME_BY_X).unwrap());
             let res = execute(deps.as_mut(), env, mock_info( before_all.default_sender.as_str(),&[]), msg);
             match res {
                 Err(StdError::GenericErr {
@@ -1450,7 +1450,7 @@ mod tests {
 
             let msg = ExecuteMsg::Claim { addresses: None };
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos((state.block_time_play.nanos() - state.every_block_time_play.nanos()) / DIV_BLOCK_TIME_BY_X);
+            env.block.time =  Timestamp::from_seconds(state.block_time_play.checked_sub(state.every_block_time_play / DIV_BLOCK_TIME_BY_X).unwrap());
             let res = execute(deps.as_mut(), env.clone(), mock_info(before_all.default_sender.as_str().clone(), &[]), msg.clone()).unwrap();
 
             println!("{:?}", res);
@@ -1539,7 +1539,7 @@ mod tests {
             };
             let mut env = mock_env();
             let state = read_state(deps.as_ref().storage).unwrap();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1).unwrap());
             let res = execute(deps.as_mut(), env.clone(),
                               mock_info(
                                   before_all.default_sender.as_str(),
@@ -1647,7 +1647,7 @@ mod tests {
             };
             let mut env = mock_env();
             let state = read_state(deps.as_ref().storage).unwrap();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1).unwrap());
             let res = execute(deps.as_mut(), env,
                     mock_info(
                         before_all.default_sender.as_str(),
@@ -1681,7 +1681,7 @@ mod tests {
             };
             let mut env = mock_env();
             let state = read_state(deps.as_ref().storage).unwrap();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1).unwrap());
             let res = execute(deps.as_mut(), env,
                               mock_info(
                                   before_all.default_sender.as_str(),
@@ -1719,7 +1719,7 @@ mod tests {
 
             let mut env = mock_env();
             let state = read_state(deps.as_ref().storage).unwrap();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1).unwrap());
             let res = execute(deps.as_mut(), env,
                               mock_info(
                                   before_all.default_sender.as_str(),
@@ -1755,7 +1755,7 @@ mod tests {
             };
             let mut env = mock_env();
             let state = read_state(deps.as_ref().storage).unwrap();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1).unwrap());
             let res = execute(deps.as_mut(), env,
                               mock_info(
                                   before_all.default_sender.as_str(),
@@ -1791,7 +1791,7 @@ mod tests {
             };
             let mut env = mock_env();
             let state = read_state(deps.as_ref().storage).unwrap();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1).unwrap());
             let res = execute(deps.as_mut(), env,
                               mock_info(
                                   before_all.default_sender.as_str(),
@@ -1828,7 +1828,7 @@ mod tests {
 
             let mut env = mock_env();
             let state = read_state(deps.as_ref().storage).unwrap();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(1).unwrap());
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1).unwrap());
             // Fail sending less than required (1_000_000)
             let res = execute(deps.as_mut(), env.clone(),
                               mock_info(
@@ -1884,7 +1884,7 @@ mod tests {
             let mut env = mock_env();
             let state = read_state(deps.as_ref().storage).unwrap();
             // Block time is superior to block_time_play so the lottery is about to start
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() + 1000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_add(1000).unwrap());
             let res = execute(deps.as_mut(), env,
                               mock_info(
                                   before_all.default_sender.as_str(),
@@ -1948,7 +1948,7 @@ mod tests {
             default_init(deps.as_mut());
             let mut state = read_state(deps.as_ref().storage).unwrap();
             let env = mock_env();
-            state.block_time_play = Timestamp::from_nanos(env.block.time.nanos().checked_add(1000).unwrap());
+            state.block_time_play = env.block.time.plus_seconds(1000).nanos() / 1_000_000_000;
             store_state(deps.as_mut().storage, &state).unwrap();
             let info = mock_info(before_all.default_sender.as_str(), &[]);
             let res = handle_play(deps.as_mut(), env,info);
@@ -1981,7 +1981,7 @@ mod tests {
                     amount: Uint128(9),
                 }],
             );
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() + 1000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_add(1000).unwrap());
             let res = handle_play(deps.as_mut(), env, info);
             println!("{:?}", res);
             match res {
@@ -2005,7 +2005,7 @@ mod tests {
             default_init(deps.as_mut());
             let state = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() + 1000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_add(1000).unwrap());
             let info = mock_info(before_all.default_sender_owner.as_str(), &[]);
             let res = handle_play(deps.as_mut(), env, info).unwrap();
             assert_eq!(res.messages.len(), 1);
@@ -2026,7 +2026,7 @@ mod tests {
             default_init(deps.as_mut());
             let state = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() - 1000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1000).unwrap());
             // register some combination
             let msg = ExecuteMsg::Register {
                 address: None,
@@ -2071,7 +2071,7 @@ mod tests {
                 JACKPOT.load(deps.as_ref().storage, &(state.lottery_counter - 1).to_be_bytes()).unwrap();
 
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() + 1000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_add(1000).unwrap());
 
             let info = mock_info(before_all.default_sender_owner.as_str(), &[]);
             let res = handle_play(deps.as_mut(), env, info).unwrap();
@@ -2120,7 +2120,7 @@ mod tests {
             default_init(deps.as_mut());
             let state = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() - 1000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1000).unwrap());
             // register some combination
             let msg = ExecuteMsg::Register {
                 address: None,
@@ -2139,7 +2139,7 @@ mod tests {
             let jackpot_reward_before =
                 JACKPOT.load(deps.as_ref().storage,&(state.lottery_counter - 1).to_be_bytes()).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() + 1000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_add(1000).unwrap());
             let info = mock_info(before_all.default_sender_owner.as_str().clone(), &[]);
             let res = handle_play(deps.as_mut(), env.clone(), info.clone()).unwrap();
             println!("{:?}", res);
@@ -2184,7 +2184,7 @@ mod tests {
             default_init(deps.as_mut());
             let state = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() - 1000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(1000).unwrap());
             // register some combination
             let msg = ExecuteMsg::Register {
                 address: None,
@@ -2217,7 +2217,7 @@ mod tests {
                 JACKPOT.load(deps.as_ref().storage,&(state.lottery_counter - 1).to_be_bytes()).unwrap();
 
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos() + 10_000);
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_add(10_000).unwrap());
             let info = mock_info(before_all.default_sender_owner.as_str(), &[]);
             let res = handle_play(deps.as_mut(), env.clone(), info.clone()).unwrap();
             println!("{:?}", res);
@@ -2324,7 +2324,8 @@ mod tests {
             let state = read_state(deps.as_ref().storage).unwrap();
             JACKPOT.save(deps.as_mut().storage,&(state.lottery_counter - 1).to_be_bytes(),  &Uint128::zero()).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos()).unwrap());
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(state.every_block_time_play).unwrap());
+
             let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect { address: None };
             let res = execute(deps.as_mut(), env, info, msg);
@@ -2349,7 +2350,7 @@ mod tests {
             let state = read_state(deps.as_ref().storage).unwrap();
             JACKPOT.save(deps.as_mut().storage, &(state.lottery_counter - 1).to_be_bytes(),  &Uint128::zero()).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos() / 2).unwrap() );
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(state.every_block_time_play / 2).unwrap());
             let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect { address: None };
             let res = execute(deps.as_mut(), env, info, msg);
@@ -2377,7 +2378,7 @@ mod tests {
             JACKPOT.save(deps.as_mut().storage, &(state.lottery_counter - 1).to_be_bytes(),  &Uint128(1_000_000)).unwrap();
             let state = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos() / 2).unwrap() );
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(state.every_block_time_play / 2).unwrap() );
             let info = mock_info(before_all.default_sender.as_str().clone(), &[] );
             let msg = ExecuteMsg::Collect { address: None };
             let res = execute(deps.as_mut(), env, info,msg);
@@ -2423,7 +2424,7 @@ mod tests {
             save_winner(deps.as_mut().storage, 1u64, addr2, 1).unwrap();
             let state = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state.block_time_play.nanos().checked_sub(state.every_block_time_play.nanos() / 2).unwrap() );
+            env.block.time = Timestamp::from_seconds(state.block_time_play.checked_sub(state.every_block_time_play / 2).unwrap() );
             let info = mock_info("address1", &[]);
             let msg = ExecuteMsg::Collect { address: None };
             let res = execute(deps.as_mut(), env, info, msg);
@@ -2480,7 +2481,7 @@ mod tests {
             save_winner(deps.as_mut().storage, 1u64, addr_default.clone(), 4).unwrap();
 
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state_before.block_time_play.nanos().checked_sub(state_before.every_block_time_play.nanos() / 2).unwrap() );
+            env.block.time = Timestamp::from_seconds(state_before.block_time_play.checked_sub(state_before.every_block_time_play / 2).unwrap() );
             let msg = ExecuteMsg::Collect { address: None };
             let info = mock_info(before_all.default_sender_two.as_str().clone(), &[]);
             let res = execute(deps.as_mut(), env, info, msg);
@@ -2525,7 +2526,7 @@ mod tests {
             save_winner(deps.as_mut().storage, 1u64, default_addr.clone(), 1).unwrap();
 
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state_before.block_time_play.nanos().checked_sub(state_before.every_block_time_play.nanos() / 2).unwrap() );
+            env.block.time = Timestamp::from_seconds(state_before.block_time_play.checked_sub(state_before.every_block_time_play / 2).unwrap() );
 
             let msg = ExecuteMsg::Collect { address: None };
             let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
@@ -2613,7 +2614,7 @@ mod tests {
             save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
 
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state_before.block_time_play.nanos().checked_sub(state_before.every_block_time_play.nanos() / 2).unwrap() );
+            env.block.time = Timestamp::from_seconds(state_before.block_time_play.checked_sub(state_before.every_block_time_play / 2).unwrap() );
             let info = mock_info(before_all.default_sender_two.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect {
                 address: Some(before_all.default_sender.clone()),
@@ -2713,7 +2714,7 @@ mod tests {
 
             let state = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            env.block.time = Timestamp::from_nanos(state_before.block_time_play.nanos().checked_sub(state_before.every_block_time_play.nanos() / 2).unwrap() );
+            env.block.time = Timestamp::from_seconds(state_before.block_time_play.checked_sub(state_before.every_block_time_play / 2).unwrap() );
             let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect { address: None };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();

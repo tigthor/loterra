@@ -8,8 +8,8 @@ use std::ops::Add;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub admin: CanonicalAddr,
-    pub block_time_play: Timestamp,
-    pub every_block_time_play: Timestamp,
+    pub block_time_play: u64,
+    pub every_block_time_play: u64,
     pub denom_stable: String,
     pub combination_len: u8,
     pub jackpot_percentage_reward: u8,
@@ -24,7 +24,7 @@ pub struct State {
     pub loterra_staking_contract_address: CanonicalAddr,
     pub safe_lock: bool,
     pub lottery_counter: u64,
-    pub holders_bonus_block_time_end: Timestamp,
+    pub holders_bonus_block_time_end: u64,
 }
 pub const STATE: Item<State> = Item::new("state");
 pub fn store_state(storage: &mut dyn Storage, state: &State) -> StdResult<()> {
